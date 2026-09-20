@@ -49,8 +49,7 @@ builds.
   impact on the hub's own growth or appearance — it's managed by the developers,
   not built up by players. All the "building" fantasy lives on the ship.
 - Multiplayer: the hub is the shared social space where players see/interact with
-  each other (trade, faction presence). Not yet decided whether ships/expeditions
-  themselves are ever shared (see § Open Questions).
+  each other (trade, faction presence).
 
 ## Missions
 
@@ -64,6 +63,11 @@ builds.
   your Warframe or account progress).
 - Open: does a mission failure/ship-loss still grant partial rewards (Warframe-
   style partial extraction) or zero rewards?
+- **Squads:** a mission can have up to 4 players join, but every mission must be
+  fully completable solo. Ships and crews always belong to a single player only —
+  never shared/co-owned. (Open: in a 4-player mission, does each player bring
+  their own ship into the same instance, or do joining players contribute their
+  character/crew while one host's ship is used for that run? See § Open Questions.)
 
 ## Enemies / Opposition
 
@@ -90,9 +94,8 @@ _TBD_
   concrete ship upgrades — is there crafting on the ship too, or is the hub the
   only source of new ship parts/tech?
 - Does mission failure/ship-loss grant partial rewards, or none?
-- Do multiple players ever squad up for missions together (Warframe-style, each
-  bringing their own ship/crew), or is every mission solo (just the main character
-  + their own companions)? The Warframe comparison suggests squads are likely, but
-  worth confirming explicitly.
+- In a multiplayer (up to 4) mission, does each player bring their own ship into
+  the shared instance (small co-present fleet), or do joining players contribute
+  just their character/crew while one player's ship is used for that run?
 - What do factions actually represent (in-fiction) — political/military groups,
   trade guilds, something tied to the Oni species or the wormhole accident?

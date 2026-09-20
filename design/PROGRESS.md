@@ -26,3 +26,5 @@ _Running log of what's decided and what's built. Newest entries on top._
 - Stakes clarified: losing the ship in a mission only costs the time/rewards of
   that mission — it doesn't threaten the ship's persistent upgrades or crew
   progression.
+- Ships and crews belong only to a single player (never shared/co-owned). Missions
+  support up to 4 players joining, but every mission must be completable solo.
