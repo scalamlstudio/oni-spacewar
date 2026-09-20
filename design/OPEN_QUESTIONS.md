@@ -12,10 +12,6 @@ doc's content and remove it from this list, rather than keeping a second copy._
   what's the full range of condition types, and what happens when multiple
   skills' conditions are met simultaneously (priority/cooldowns)?
   _(§ Crew Skill Trees)_
-- **Research tree passive-boost framing:** confirmed the main character's
-  Research skills lean toward passive production/research boosts — is that
-  main-character-specific, or do companions' Research trees work the same way
-  (vs. directly unlocking recipes/buildings)? _(§ Crew Skill Trees)_
 - **Skill tree progress source:** how are points/progress earned for the
   Research and Combat Operation trees (missions, training, both)?
   _(§ Crew Skill Trees)_

@@ -54,11 +54,9 @@ builds.
 - This is the **actual progression** system of the game — distinct from Ship
   Modules (see § Ship Modules), which just introduce base mechanics.
 - **Research tree:** unlocks recipes and buildings within whatever modules are
-  already active (see § Ship Modules for the example). For the main character
-  specifically, Research skills lean toward **passive production/research
-  boosts** (buffs to output/speed) rather than direct unlocks — whether this
-  passive-boost framing is main-character-specific or also true of companions'
-  Research trees is open.
+  already active (see § Ship Modules for the example). Nodes can also be
+  **passive production/research boosts** (buffs to output/speed) rather than
+  direct unlocks — this applies to any crew member, not just the main character.
 - **Combat Operation tree:** unlocks combat skills/passive skills, but the
   trigger mechanism differs by crew role:
   - **Companions:** auto-triggered — a companion uses a skill automatically when

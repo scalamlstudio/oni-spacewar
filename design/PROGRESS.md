@@ -68,3 +68,5 @@ _Running log of what's decided and what's built. Newest entries on top._
   flight. Main character's Combat Operation skills are manually triggered while
   flying (unlike companions' auto-trigger); their Research skills lean toward
   passive production/research boosts.
+- Confirmed passive-boost Research nodes aren't main-character-specific — any
+  crew member's Research tree can include boosting-type skills.
