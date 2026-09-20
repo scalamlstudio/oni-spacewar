@@ -25,19 +25,24 @@ builds.
 
 ## Player
 
-- Movement:
-- Combat / interaction:
+- Movement: the player pilots the ship directly — flying the ship (not just a
+  character on foot) is the core moment-to-moment control.
+- Combat / interaction: the main character's Combat Operation skills are
+  manually triggered by the player while flying the ship (see § Crew Skill
+  Trees) — unlike companions, whose combat skills auto-trigger on condition.
 - Progression: earn credits via faction missions and resource-gathering, spend on
   growing/upgrading the ship (see § Hub, § Economy).
 
 ## Crew / Companions
 
-- Main character: player-controlled directly (likely direct control during combat/
-  exploration, given the 2D shooter half of the game).
+- Main character: **the ship's pilot** — player-controlled directly, flying the
+  ship and manually triggering their own Combat Operation skills (see § Crew
+  Skill Trees).
 - 2-3 companions: ONI-style task assignment — the player assigns jobs/priorities
   (fix this, mine that, defend here) and companions execute autonomously, rather
   than being directly piloted. They can be trained (skills/roles improve over time,
-  ONI-dupe-style).
+  ONI-dupe-style), and their combat skills auto-trigger on condition rather than
+  being manually activated (see § Crew Skill Trees).
 
 ## Crew Skill Trees
 
@@ -49,20 +54,23 @@ builds.
 - This is the **actual progression** system of the game — distinct from Ship
   Modules (see § Ship Modules), which just introduce base mechanics.
 - **Research tree:** unlocks recipes and buildings within whatever modules are
-  already active (see § Ship Modules for the example).
-- **Combat Operation tree:** unlocks combat skills/passive skills. These are not
-  manually triggered — a crew member uses a skill automatically when its
-  condition is met, and the condition is specific to each skill, e.g.:
-  - A **repair skill** triggers when ship HP is low.
-  - A **damage skill** triggers when an enemy is in range.
-  This fits the existing ONI-style autonomous behavior for companions (see
-  § Crew / Companions); whether it also applies to the directly-piloted main
-  character is open.
-- Open: the full range of condition types beyond the two examples above, what
-  happens when multiple skills' conditions are met at once (priority/cooldowns),
-  whether auto-triggered skills apply to the main character too, and how points/
-  progress are earned for either tree (missions, training, both). See
-  design/OPEN_QUESTIONS.md.
+  already active (see § Ship Modules for the example). For the main character
+  specifically, Research skills lean toward **passive production/research
+  boosts** (buffs to output/speed) rather than direct unlocks — whether this
+  passive-boost framing is main-character-specific or also true of companions'
+  Research trees is open.
+- **Combat Operation tree:** unlocks combat skills/passive skills, but the
+  trigger mechanism differs by crew role:
+  - **Companions:** auto-triggered — a companion uses a skill automatically when
+    its condition is met, specific to each skill, e.g. a **repair skill**
+    triggers when ship HP is low, a **damage skill** triggers when an enemy is
+    in range.
+  - **Main character:** manually triggered by the player while flying the ship
+    (see § Player) — not condition-based.
+- Open: the full range of condition types for companion skills beyond the two
+  examples above, what happens when multiple companion skills' conditions are
+  met at once (priority/cooldowns), and how points/progress are earned for
+  either tree (missions, training, both). See design/OPEN_QUESTIONS.md.
 
 ## Hub
 

@@ -7,18 +7,21 @@ doc's content and remove it from this list, rather than keeping a second copy._
 
 ## Mechanics (design/DESIGN.md)
 
-- **Combat skill trigger conditions:** each skill has its own trigger condition
-  (e.g. repair skill → ship HP low, damage skill → enemy in range) — what's the
-  full range of condition types, and what happens when multiple skills' conditions
-  are met simultaneously (priority/cooldowns)? _(§ Crew Skill Trees)_
-- **Does condition-triggered combat apply to the main character:** companions
-  are already autonomous (ONI-style task assignment), so auto-triggered skills
-  fit naturally; the main character is otherwise directly piloted — do their
-  Combat Operation skills also auto-trigger, or work differently?
-  _(§ Crew Skill Trees, § Crew / Companions)_
+- **Companion combat skill trigger conditions:** each skill has its own trigger
+  condition (e.g. repair skill → ship HP low, damage skill → enemy in range) —
+  what's the full range of condition types, and what happens when multiple
+  skills' conditions are met simultaneously (priority/cooldowns)?
+  _(§ Crew Skill Trees)_
+- **Research tree passive-boost framing:** confirmed the main character's
+  Research skills lean toward passive production/research boosts — is that
+  main-character-specific, or do companions' Research trees work the same way
+  (vs. directly unlocking recipes/buildings)? _(§ Crew Skill Trees)_
 - **Skill tree progress source:** how are points/progress earned for the
   Research and Combat Operation trees (missions, training, both)?
   _(§ Crew Skill Trees)_
+- **Ship flight/weapon controls:** beyond skill-tree abilities, what's the base
+  flight control scheme (thrust/rotate vs. waypoint, etc.) and is there a basic
+  weapon-fire action separate from Combat Operation skills? _(§ Player)_
 - **Key-resource trading target:** does trading for key resources unlock ship
   *modules*, or feed the *recipes* crew leveling unlocks, or both?
   _(§ Ship Modules)_
@@ -32,8 +35,6 @@ doc's content and remove it from this list, rather than keeping a second copy._
   configurable "survives failure" flag), but which specific rewards get flagged
   that way is still open — deliberately left pending for later tuning.
   _(§ Missions)_
-- **Player moment-to-moment mechanics:** movement and combat/interaction details
-  are still blank. _(§ Player)_
 - **Enemies/opposition:** entirely undefined — who/what the player fights.
   _(§ Enemies / Opposition)_
 - **Level design within missions:** procedural vs. hand-designed, mission

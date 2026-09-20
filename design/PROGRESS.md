@@ -64,3 +64,7 @@ _Running log of what's decided and what's built. Newest entries on top._
   autonomous behavior for companions.
 - Trigger conditions are per-skill, e.g. repair skill → ship HP low, damage skill
   → enemy in range. Full condition range and multi-trigger priority still open.
+- Main character confirmed as the ship's pilot — player directly controls ship
+  flight. Main character's Combat Operation skills are manually triggered while
+  flying (unlike companions' auto-trigger); their Research skills lean toward
+  passive production/research boosts.
