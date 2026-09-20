@@ -11,8 +11,10 @@ doc's content and remove it from this list, rather than keeping a second copy._
   (raw/refined/key-trade) that feed it. _(§ Crafting & Tech Tree)_
 - **Machines/rooms progression:** which ones exist early vs. late game.
   _(§ Crafting & Tech Tree)_
-- **Failure reward exceptions:** what specific rewards or conditions still pay
-  out on a failed mission (e.g. loot already "banked" mid-mission)? _(§ Missions)_
+- **Failure reward exceptions:** the mechanism is decided (per-reward-type
+  configurable "survives failure" flag), but which specific rewards get flagged
+  that way is still open — deliberately left pending for later tuning.
+  _(§ Missions)_
 - **Player moment-to-moment mechanics:** movement and combat/interaction details
   are still blank. _(§ Player)_
 - **Enemies/opposition:** entirely undefined — who/what the player fights.

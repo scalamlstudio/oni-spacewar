@@ -65,9 +65,11 @@ builds.
   build/upgrades or the crew's overall progression. Low permanent risk, same
   spirit as dying/failing a Warframe mission (you lose that mission's run, not
   your Warframe or account progress).
-- **Failure rewards:** on mission failure, most rewards are lost — but there can
-  be exceptions (e.g. specific reward types, or specific failure conditions, that
-  still pay out). Exact exceptions TBD.
+- **Failure rewards:** on mission failure, most rewards are lost. Which rewards
+  are exceptions (still pay out on failure) is undecided — but each reward type
+  should carry its own configurable "survives failure" flag/rule, rather than one
+  global rule, so exceptions can be tuned/expanded per reward later without a
+  system rework. Which rewards actually get flagged that way is still open.
 - **Squads:** a mission can have up to 4 players join, but every mission must be
   fully completable solo. Ships and crews always belong to a single player only —
   never shared/co-owned. In a multiplayer mission, each player brings their own
