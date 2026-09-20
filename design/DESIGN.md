@@ -61,8 +61,9 @@ builds.
   build/upgrades or the crew's overall progression. Low permanent risk, same
   spirit as dying/failing a Warframe mission (you lose that mission's run, not
   your Warframe or account progress).
-- Open: does a mission failure/ship-loss still grant partial rewards (Warframe-
-  style partial extraction) or zero rewards?
+- **Failure rewards:** on mission failure, most rewards are lost — but there can
+  be exceptions (e.g. specific reward types, or specific failure conditions, that
+  still pay out). Exact exceptions TBD.
 - **Squads:** a mission can have up to 4 players join, but every mission must be
   fully completable solo. Ships and crews always belong to a single player only —
   never shared/co-owned. In a multiplayer mission, each player brings their own
@@ -95,6 +96,8 @@ _TBD_
 - How does credit-earning (faction missions, resource quests) translate into
   concrete ship upgrades — is there crafting on the ship too, or is the hub the
   only source of new ship parts/tech?
-- Does mission failure/ship-loss grant partial rewards, or none?
+- What are the exceptions where a failed mission still pays out reward (e.g.
+  loot already picked up and "banked" mid-mission, like Warframe's resource
+  extraction rules? Or something else)?
 - What do factions actually represent (in-fiction) — political/military groups,
   trade guilds, something tied to the Oni species or the wormhole accident?

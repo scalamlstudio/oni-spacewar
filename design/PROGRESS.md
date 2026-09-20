@@ -30,3 +30,5 @@ _Running log of what's decided and what's built. Newest entries on top._
   support up to 4 players joining, but every mission must be completable solo.
   Each player brings their own ship into the shared mission instance (a small
   co-present fleet, not one shared ship).
+- Mission failure: most rewards are lost, but there can be exceptions (specifics
+  TBD).
