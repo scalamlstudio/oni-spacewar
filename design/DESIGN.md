@@ -39,6 +39,22 @@ builds.
   than being directly piloted. They can be trained (skills/roles improve over time,
   ONI-dupe-style).
 
+## Crew Skill Trees
+
+- Each crew member (main character and each companion) has their own **2 skill
+  trees**: one for **Research**, one for **Combat Operation**.
+- Trees are branching, node-based — modeled on Warframe's Focus School trees.
+  Each node can have several stages, and unlocking a node opens up further nodes/
+  branches beyond it.
+- Open: how this per-crew Research tree relates to the ship-wide crafting tech
+  tree (see § Crafting & Tech Tree) — are they the same system (a crew member's
+  Research tree *is* how ship tech gets unlocked), or two separate progression
+  systems (character skills vs. ship crafting recipes)? See
+  design/OPEN_QUESTIONS.md.
+- Open: what Combat Operation nodes actually grant (abilities, stats, weapon
+  unlocks?), and how points/progress are earned for either tree (missions,
+  training, both?).
+
 ## Hub
 
 - An MMO-style social/trade space where players' ships dock between expeditions.
@@ -88,9 +104,9 @@ builds.
   finished upgrades, but building the production chain that makes them.
 - **Key resources** — needed to unlock/expand the tech tree — are obtained through
   trading, both with other players and with hub NPCs (see § Hub, § Economy).
-- Open: shape of the tech tree (tiers, branching vs. linear), the resource
-  categories (raw/refined/key-trade), and which machines/rooms exist early vs.
-  late game (see design/OPEN_QUESTIONS.md).
+- Open: how this relates to each crew member's Research skill tree (see § Crew
+  Skill Trees), the resource categories (raw/refined/key-trade) that feed it, and
+  which machines/rooms exist early vs. late game (see design/OPEN_QUESTIONS.md).
 
 ## Enemies / Opposition
 

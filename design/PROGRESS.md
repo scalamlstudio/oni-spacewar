@@ -45,3 +45,7 @@ _Running log of what's decided and what's built. Newest entries on top._
 - Failure-reward exceptions: mechanism decided (per-reward-type configurable
   "survives failure" flag), specific rewards left pending on purpose for future
   tuning.
+- New § Crew Skill Trees in DESIGN.md: each crew member has 2 branching, node-
+  based skill trees (Research, Combat Operation), Warframe Focus-School style —
+  nodes have stages, unlocking one opens further nodes/branches. Relationship to
+  the ship's crafting tech tree is still open.

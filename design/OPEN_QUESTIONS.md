@@ -7,8 +7,15 @@ doc's content and remove it from this list, rather than keeping a second copy._
 
 ## Mechanics (design/DESIGN.md)
 
-- **Tech tree shape:** tiers, branching vs. linear, and the resource categories
-  (raw/refined/key-trade) that feed it. _(§ Crafting & Tech Tree)_
+- **Research tree ↔ ship tech tree relationship:** is a crew member's Research
+  skill tree the actual mechanism that unlocks the ship's crafting tech tree, or
+  are they two separate systems (character skills vs. ship crafting recipes)?
+  _(§ Crew Skill Trees, § Crafting & Tech Tree)_
+- **Combat Operation tree contents:** what nodes actually grant (abilities,
+  stats, weapon unlocks?), and how points/progress are earned for either crew
+  skill tree (missions, training, both?). _(§ Crew Skill Trees)_
+- **Resource categories:** raw/refined/key-trade breakdown feeding the ship's
+  tech tree. _(§ Crafting & Tech Tree)_
 - **Machines/rooms progression:** which ones exist early vs. late game.
   _(§ Crafting & Tech Tree)_
 - **Failure reward exceptions:** the mechanism is decided (per-reward-type
