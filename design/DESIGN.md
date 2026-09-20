@@ -65,9 +65,11 @@ builds.
   style partial extraction) or zero rewards?
 - **Squads:** a mission can have up to 4 players join, but every mission must be
   fully completable solo. Ships and crews always belong to a single player only —
-  never shared/co-owned. (Open: in a 4-player mission, does each player bring
-  their own ship into the same instance, or do joining players contribute their
-  character/crew while one host's ship is used for that run? See § Open Questions.)
+  never shared/co-owned. In a multiplayer mission, each player brings their own
+  ship into the shared instance — missions play out as a small co-present fleet,
+  not a single shared ship. (Implication: mission-instance combat/space needs to
+  support multiple independently-piloted ships plus their respective companion
+  crews at once.)
 
 ## Enemies / Opposition
 
@@ -94,8 +96,5 @@ _TBD_
   concrete ship upgrades — is there crafting on the ship too, or is the hub the
   only source of new ship parts/tech?
 - Does mission failure/ship-loss grant partial rewards, or none?
-- In a multiplayer (up to 4) mission, does each player bring their own ship into
-  the shared instance (small co-present fleet), or do joining players contribute
-  just their character/crew while one player's ship is used for that run?
 - What do factions actually represent (in-fiction) — political/military groups,
   trade guilds, something tied to the Oni species or the wormhole accident?
