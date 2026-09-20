@@ -27,8 +27,4 @@ _TBD_
 - Open: what do factions represent in-fiction — political/military groups, trade
   guilds, something tied to the Oni species or the wormhole accident?
 
-## Open Questions
-
-- What caused the wormhole accident?
-- What is known space like, and where does the hub sit in it?
-- What are the factions, and what do they want?
+_Full list of open questions across all design docs: design/OPEN_QUESTIONS.md._

@@ -1,8 +1,9 @@
 # Open Questions
 
-_Rollup of every unresolved design question across the other docs, grouped by
-topic. Source of truth for each question stays in its home doc (linked) — update
-it there when answered, and remove/update the line here too._
+_The single canonical list of unresolved design questions, grouped by topic. Other
+docs may flag a spot as open inline (e.g. "TBD", "Open:") for context, but the
+enumerated list lives only here — when a question is answered, update the relevant
+doc's content and remove it from this list, rather than keeping a second copy._
 
 ## Mechanics (design/DESIGN.md)
 

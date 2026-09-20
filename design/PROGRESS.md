@@ -36,3 +36,6 @@ _Running log of what's decided and what's built. Newest entries on top._
   `design/DESIGN.md`.
 - Added `design/OPEN_QUESTIONS.md` as a rollup of every unresolved question across
   the other docs.
+- Removed the duplicate "Open Questions" list sections from DESIGN.md and
+  STORY.md — OPEN_QUESTIONS.md is now the single canonical list; other docs just
+  point to it.

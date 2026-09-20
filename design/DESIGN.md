@@ -88,18 +88,8 @@ _TBD_
 ## Economy
 
 - Credits earned via faction missions and resource-gathering quests.
-- Spent on... ship upgrades/parts, presumably (see § Open Questions — what exactly
-  is purchasable, and where: only at the hub, or also from loot/crafting on the
-  ship?).
+- Spent on... ship upgrades/parts, presumably — exactly what's purchasable, and
+  whether it's hub-only or also on-ship crafting, is still open (see
+  design/OPEN_QUESTIONS.md).
 
-## Open Questions
-
-- How does credit-earning (faction missions, resource quests) translate into
-  concrete ship upgrades — is there crafting on the ship too, or is the hub the
-  only source of new ship parts/tech?
-- What are the exceptions where a failed mission still pays out reward (e.g.
-  loot already picked up and "banked" mid-mission, like Warframe's resource
-  extraction rules? Or something else)?
-
-_Narrative questions (what factions represent, the wormhole accident, etc.) live
-in design/STORY.md._
+_Full list of open questions across all design docs: design/OPEN_QUESTIONS.md._
