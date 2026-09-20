@@ -75,6 +75,7 @@ _Running log of what's decided and what's built. Newest entries on top._
   manufacturing, different sample kinds give different point payouts — and
   (2) studying "advanced tech documents," bought at the hub or found as mission
   loot. Exact mechanics of the research/study action itself still open.
-- Ship movement/combat feel referenced to controlling the Mothership in
-  StarCraft II: slow-moving, ability/skill-driven rather than fast dogfighting.
-  Exact input scheme (click-to-move vs. directly-steered) still open.
+- Ship control scheme settled: click-to-move, League of Legends champion-style —
+  player always controls their own ship (no unit selection), moves slowly, uses
+  abilities on hotkeys. StarCraft II Mothership was the movement-feel reference
+  (slow, ability-driven). Companions still auto-trigger skills on condition.
