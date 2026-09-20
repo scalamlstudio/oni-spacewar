@@ -39,3 +39,6 @@ _Running log of what's decided and what's built. Newest entries on top._
 - Removed the duplicate "Open Questions" list sections from DESIGN.md and
   STORY.md — OPEN_QUESTIONS.md is now the single canonical list; other docs just
   point to it.
+- On-ship crafting confirmed (ONI-style resource/machine input-output balancing) —
+  new § Crafting & Tech Tree in DESIGN.md. Trading (player-to-player and with hub
+  NPCs) is the source of key resources that expand the tech tree.

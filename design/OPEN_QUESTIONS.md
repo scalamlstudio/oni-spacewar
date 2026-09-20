@@ -7,12 +7,12 @@ doc's content and remove it from this list, rather than keeping a second copy._
 
 ## Mechanics (design/DESIGN.md)
 
-- **Ship upgrades:** does credit-earning (faction missions, resource quests)
-  translate into ship upgrades only via the hub, or is there also on-ship
-  crafting? _(§ Open Questions, § Economy)_
+- **Tech tree shape:** tiers, branching vs. linear, and the resource categories
+  (raw/refined/key-trade) that feed it. _(§ Crafting & Tech Tree)_
+- **Machines/rooms progression:** which ones exist early vs. late game.
+  _(§ Crafting & Tech Tree)_
 - **Failure reward exceptions:** what specific rewards or conditions still pay
-  out on a failed mission (e.g. loot already "banked" mid-mission)? _(§ Missions,
-  § Open Questions)_
+  out on a failed mission (e.g. loot already "banked" mid-mission)? _(§ Missions)_
 - **Player moment-to-moment mechanics:** movement and combat/interaction details
   are still blank. _(§ Player)_
 - **Enemies/opposition:** entirely undefined — who/what the player fights.

@@ -42,10 +42,13 @@ builds.
 ## Hub
 
 - An MMO-style social/trade space where players' ships dock between expeditions.
-- Purpose: trading, and a base for **factions**.
+- Purpose: trading (both player-to-player and with hub NPCs), and a base for
+  **factions**.
 - **Factions:** players can join a faction and earn credits/reputation by
   completing missions for it.
 - Also offers **resource-gathering quests** the player can do at/from the hub.
+- Trading here is a key source of the resources needed to expand the ship's tech
+  tree (see § Crafting & Tech Tree) — not just a credit sink.
 - Important distinction from a typical base-builder: the player has little to no
   impact on the hub's own growth or appearance — it's managed by the developers,
   not built up by players. All the "building" fantasy lives on the ship.
@@ -73,6 +76,20 @@ builds.
   support multiple independently-piloted ships plus their respective companion
   crews at once.)
 
+## Crafting & Tech Tree
+
+- On-ship crafting is central, ONI-style: the player builds machines/stations on
+  the ship that consume and produce resources, and has to balance input/output
+  chains (e.g. a machine that turns raw material A + power into refined material B)
+  the same way ONI balances power, oxygen, and water webs.
+- This is the main way the ship is upgraded/expanded over time — not just buying
+  finished upgrades, but building the production chain that makes them.
+- **Key resources** — needed to unlock/expand the tech tree — are obtained through
+  trading, both with other players and with hub NPCs (see § Hub, § Economy).
+- Open: shape of the tech tree (tiers, branching vs. linear), the resource
+  categories (raw/refined/key-trade), and which machines/rooms exist early vs.
+  late game (see design/OPEN_QUESTIONS.md).
+
 ## Enemies / Opposition
 
 _TBD_
@@ -87,9 +104,12 @@ _TBD_
 
 ## Economy
 
-- Credits earned via faction missions and resource-gathering quests.
-- Spent on... ship upgrades/parts, presumably — exactly what's purchasable, and
-  whether it's hub-only or also on-ship crafting, is still open (see
-  design/OPEN_QUESTIONS.md).
+- Credits earned via faction missions and resource-gathering quests; spent at the
+  hub (trading with NPCs and other players).
+- Trading is also how the player obtains **key resources** that expand the ship's
+  tech tree, on top of whatever's gathered/looted directly on missions.
+- Ship upgrades themselves come from on-ship crafting (see § Crafting & Tech
+  Tree), not direct purchase — credits/trading get you the resources and unlocks,
+  building still happens on the ship.
 
 _Full list of open questions across all design docs: design/OPEN_QUESTIONS.md._
