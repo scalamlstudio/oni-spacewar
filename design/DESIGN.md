@@ -9,11 +9,12 @@ ONI-style build/fix/life-support depth applies to the ship itself. The hub is a
 separate, dev-managed MMO-style social space (see § Hub), not something the player
 builds.
 
-## Core Loop / Story Structure
+## Core Loop
 
-1. **Opening (wormhole accident):** Story starts with a wormhole accident leaving
-   the player with one semi-functional spaceship. Many systems need to be built/
-   fixed — this introduces the ship's build/repair/life-support mechanics.
+1. **Opening:** the player starts with one semi-functional spaceship (see
+   design/STORY.md § Opening: The Wormhole Accident for the narrative reason).
+   Many systems need to be built/fixed — this introduces the ship's build/repair/
+   life-support mechanics.
 2. **Crew:** 1 main controllable character + 2-3 companions aboard the ship.
    Companions can be trained and work alongside the main character (ONI-style task
    assignment — see § Crew / Companions).
@@ -99,5 +100,6 @@ _TBD_
 - What are the exceptions where a failed mission still pays out reward (e.g.
   loot already picked up and "banked" mid-mission, like Warframe's resource
   extraction rules? Or something else)?
-- What do factions actually represent (in-fiction) — political/military groups,
-  trade guilds, something tied to the Oni species or the wormhole accident?
+
+_Narrative questions (what factions represent, the wormhole accident, etc.) live
+in design/STORY.md._
