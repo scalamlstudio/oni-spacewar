@@ -65,10 +65,12 @@ builds.
     in range.
   - **Main character:** manually triggered by the player while flying the ship
     (see § Player) — not condition-based.
+- **Points:** Research points are earned via research and training; Combat
+  points are earned by defeating enemies.
 - Open: the full range of condition types for companion skills beyond the two
   examples above, what happens when multiple companion skills' conditions are
-  met at once (priority/cooldowns), and how points/progress are earned for
-  either tree (missions, training, both). See design/OPEN_QUESTIONS.md.
+  met at once (priority/cooldowns), and what "research" and "training" concretely
+  look like as crew activities (see design/OPEN_QUESTIONS.md).
 
 ## Hub
 

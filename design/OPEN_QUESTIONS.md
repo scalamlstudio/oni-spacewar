@@ -12,9 +12,10 @@ doc's content and remove it from this list, rather than keeping a second copy._
   what's the full range of condition types, and what happens when multiple
   skills' conditions are met simultaneously (priority/cooldowns)?
   _(§ Crew Skill Trees)_
-- **Skill tree progress source:** how are points/progress earned for the
-  Research and Combat Operation trees (missions, training, both)?
-  _(§ Crew Skill Trees)_
+- **Research/training activities:** Research points come from "research and
+  training," Combat points from defeating enemies — but what do "research" and
+  "training" concretely look like as crew activities (a task assignment? a
+  ship room? passive over time)? _(§ Crew Skill Trees)_
 - **Ship flight/weapon controls:** beyond skill-tree abilities, what's the base
   flight control scheme (thrust/rotate vs. waypoint, etc.) and is there a basic
   weapon-fire action separate from Combat Operation skills? _(§ Player)_
