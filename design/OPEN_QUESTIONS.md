@@ -7,10 +7,10 @@ doc's content and remove it from this list, rather than keeping a second copy._
 
 ## Mechanics (design/DESIGN.md)
 
-- **Combat skill trigger conditions:** Combat Operation nodes unlock skills/
-  passives that fire automatically when a condition is met (not manually
-  triggered) — what conditions exist (HP thresholds, enemy range, etc.)?
-  _(§ Crew Skill Trees)_
+- **Combat skill trigger conditions:** each skill has its own trigger condition
+  (e.g. repair skill → ship HP low, damage skill → enemy in range) — what's the
+  full range of condition types, and what happens when multiple skills' conditions
+  are met simultaneously (priority/cooldowns)? _(§ Crew Skill Trees)_
 - **Does condition-triggered combat apply to the main character:** companions
   are already autonomous (ONI-style task assignment), so auto-triggered skills
   fit naturally; the main character is otherwise directly piloted — do their

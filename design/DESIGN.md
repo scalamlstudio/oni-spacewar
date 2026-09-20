@@ -52,12 +52,15 @@ builds.
   already active (see § Ship Modules for the example).
 - **Combat Operation tree:** unlocks combat skills/passive skills. These are not
   manually triggered — a crew member uses a skill automatically when its
-  condition is met (e.g. an HP threshold, an enemy coming into range, etc.). This
-  fits the existing ONI-style autonomous behavior for companions (see § Crew /
-  Companions); whether it also applies to the directly-piloted main character is
-  open.
-- Open: what conditions exist to trigger combat skills, whether they apply to the
-  main character too (who is otherwise directly controlled), and how points/
+  condition is met, and the condition is specific to each skill, e.g.:
+  - A **repair skill** triggers when ship HP is low.
+  - A **damage skill** triggers when an enemy is in range.
+  This fits the existing ONI-style autonomous behavior for companions (see
+  § Crew / Companions); whether it also applies to the directly-piloted main
+  character is open.
+- Open: the full range of condition types beyond the two examples above, what
+  happens when multiple skills' conditions are met at once (priority/cooldowns),
+  whether auto-triggered skills apply to the main character too, and how points/
   progress are earned for either tree (missions, training, both). See
   design/OPEN_QUESTIONS.md.
 

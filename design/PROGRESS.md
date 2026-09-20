@@ -62,3 +62,5 @@ _Running log of what's decided and what's built. Newest entries on top._
   Combat Operation unlocks combat skills/passives that trigger automatically when
   a condition is met (not manually activated), fitting the existing ONI-style
   autonomous behavior for companions.
+- Trigger conditions are per-skill, e.g. repair skill → ship HP low, damage skill
+  → enemy in range. Full condition range and multi-trigger priority still open.
