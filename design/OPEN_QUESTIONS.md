@@ -12,10 +12,12 @@ doc's content and remove it from this list, rather than keeping a second copy._
   what's the full range of condition types, and what happens when multiple
   skills' conditions are met simultaneously (priority/cooldowns)?
   _(§ Crew Skill Trees)_
-- **Research/training activities:** Research points come from "research and
-  training," Combat points from defeating enemies — but what do "research" and
-  "training" concretely look like as crew activities (a task assignment? a
-  ship room? passive over time)? _(§ Crew Skill Trees)_
+- **Extraordinary sample variety:** what different kinds of samples exist, and
+  how do their Research point payouts differ? _(§ Crew Skill Trees, § Ship
+  Modules)_
+- **Research/training as an action:** how does "researching" a sample or
+  "studying" a tech document actually play out mechanically — a timed task
+  assignment, a dedicated ship room, passive over time? _(§ Crew Skill Trees)_
 - **Ship flight/weapon controls:** beyond skill-tree abilities, what's the base
   flight control scheme (thrust/rotate vs. waypoint, etc.) and is there a basic
   weapon-fire action separate from Combat Operation skills? _(§ Player)_

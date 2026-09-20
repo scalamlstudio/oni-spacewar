@@ -65,12 +65,22 @@ builds.
     in range.
   - **Main character:** manually triggered by the player while flying the ship
     (see § Player) — not condition-based.
-- **Points:** Research points are earned via research and training; Combat
-  points are earned by defeating enemies.
+- **Points:** Combat points are earned by defeating enemies. Research points come
+  from two crew activities:
+  - **Researching extraordinary samples:** manufacturing (see § Ship Modules) has
+    a chance to produce a bonus "extraordinary sample" alongside its normal
+    output. A crew member can research that sample to gain Research points.
+    There are many different kinds of samples, and different samples yield
+    different point results.
+  - **Training (studying):** crew gain knowledge by studying "advanced tech
+    documents," obtained either by purchasing them at the hub or finding them
+    as mission loot (see § Hub, § Missions).
 - Open: the full range of condition types for companion skills beyond the two
   examples above, what happens when multiple companion skills' conditions are
-  met at once (priority/cooldowns), and what "research" and "training" concretely
-  look like as crew activities (see design/OPEN_QUESTIONS.md).
+  met at once (priority/cooldowns); the range/tiers of extraordinary samples and
+  how their point values differ; and how "researching" a sample or "studying" a
+  document plays out as an action (time cost, task assignment, etc.) — see
+  design/OPEN_QUESTIONS.md.
 
 ## Hub
 
@@ -82,6 +92,8 @@ builds.
 - Also offers **resource-gathering quests** the player can do at/from the hub.
 - Trading here is a key source of the resources needed to expand the ship (see
   § Ship Modules) — not just a credit sink.
+- **Advanced tech documents** are purchasable here — studying them is one of the
+  two ways crew earn Research points (see § Crew Skill Trees).
 - Important distinction from a typical base-builder: the player has little to no
   impact on the hub's own growth or appearance — it's managed by the developers,
   not built up by players. All the "building" fantasy lives on the ship.
@@ -103,6 +115,8 @@ builds.
   should carry its own configurable "survives failure" flag/rule, rather than one
   global rule, so exceptions can be tuned/expanded per reward later without a
   system rework. Which rewards actually get flagged that way is still open.
+- **Loot** can include advanced tech documents (see § Hub, § Crew Skill Trees) on
+  top of whatever other resources missions grant.
 - **Squads:** a mission can have up to 4 players join, but every mission must be
   fully completable solo. Ships and crews always belong to a single player only —
   never shared/co-owned. In a multiplayer mission, each player brings their own
@@ -128,6 +142,9 @@ builds.
   and the player has to balance input/output chains (e.g. a machine that turns
   raw material A + power into refined material B) the same way ONI balances
   power, oxygen, and water webs.
+- Manufacturing has a chance to produce a bonus **"extraordinary sample"**
+  alongside normal output — these feed Research points when studied by a crew
+  member (see § Crew Skill Trees).
 - **Key resources** — needed to unlock/expand things — are obtained through
   trading, both with other players and with hub NPCs (see § Hub, § Economy).
 - Open: does trading-for-key-resources unlock *modules*, or feed the *recipes*

@@ -70,5 +70,8 @@ _Running log of what's decided and what's built. Newest entries on top._
   passive production/research boosts.
 - Confirmed passive-boost Research nodes aren't main-character-specific — any
   crew member's Research tree can include boosting-type skills.
-- Skill point sources: Research points from research/training, Combat points
-  from defeating enemies. Concrete activity shape still open.
+- Skill point sources detailed: Combat points from defeating enemies. Research
+  points from (1) researching "extraordinary samples" — a chance byproduct of
+  manufacturing, different sample kinds give different point payouts — and
+  (2) studying "advanced tech documents," bought at the hub or found as mission
+  loot. Exact mechanics of the research/study action itself still open.
