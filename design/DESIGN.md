@@ -26,7 +26,11 @@ builds.
 ## Player
 
 - Movement: the player pilots the ship directly — flying the ship (not just a
-  character on foot) is the core moment-to-moment control.
+  character on foot) is the core moment-to-moment control. The ship itself moves
+  **slowly**, and combat leans on abilities rather than fast dogfighting — the
+  reference point is controlling the Mothership unit in StarCraft II (slow-moving,
+  skill/ability-driven). Whether that reference extends to StarCraft-style
+  click-to-move targeting or a directly-steered ship (thrust/rotate) is open.
 - Combat / interaction: the main character's Combat Operation skills are
   manually triggered by the player while flying the ship (see § Crew Skill
   Trees) — unlike companions, whose combat skills auto-trigger on condition.

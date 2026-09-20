@@ -18,9 +18,11 @@ doc's content and remove it from this list, rather than keeping a second copy._
 - **Research/training as an action:** how does "researching" a sample or
   "studying" a tech document actually play out mechanically — a timed task
   assignment, a dedicated ship room, passive over time? _(§ Crew Skill Trees)_
-- **Ship flight/weapon controls:** beyond skill-tree abilities, what's the base
-  flight control scheme (thrust/rotate vs. waypoint, etc.) and is there a basic
-  weapon-fire action separate from Combat Operation skills? _(§ Player)_
+- **Ship input scheme:** ship movement is slow and ability-driven, modeled on
+  controlling the Mothership in StarCraft II — but does that mean literal
+  click-to-move/targeting (RTS-style), or a directly-steered ship (thrust/
+  rotate) that's just slow? Also: is there a basic weapon-fire action separate
+  from Combat Operation skills? _(§ Player)_
 - **Key-resource trading target:** does trading for key resources unlock ship
   *modules*, or feed the *recipes* crew leveling unlocks, or both?
   _(§ Ship Modules)_

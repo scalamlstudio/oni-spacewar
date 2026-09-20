@@ -75,3 +75,6 @@ _Running log of what's decided and what's built. Newest entries on top._
   manufacturing, different sample kinds give different point payouts — and
   (2) studying "advanced tech documents," bought at the hub or found as mission
   loot. Exact mechanics of the research/study action itself still open.
+- Ship movement/combat feel referenced to controlling the Mothership in
+  StarCraft II: slow-moving, ability/skill-driven rather than fast dogfighting.
+  Exact input scheme (click-to-move vs. directly-steered) still open.
