@@ -52,6 +52,19 @@ builds.
   each other (trade, faction presence). Not yet decided whether ships/expeditions
   themselves are ever shared (see § Open Questions).
 
+## Missions
+
+- Mission structure is modeled on **Warframe**: discrete, self-contained runs with
+  their own objective(s), taken on (from the hub / via factions) and then
+  played out separately from the persistent ship/hub state.
+- **Stakes:** losing the ship during a mission costs the player only the time and
+  rewards tied to *that mission* — it does not threaten the ship's persistent
+  build/upgrades or the crew's overall progression. Low permanent risk, same
+  spirit as dying/failing a Warframe mission (you lose that mission's run, not
+  your Warframe or account progress).
+- Open: does a mission failure/ship-loss still grant partial rewards (Warframe-
+  style partial extraction) or zero rewards?
+
 ## Enemies / Opposition
 
 _TBD_
@@ -61,7 +74,8 @@ _TBD_
 - **Ship interior:** the player's persistent base — rooms/systems to fix, build
   out, and upgrade over the course of the game.
 - **Hub:** dev-managed MMO social/trade space; not player-buildable.
-- **Space:** where exploration, looting, and 2D ship combat happen.
+- **Space / missions:** discrete, self-contained mission instances (see § Missions)
+  where exploration, looting, and 2D ship combat happen.
 
 ## Economy
 
@@ -75,11 +89,10 @@ _TBD_
 - How does credit-earning (faction missions, resource quests) translate into
   concrete ship upgrades — is there crafting on the ship too, or is the hub the
   only source of new ship parts/tech?
-- What ties a "run" together — is space exploration/combat roguelike (losses
-  expected) or persistent (your ship/crew carry forward, losses are costly but
-  rare)? This matters a lot now that the ship *is* the persistent base — losing it
-  would be a bigger deal than in a typical roguelike.
-- Do multiple players ever share a ship/crew, or is the ship always a single
-  player's, with multiplayer only happening at the hub?
+- Does mission failure/ship-loss grant partial rewards, or none?
+- Do multiple players ever squad up for missions together (Warframe-style, each
+  bringing their own ship/crew), or is every mission solo (just the main character
+  + their own companions)? The Warframe comparison suggests squads are likely, but
+  worth confirming explicitly.
 - What do factions actually represent (in-fiction) — political/military groups,
   trade guilds, something tied to the Oni species or the wormhole accident?

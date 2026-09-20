@@ -18,3 +18,11 @@ _Running log of what's decided and what's built. Newest entries on top._
   style building/repair lives there). The hub is a dev-managed MMO-style social/
   trade space — players join factions, do missions and resource-gathering quests
   for credits, but don't build or shape the hub itself.
+
+## 2026-09-21
+
+- Mission structure modeled on Warframe: discrete, self-contained runs taken on
+  separately from the persistent ship/hub state.
+- Stakes clarified: losing the ship in a mission only costs the time/rewards of
+  that mission — it doesn't threaten the ship's persistent upgrades or crew
+  progression.
