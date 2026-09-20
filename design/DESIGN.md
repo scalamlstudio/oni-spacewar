@@ -46,14 +46,15 @@ builds.
 - Trees are branching, node-based — modeled on Warframe's Focus School trees.
   Each node can have several stages, and unlocking a node opens up further nodes/
   branches beyond it.
-- Open: how this per-crew Research tree relates to the ship-wide crafting tech
-  tree (see § Crafting & Tech Tree) — are they the same system (a crew member's
-  Research tree *is* how ship tech gets unlocked), or two separate progression
-  systems (character skills vs. ship crafting recipes)? See
+- This is the **actual progression** system of the game — distinct from Ship
+  Modules (see § Ship Modules), which just introduce base mechanics. Leveling up
+  crew members is what unlocks further buildings and recipes within whatever
+  modules are already active (see § Ship Modules for the example).
+- Open: is it specifically the Research tree that unlocks buildings/recipes, or
+  does Combat Operation feed into it too (e.g. combat-related buildings/recipes)?
+  What does Combat Operation grant otherwise (abilities, stats, weapon unlocks)?
+  How are points/progress earned for either tree (missions, training, both)? See
   design/OPEN_QUESTIONS.md.
-- Open: what Combat Operation nodes actually grant (abilities, stats, weapon
-  unlocks?), and how points/progress are earned for either tree (missions,
-  training, both?).
 
 ## Hub
 
@@ -63,8 +64,8 @@ builds.
 - **Factions:** players can join a faction and earn credits/reputation by
   completing missions for it.
 - Also offers **resource-gathering quests** the player can do at/from the hub.
-- Trading here is a key source of the resources needed to expand the ship's tech
-  tree (see § Crafting & Tech Tree) — not just a credit sink.
+- Trading here is a key source of the resources needed to expand the ship (see
+  § Ship Modules) — not just a credit sink.
 - Important distinction from a typical base-builder: the player has little to no
   impact on the hub's own growth or appearance — it's managed by the developers,
   not built up by players. All the "building" fantasy lives on the ship.
@@ -94,19 +95,28 @@ builds.
   support multiple independently-piloted ships plus their respective companion
   crews at once.)
 
-## Crafting & Tech Tree
+## Ship Modules
 
-- On-ship crafting is central, ONI-style: the player builds machines/stations on
-  the ship that consume and produce resources, and has to balance input/output
-  chains (e.g. a machine that turns raw material A + power into refined material B)
-  the same way ONI balances power, oxygen, and water webs.
-- This is the main way the ship is upgraded/expanded over time — not just buying
-  finished upgrades, but building the production chain that makes them.
-- **Key resources** — needed to unlock/expand the tech tree — are obtained through
+- Ship progression has two distinct layers, and they should stay separate
+  (confirmed — not the same system as § Crew Skill Trees):
+  1. **Ship Modules** (this section) — coarse unlocks that introduce a *basic
+     game mechanic* plus a dedicated area on the ship. Example: unlocking the
+     **Manufacturing Module** opens up an area where manufacturing-related
+     buildings can be built at all. This is about gradually introducing systems
+     to the player, not deep progression.
+  2. **Buildings & recipes within a module** — the actual depth/progression,
+     unlocked by leveling up crew members via their skill trees (see § Crew
+     Skill Trees). E.g. once Manufacturing is unlocked, further crew leveling is
+     what unlocks *which* manufacturing buildings/recipes become available.
+- On-ship crafting itself is ONI-style: buildings consume and produce resources,
+  and the player has to balance input/output chains (e.g. a machine that turns
+  raw material A + power into refined material B) the same way ONI balances
+  power, oxygen, and water webs.
+- **Key resources** — needed to unlock/expand things — are obtained through
   trading, both with other players and with hub NPCs (see § Hub, § Economy).
-- Open: how this relates to each crew member's Research skill tree (see § Crew
-  Skill Trees), the resource categories (raw/refined/key-trade) that feed it, and
-  which machines/rooms exist early vs. late game (see design/OPEN_QUESTIONS.md).
+- Open: does trading-for-key-resources unlock *modules*, or feed the *recipes*
+  crew leveling unlocks, or both? What other modules exist besides Manufacturing?
+  (see design/OPEN_QUESTIONS.md)
 
 ## Enemies / Opposition
 
@@ -124,10 +134,11 @@ _TBD_
 
 - Credits earned via faction missions and resource-gathering quests; spent at the
   hub (trading with NPCs and other players).
-- Trading is also how the player obtains **key resources** that expand the ship's
-  tech tree, on top of whatever's gathered/looted directly on missions.
-- Ship upgrades themselves come from on-ship crafting (see § Crafting & Tech
-  Tree), not direct purchase — credits/trading get you the resources and unlocks,
-  building still happens on the ship.
+- Trading is also how the player obtains **key resources** that expand the ship,
+  on top of whatever's gathered/looted directly on missions.
+- Ship upgrades themselves come from on-ship crafting, gated by Ship Modules and
+  Crew Skill Trees (see § Ship Modules, § Crew Skill Trees), not direct purchase
+  — credits/trading get you the resources and unlocks, building still happens on
+  the ship.
 
 _Full list of open questions across all design docs: design/OPEN_QUESTIONS.md._

@@ -49,3 +49,12 @@ _Running log of what's decided and what's built. Newest entries on top._
   based skill trees (Research, Combat Operation), Warframe Focus-School style —
   nodes have stages, unlocking one opens further nodes/branches. Relationship to
   the ship's crafting tech tree is still open.
+
+## 2026-09-22
+
+- Split ship progression into two confirmed-separate layers: **Ship Modules**
+  (coarse unlocks that introduce a basic mechanic + ship area, e.g. unlocking
+  Manufacturing lets you start building manufacturing buildings at all) vs.
+  **Crew Skill Trees** (the actual progression — leveling crew unlocks which
+  specific buildings/recipes are available within an already-unlocked module).
+  Renamed DESIGN.md's "Crafting & Tech Tree" section to "Ship Modules" to match.

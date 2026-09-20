@@ -7,17 +7,23 @@ doc's content and remove it from this list, rather than keeping a second copy._
 
 ## Mechanics (design/DESIGN.md)
 
-- **Research tree ↔ ship tech tree relationship:** is a crew member's Research
-  skill tree the actual mechanism that unlocks the ship's crafting tech tree, or
-  are they two separate systems (character skills vs. ship crafting recipes)?
-  _(§ Crew Skill Trees, § Crafting & Tech Tree)_
+- **Which skill tree drives building/recipe unlocks:** confirmed that Ship
+  Modules (basic mechanic gates) and Crew Skill Trees (actual progression) are
+  separate systems — but is it specifically the Research tree that unlocks
+  buildings/recipes within a module, or does Combat Operation feed in too?
+  _(§ Crew Skill Trees, § Ship Modules)_
 - **Combat Operation tree contents:** what nodes actually grant (abilities,
   stats, weapon unlocks?), and how points/progress are earned for either crew
   skill tree (missions, training, both?). _(§ Crew Skill Trees)_
-- **Resource categories:** raw/refined/key-trade breakdown feeding the ship's
-  tech tree. _(§ Crafting & Tech Tree)_
+- **Key-resource trading target:** does trading for key resources unlock ship
+  *modules*, or feed the *recipes* crew leveling unlocks, or both?
+  _(§ Ship Modules)_
+- **Module roster:** what modules exist besides Manufacturing (the one example
+  given so far), and what area/mechanic does each introduce? _(§ Ship Modules)_
+- **Resource categories:** raw/refined/key-trade breakdown feeding ship
+  progression. _(§ Ship Modules)_
 - **Machines/rooms progression:** which ones exist early vs. late game.
-  _(§ Crafting & Tech Tree)_
+  _(§ Ship Modules)_
 - **Failure reward exceptions:** the mechanism is decided (per-reward-type
   configurable "survives failure" flag), but which specific rewards get flagged
   that way is still open — deliberately left pending for later tuning.
