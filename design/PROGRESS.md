@@ -34,3 +34,5 @@ _Running log of what's decided and what's built. Newest entries on top._
   TBD).
 - Split narrative/lore into its own `design/STORY.md`, separate from mechanics in
   `design/DESIGN.md`.
+- Added `design/OPEN_QUESTIONS.md` as a rollup of every unresolved question across
+  the other docs.
