@@ -7,14 +7,18 @@ doc's content and remove it from this list, rather than keeping a second copy._
 
 ## Mechanics (design/DESIGN.md)
 
-- **Which skill tree drives building/recipe unlocks:** confirmed that Ship
-  Modules (basic mechanic gates) and Crew Skill Trees (actual progression) are
-  separate systems — but is it specifically the Research tree that unlocks
-  buildings/recipes within a module, or does Combat Operation feed in too?
-  _(§ Crew Skill Trees, § Ship Modules)_
-- **Combat Operation tree contents:** what nodes actually grant (abilities,
-  stats, weapon unlocks?), and how points/progress are earned for either crew
-  skill tree (missions, training, both?). _(§ Crew Skill Trees)_
+- **Combat skill trigger conditions:** Combat Operation nodes unlock skills/
+  passives that fire automatically when a condition is met (not manually
+  triggered) — what conditions exist (HP thresholds, enemy range, etc.)?
+  _(§ Crew Skill Trees)_
+- **Does condition-triggered combat apply to the main character:** companions
+  are already autonomous (ONI-style task assignment), so auto-triggered skills
+  fit naturally; the main character is otherwise directly piloted — do their
+  Combat Operation skills also auto-trigger, or work differently?
+  _(§ Crew Skill Trees, § Crew / Companions)_
+- **Skill tree progress source:** how are points/progress earned for the
+  Research and Combat Operation trees (missions, training, both)?
+  _(§ Crew Skill Trees)_
 - **Key-resource trading target:** does trading for key resources unlock ship
   *modules*, or feed the *recipes* crew leveling unlocks, or both?
   _(§ Ship Modules)_

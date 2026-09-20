@@ -58,3 +58,7 @@ _Running log of what's decided and what's built. Newest entries on top._
   **Crew Skill Trees** (the actual progression — leveling crew unlocks which
   specific buildings/recipes are available within an already-unlocked module).
   Renamed DESIGN.md's "Crafting & Tech Tree" section to "Ship Modules" to match.
+- Resolved which crew skill tree does what: Research unlocks recipes/buildings;
+  Combat Operation unlocks combat skills/passives that trigger automatically when
+  a condition is met (not manually activated), fitting the existing ONI-style
+  autonomous behavior for companions.

@@ -47,13 +47,18 @@ builds.
   Each node can have several stages, and unlocking a node opens up further nodes/
   branches beyond it.
 - This is the **actual progression** system of the game — distinct from Ship
-  Modules (see § Ship Modules), which just introduce base mechanics. Leveling up
-  crew members is what unlocks further buildings and recipes within whatever
-  modules are already active (see § Ship Modules for the example).
-- Open: is it specifically the Research tree that unlocks buildings/recipes, or
-  does Combat Operation feed into it too (e.g. combat-related buildings/recipes)?
-  What does Combat Operation grant otherwise (abilities, stats, weapon unlocks)?
-  How are points/progress earned for either tree (missions, training, both)? See
+  Modules (see § Ship Modules), which just introduce base mechanics.
+- **Research tree:** unlocks recipes and buildings within whatever modules are
+  already active (see § Ship Modules for the example).
+- **Combat Operation tree:** unlocks combat skills/passive skills. These are not
+  manually triggered — a crew member uses a skill automatically when its
+  condition is met (e.g. an HP threshold, an enemy coming into range, etc.). This
+  fits the existing ONI-style autonomous behavior for companions (see § Crew /
+  Companions); whether it also applies to the directly-piloted main character is
+  open.
+- Open: what conditions exist to trigger combat skills, whether they apply to the
+  main character too (who is otherwise directly controlled), and how points/
+  progress are earned for either tree (missions, training, both). See
   design/OPEN_QUESTIONS.md.
 
 ## Hub
