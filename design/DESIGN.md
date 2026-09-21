@@ -157,7 +157,10 @@ builds.
 
 ## Enemies / Opposition
 
-_TBD_
+- Narrative source is likely the **void monsters** occupying space segments
+  (see design/STORY.md § Setting), but gameplay specifics — enemy types,
+  behaviors, whether all opposition is void monsters or there are also human/Oni
+  factions to fight — are still entirely open.
 
 ## World / Levels
 

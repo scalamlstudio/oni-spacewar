@@ -81,3 +81,10 @@ _Running log of what's decided and what's built. Newest entries on top._
   (slow, ability-driven). Companions still auto-trigger skills on condition.
 - Revised Oni visual design: close to human, with variants like cat ears —
   supersedes the earlier "walking fat cat" description in CONCEPT.md/STORY.md.
+- Wrote the universe's core cosmology into STORY.md § Setting: humanity
+  fractured the universe into "space segments" to survive an oncoming Big Rip,
+  later invented wormhole-jump engines to travel between segments, and found
+  many segments already held by hostile "void monsters." Oni origin resolved:
+  some humans evolved into Oni (gaining magical abilities) through the war
+  against the void monsters. Void monsters are the likely narrative source for
+  DESIGN.md § Enemies / Opposition.

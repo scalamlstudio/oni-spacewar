@@ -34,21 +34,27 @@ doc's content and remove it from this list, rather than keeping a second copy._
   configurable "survives failure" flag), but which specific rewards get flagged
   that way is still open — deliberately left pending for later tuning.
   _(§ Missions)_
-- **Enemies/opposition:** entirely undefined — who/what the player fights.
-  _(§ Enemies / Opposition)_
+- **Enemies/opposition:** likely narrative source is the void monsters (see
+  Story § Setting below), but enemy types/behaviors and whether there's also
+  human/Oni opposition are undefined. _(§ Enemies / Opposition)_
 - **Level design within missions:** procedural vs. hand-designed, mission
   objective types/variety. _(implied by § Missions, not yet written up)_
 
 ## Story (design/STORY.md)
 
-- **Wormhole accident:** what caused it, and what state it leaves the crew/ship
-  in narratively? _(§ Opening: The Wormhole Accident)_
-- **Setting / known space:** what does known space look like, and where does the
-  hub sit in it? _(§ Setting)_
-- **The Oni:** origin and culture of the species — why are they the ones out
-  exploring space? _(§ The Oni)_
-- **Factions:** what do they represent in-fiction (political/military groups,
-  trade guilds, tied to the Oni or the accident)? What do they each want?
+- **Timeline & map:** how long ago the Big Rip/segmentation happened, how much
+  of the universe is explored/reclaimed vs. still void-monster territory, and
+  where the hub and the player's starting point sit in that map. _(§ Setting)_
+- **Wormhole accident specifics:** what specifically caused it, and what
+  state/location it leaves the crew/ship in (near void-monster territory?).
+  _(§ Opening: The Wormhole Accident)_
+- **Oni evolution & culture:** what specifically triggers the human→Oni
+  evolution, what "magical abilities" means concretely (ties to design/DESIGN.md
+  § Crew Skill Trees), whether Oni and un-evolved humans coexist/have distinct
+  roles, and why Oni specifically are the ones out exploring space now.
+  _(§ The Oni)_
+- **Factions:** human groups, Oni-specific groups, trade guilds, or organized
+  around fighting the void monsters? What does each faction want?
   _(§ Factions)_
 
 ## Concept (design/CONCEPT.md)
@@ -57,7 +63,6 @@ doc's content and remove it from this list, rather than keeping a second copy._
 
 ## Not yet started
 
-- Art direction / visual style beyond "Oni = walking fat cat."
+- Art direction / visual style beyond "Oni = human-like, with variants like cat
+  ears."
 - Audio direction.
-- Controls/input scheme specifics (the inherited scaffold uses mouse-move +
-  click-to-shoot; not yet confirmed as final).
