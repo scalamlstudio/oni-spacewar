@@ -79,3 +79,5 @@ _Running log of what's decided and what's built. Newest entries on top._
   player always controls their own ship (no unit selection), moves slowly, uses
   abilities on hotkeys. StarCraft II Mothership was the movement-feel reference
   (slow, ability-driven). Companions still auto-trigger skills on condition.
+- Revised Oni visual design: close to human, with variants like cat ears —
+  supersedes the earlier "walking fat cat" description in CONCEPT.md/STORY.md.

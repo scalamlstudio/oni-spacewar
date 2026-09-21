@@ -9,8 +9,9 @@ _TBD_
 
 ## The Oni
 
-- The species the player controls — visually a walking fat cat (not the Japanese-
-  folklore demon; see design/CONCEPT.md § "Oni" — double meaning).
+- The species the player controls — visually very close to human, with variants
+  such as cat ears (not the Japanese-folklore demon; see design/CONCEPT.md §
+  "Oni" — double meaning).
 - Open: origin, culture, why they're the ones out exploring space?
 
 ## Opening: The Wormhole Accident
