@@ -146,6 +146,13 @@ builds.
   and the player has to balance input/output chains (e.g. a machine that turns
   raw material A + power into refined material B) the same way ONI balances
   power, oxygen, and water webs.
+- **Building style/art direction reference: Mindustry** — a 2D factory-building
+  game (place machines/conveyors, route resources between them). Key difference
+  from Mindustry: Mindustry's factory can keep expanding indefinitely across an
+  open map, but our ship building is bounded by the ship's current interior
+  space/size. The ship's size is itself extended over time by adding more
+  modules (see this section) — so unlocking a module both introduces a mechanic
+  *and* grows the buildable area.
 - Manufacturing has a chance to produce a bonus **"extraordinary sample"**
   alongside normal output — these feed Research points when studied by a crew
   member (see § Crew Skill Trees).

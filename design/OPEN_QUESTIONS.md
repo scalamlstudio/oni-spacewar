@@ -26,6 +26,9 @@ doc's content and remove it from this list, rather than keeping a second copy._
   _(§ Ship Modules)_
 - **Module roster:** what modules exist besides Manufacturing (the one example
   given so far), and what area/mechanic does each introduce? _(§ Ship Modules)_
+- **Ship size extension:** mechanically, how does adding a module grow the ship's
+  buildable space — new rooms/tiles attached to the existing layout, a
+  pre-designed set of expansion shapes, something else? _(§ Ship Modules)_
 - **Resource categories:** raw/refined/key-trade breakdown feeding ship
   progression. _(§ Ship Modules)_
 - **Machines/rooms progression:** which ones exist early vs. late game.
@@ -64,5 +67,7 @@ doc's content and remove it from this list, rather than keeping a second copy._
 ## Not yet started
 
 - Art direction / visual style beyond "Oni = human-like, with variants like cat
-  ears."
+  ears" and "ship-building interior = Mindustry-style factory/conveyor visuals"
+  (see design/DESIGN.md § Ship Modules) — ship exterior, characters, UI, etc.
+  still undefined.
 - Audio direction.

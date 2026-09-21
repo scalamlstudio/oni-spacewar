@@ -88,3 +88,7 @@ _Running log of what's decided and what's built. Newest entries on top._
   some humans evolved into Oni (gaining magical abilities) through the war
   against the void monsters. Void monsters are the likely narrative source for
   DESIGN.md § Enemies / Opposition.
+- Ship building/art direction referenced to Mindustry (2D factory building —
+  machines, conveyors, resource routing), bounded by the ship's current interior
+  space rather than Mindustry's unbounded map. Ship size grows over time by
+  adding more modules (see § Ship Modules).
