@@ -92,3 +92,11 @@ _Running log of what's decided and what's built. Newest entries on top._
   machines, conveyors, resource routing), bounded by the ship's current interior
   space rather than Mindustry's unbounded map. Ship size grows over time by
   adding more modules (see § Ship Modules).
+- Major structural clarification: the persistent base is a **carrier**, not the
+  ship the player fights with. Missions are played with a separate **battleship**
+  (built/stored via a new **Docking Module**), selected along with companions and
+  teleported to a space segment. Also confirmed **Manufacturing Module** and
+  **Lab Module** (research) as known modules. Reworked DESIGN.md throughout to
+  distinguish carrier (persistent, stays behind) from battleship (mission
+  vessel, at risk each run) — this also sharpens why mission stakes are low: the
+  carrier itself is never directly at risk.

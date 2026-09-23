@@ -8,26 +8,32 @@ doc's content and remove it from this list, rather than keeping a second copy._
 ## Mechanics (design/DESIGN.md)
 
 - **Companion combat skill trigger conditions:** each skill has its own trigger
-  condition (e.g. repair skill → ship HP low, damage skill → enemy in range) —
-  what's the full range of condition types, and what happens when multiple
-  skills' conditions are met simultaneously (priority/cooldowns)?
+  condition (e.g. repair skill → battleship HP low, damage skill → enemy in
+  range) — what's the full range of condition types, and what happens when
+  multiple skills' conditions are met simultaneously (priority/cooldowns)?
   _(§ Crew Skill Trees)_
 - **Extraordinary sample variety:** what different kinds of samples exist, and
   how do their Research point payouts differ? _(§ Crew Skill Trees, § Ship
   Modules)_
 - **Research/training as an action:** how does "researching" a sample or
-  "studying" a tech document actually play out mechanically — a timed task
-  assignment, a dedicated ship room, passive over time? _(§ Crew Skill Trees)_
+  "studying" a tech document actually play out mechanically — likely happens in
+  the Lab Module (unconfirmed), but is it a timed task assignment, passive over
+  time, something else? _(§ Crew Skill Trees, § Ship Modules)_
 - **Basic weapon-fire action:** is there a plain attack separate from Combat
   Operation skills (LoL champions have basic attacks alongside abilities), or is
   all offense skill-based? _(§ Player)_
+- **Carrier control outside missions:** how does the player actually
+  control/manage the carrier itself (building placement, task assignment,
+  whether/how it "moves") when not on a mission with the battleship? What does
+  the main character do aboard the carrier between missions? _(§ Player,
+  § Crew / Companions)_
 - **Key-resource trading target:** does trading for key resources unlock ship
   *modules*, or feed the *recipes* crew leveling unlocks, or both?
   _(§ Ship Modules)_
-- **Module roster:** what modules exist besides Manufacturing (the one example
-  given so far), and what area/mechanic does each introduce? _(§ Ship Modules)_
-- **Ship size extension:** mechanically, how does adding a module grow the ship's
-  buildable space — new rooms/tiles attached to the existing layout, a
+- **Module roster:** what modules exist besides Docking, Manufacturing, and Lab,
+  and what area/mechanic does each introduce? _(§ Ship Modules)_
+- **Ship size extension:** mechanically, how does adding a module grow the
+  carrier's buildable space — new rooms/tiles attached to the existing layout, a
   pre-designed set of expansion shapes, something else? _(§ Ship Modules)_
 - **Resource categories:** raw/refined/key-trade breakdown feeding ship
   progression. _(§ Ship Modules)_
