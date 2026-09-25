@@ -79,14 +79,14 @@ _Running log of what's decided and what's built. Newest entries on top._
   player always controls their own ship (no unit selection), moves slowly, uses
   abilities on hotkeys. StarCraft II Mothership was the movement-feel reference
   (slow, ability-driven). Companions still auto-trigger skills on condition.
-- Revised Oni visual design: close to human, with variants like cat ears —
-  supersedes the earlier "walking fat cat" description in CONCEPT.md/STORY.md.
-- Wrote the universe's core cosmology into STORY.md § Setting: humanity
-  fractured the universe into "space segments" to survive an oncoming Big Rip,
-  later invented wormhole-jump engines to travel between segments, and found
-  many segments already held by hostile "void monsters." Oni origin resolved:
-  some humans evolved into Oni (gaining magical abilities) through the war
-  against the void monsters. Void monsters are the likely narrative source for
+- Revised Oni visual design, superseding the earlier "walking fat cat"
+  description in CONCEPT.md/STORY.md (since redesigned — see 2026-09-25).
+- Wrote the universe's core cosmology into STORY.md § Setting: the Oni
+  civilization fractured the universe into "space segments" to survive an
+  oncoming Big Rip, later invented wormhole-jump engines to travel between
+  segments, and found many segments already held by hostile "void monsters."
+  Oni origin resolved: the Oni gained magical abilities through the war against
+  the void monsters. Void monsters are the likely narrative source for
   DESIGN.md § Enemies / Opposition.
 - Ship building/art direction referenced to Mindustry (2D factory building —
   machines, conveyors, resource routing), bounded by the ship's current interior
@@ -120,3 +120,9 @@ _Running log of what's decided and what's built. Newest entries on top._
   questions) and keeps only § First Playable Scope and § Design-Done Checklist.
   First-playable resources, machines/rooms and the research/training action now
   track under TAKOAI-8. No question's substance changed.
+- Oni redesigned as a cat-like species (decided with collaborators). They are
+  now their own species rather than descended from another one — every such
+  reference is removed from the design and cosmology — and the Oni are the
+  civilization that segmented the universe. Updated CONCEPT.md, STORY.md,
+  DESIGN.md and OPEN_QUESTIONS.md to match, and edited the 2026-09-22 entries
+  above to match too.

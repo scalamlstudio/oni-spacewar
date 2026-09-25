@@ -6,12 +6,12 @@ high-level pitch see design/CONCEPT.md._
 ## Setting
 
 - Long ago, the universe was approaching the **Big Rip**. To prevent total
-  destruction, humanity used technology to deliberately tear the universe apart
-  first, on its own terms — fracturing it into separate **space segments**
-  instead of letting it rip apart completely.
-- Some time after that, humans developed a specialized spaceship engine capable
+  destruction, the **Oni civilization** used technology to deliberately tear the
+  universe apart first, on its own terms — fracturing it into separate **space
+  segments** instead of letting it rip apart completely.
+- Some time after that, the Oni developed a specialized spaceship engine capable
   of passing through **wormholes**, allowing travel between space segments.
-- Exploring these segments, humanity found many of them already occupied by
+- Exploring these segments, the Oni found many of them already occupied by
   **void monsters** — hostile entities from the void. This sets up § The Oni and
   is the likely narrative source for § Enemies / Opposition in design/DESIGN.md.
 - Open: how long ago all this happened, how much of "known space" has been
@@ -20,16 +20,15 @@ high-level pitch see design/CONCEPT.md._
 
 ## The Oni
 
-- The species the player controls — visually very close to human, with variants
-  such as cat ears (not the Japanese-folklore demon; see design/CONCEPT.md §
-  "Oni" — double meaning).
-- **Origin:** through the war against the void monsters (see § Setting), some
-  humans evolved into Oni, gaining magical abilities.
-- Open: what specifically triggers the evolution (exposure to void energy,
-  something else), what "magical abilities" concretely means in gameplay terms
-  (ties to design/DESIGN.md § Crew Skill Trees?), whether Oni and un-evolved
-  humans still coexist/have distinct roles or society, and why Oni specifically
-  are the ones out exploring space now.
+- The species the player controls — a cat-like creature (not the
+  Japanese-folklore demon; see design/CONCEPT.md § "Oni" — double meaning).
+- **Origin:** the Oni are their own species — the civilization that segmented
+  the universe (see § Setting). Through the war against the void monsters, they
+  gained magical abilities.
+- Open: what specifically triggered the awakening of those abilities (exposure
+  to void energy, something else), what "magical abilities" concretely means in
+  gameplay terms (ties to design/DESIGN.md § Crew Skill Trees?), and why the
+  Oni are out exploring space now.
 
 ## Opening: The Wormhole Accident
 
@@ -46,8 +45,8 @@ high-level pitch see design/CONCEPT.md._
 
 - Players can join a faction and earn credits/reputation through missions for it
   (see design/DESIGN.md § Hub, § Missions).
-- Open: what do factions represent in-fiction — human political/military groups,
-  trade guilds, Oni-specific groups, or something organized around the fight
-  against the void monsters (see § Setting)?
+- Open: what do factions represent in-fiction — Oni political/military groups,
+  trade guilds, or something organized around the fight against the void
+  monsters (see § Setting)?
 
 _Full list of open questions across all design docs: design/OPEN_QUESTIONS.md._
