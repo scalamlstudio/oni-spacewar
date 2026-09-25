@@ -19,8 +19,8 @@ from the `space-sandbox` entity/world architecture.
  - [`design/CONCEPT.md`](design/CONCEPT.md) — pitch
  - [`design/DESIGN.md`](design/DESIGN.md) — mechanics
  - [`design/STORY.md`](design/STORY.md) — setting and lore
- - [`design/READINESS.md`](design/READINESS.md) — first-playable scope and what's left before development
- - [`design/OPEN_QUESTIONS.md`](design/OPEN_QUESTIONS.md) — open questions
+ - [`design/READINESS.md`](design/READINESS.md) — first-playable scope and design-done checklist
+ - [`design/OPEN_QUESTIONS.md`](design/OPEN_QUESTIONS.md) — open questions, what blocks the first playable, and what to decide next
  - [`design/PROGRESS.md`](design/PROGRESS.md) — decision log
 
 Tasks are tracked on the project's Multica board, not in this README.
