@@ -126,3 +126,8 @@ _Running log of what's decided and what's built. Newest entries on top._
   civilization that segmented the universe. Updated CONCEPT.md, STORY.md,
   DESIGN.md and OPEN_QUESTIONS.md to match, and edited the 2026-09-22 entries
   above to match too.
+- Added exploratory concept art in `design/concept-art/` (TAKOAI-12): four
+  flat-vector SVG sheets with PNG renders — the Oni crew lineup, the carrier
+  (exterior + Mindustry-style interior), a battleship-vs-void-monsters mission
+  moment with a Q/W/E/R bar, and a mood/palette board. These are for reaction
+  only, not a decided art direction; art direction stays open under TAKOAI-7.

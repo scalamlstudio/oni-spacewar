@@ -22,5 +22,6 @@ from the `space-sandbox` entity/world architecture.
  - [`design/READINESS.md`](design/READINESS.md) — first-playable scope and design-done checklist
  - [`design/OPEN_QUESTIONS.md`](design/OPEN_QUESTIONS.md) — open questions, what blocks the first playable, and what to decide next
  - [`design/PROGRESS.md`](design/PROGRESS.md) — decision log
+ - [`design/concept-art/`](design/concept-art/) — exploratory concept sheets (not a decided art direction)
 
 Tasks are tracked on the project's Multica board, not in this README.
