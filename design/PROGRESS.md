@@ -112,3 +112,11 @@ _Running log of what's decided and what's built. Newest entries on top._
 - Task tracking moved to the Multica board (TAKOAI-2 … TAKOAI-7, one issue per
   decision area). `README.md`'s Todo list was removed in favor of pointers to
   `design/`; `OPEN_QUESTIONS.md` stays the single canonical question list.
+- Consolidated open questions into `design/OPEN_QUESTIONS.md` only: each entry
+  now carries its first-playable tag (`Blocks first playable` /
+  `Blocks (partial)` / `Deferred`) and board issue, and a "Decide next" list at
+  the top gives the recommended order by name. `design/READINESS.md` dropped its
+  Question Triage and Recommended Decision Order sections (which restated the
+  questions) and keeps only § First Playable Scope and § Design-Done Checklist.
+  First-playable resources, machines/rooms and the research/training action now
+  track under TAKOAI-8. No question's substance changed.
