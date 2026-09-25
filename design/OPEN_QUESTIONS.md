@@ -85,7 +85,7 @@ Steps 1-4 (combat) and step 5 (carrier) are independent and can run in parallel.
   `Deferred` · TAKOAI-5
 - **Enemies/opposition:** likely narrative source is the void monsters (see
   Story § Setting below), but enemy types/behaviors and whether there's also
-  human/Oni opposition are undefined. _(§ Enemies / Opposition)_
+  Oni opposition (rival Oni groups) are undefined. _(§ Enemies / Opposition)_
   `Blocks (partial)` · TAKOAI-5 — needed now: 2 void-monster types.
 - **Level design within missions:** procedural vs. hand-designed, mission
   objective types/variety. _(implied by § Missions, not yet written up)_
@@ -102,13 +102,13 @@ Steps 1-4 (combat) and step 5 (carrier) are independent and can run in parallel.
   state/location it leaves the crew/ship in (near void-monster territory?).
   _(§ Opening: The Wormhole Accident)_
   `Deferred` · TAKOAI-6 — the premise is enough for a title card.
-- **Oni evolution & culture:** what specifically triggers the human→Oni
-  evolution, what "magical abilities" means concretely (ties to design/DESIGN.md
-  § Crew Skill Trees), whether Oni and un-evolved humans coexist/have distinct
-  roles, and why Oni specifically are the ones out exploring space now.
+- **Oni evolution & culture:** what specifically triggered the awakening of
+  the Oni's magical abilities, what "magical abilities" means concretely (ties
+  to design/DESIGN.md § Crew Skill Trees), and why the Oni are out exploring
+  space now.
   _(§ The Oni)_
   `Deferred` · TAKOAI-6 — not needed until skill trees grow past a stub.
-- **Factions:** human groups, Oni-specific groups, trade guilds, or organized
+- **Factions:** Oni political/military groups, trade guilds, or organized
   around fighting the void monsters? What does each faction want?
   _(§ Factions)_
   `Deferred` · TAKOAI-6 — the hub and factions are out of first-playable scope.
@@ -119,10 +119,10 @@ Steps 1-4 (combat) and step 5 (carrier) are independent and can run in parallel.
 
 ## Not yet started
 
-- Art direction / visual style beyond "Oni = human-like, with variants like cat
-  ears" and "ship-building interior = Mindustry-style factory/conveyor visuals"
-  (see design/DESIGN.md § Ship Modules) — ship exterior, characters, UI, etc.
-  still undefined.
+- Art direction / visual style beyond "Oni = cat-like creatures" and
+  "ship-building interior = Mindustry-style factory/conveyor visuals" (see
+  design/DESIGN.md § Ship Modules) — ship exterior, characters, UI, etc. still
+  undefined.
   `Deferred` · TAKOAI-7
 - Audio direction.
   `Deferred` · TAKOAI-7
