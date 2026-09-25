@@ -100,3 +100,15 @@ _Running log of what's decided and what's built. Newest entries on top._
   distinguish carrier (persistent, stays behind) from battleship (mission
   vessel, at risk each run) — this also sharpens why mission stakes are low: the
   carrier itself is never directly at risk.
+
+## 2026-09-25
+
+- Added `design/READINESS.md`: a proposed first-playable scope (one carrier with
+  Docking + Manufacturing, one solo hand-built mission, stub skill trees, no hub
+  or multiplayer), a design-done checklist, a triage of every
+  `OPEN_QUESTIONS.md` entry as blocking or deferrable, and a recommended decision
+  order. The scope is a proposal pending Wei's confirmation — nothing in it is
+  decided yet.
+- Task tracking moved to the Multica board (TAKOAI-2 … TAKOAI-7, one issue per
+  decision area). `README.md`'s Todo list was removed in favor of pointers to
+  `design/`; `OPEN_QUESTIONS.md` stays the single canonical question list.

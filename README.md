@@ -1,7 +1,11 @@
 # Oni Spacewar
 
-A LÖVE2D game, bootstrapped from the `space-sandbox` entity/world architecture.
-Concept is still open — this is currently just a running project shell.
+A LÖVE2D game: manage a modular carrier ship and its Oni crew
+(Oxygen Not Included-style base building), then take a battleship out on
+Warframe-style missions with League of Legends-style click-to-move combat.
+
+In the design phase — the code is still the running project shell bootstrapped
+from the `space-sandbox` entity/world architecture.
 
 ### Run Game
 
@@ -10,8 +14,13 @@ Concept is still open — this is currently just a running project shell.
  - macOS: `bash love.sh`
  - Other Platforms: [Love2D Wiki - Getting Started](https://love2d.org/wiki/Getting_Started)
 
-### Todo
+### Design
 
- - Decide game concept / theme
- - Replace placeholder shapes (Circle/Triangle/Square/Hexagon) with real art
- - Design levels/worlds beyond the two placeholders (`world/w1.lua`, `world/w2.lua`)
+ - [`design/CONCEPT.md`](design/CONCEPT.md) — pitch
+ - [`design/DESIGN.md`](design/DESIGN.md) — mechanics
+ - [`design/STORY.md`](design/STORY.md) — setting and lore
+ - [`design/READINESS.md`](design/READINESS.md) — first-playable scope and what's left before development
+ - [`design/OPEN_QUESTIONS.md`](design/OPEN_QUESTIONS.md) — open questions
+ - [`design/PROGRESS.md`](design/PROGRESS.md) — decision log
+
+Tasks are tracked on the project's Multica board, not in this README.
