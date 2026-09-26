@@ -7,12 +7,14 @@ Warframe-style missions with League of Legends-style click-to-move combat.
 In the design phase — the code is still the running project shell bootstrapped
 from the `space-sandbox` entity/world architecture.
 
+The game code lives in [`src/`](src/), separate from the design docs.
+
 ### Run Game
 
 [Install Love2D](https://love2d.org/#download)
 
  - macOS: `bash love.sh`
- - Other Platforms: [Love2D Wiki - Getting Started](https://love2d.org/wiki/Getting_Started)
+ - Other Platforms: `love src` — see [Love2D Wiki - Getting Started](https://love2d.org/wiki/Getting_Started)
 
 ### Design
 
