@@ -41,6 +41,10 @@ segment (see § Missions, § Ship Modules).
   manually triggered by the player (hotkeys, LoL-ability-style) while the
   battleship moves (see § Crew Skill Trees) — unlike companions, whose combat
   skills auto-trigger automatically when their condition is matched.
+- Basic attack: the battleship's main weapon auto-fires at the nearest enemy
+  within weapon range at a fixed rate; the player's inputs are movement
+  (click-to-move) and Combat Operation skills (Q/W/E/R, cooldown-based). A
+  player-set focus target may be added later.
 - Progression: earn credits via faction missions and resource-gathering, spend on
   growing/upgrading the carrier (see § Hub, § Economy).
 - Open: how the player controls/manages the carrier itself outside of missions
@@ -90,12 +94,14 @@ segment (see § Missions, § Ship Modules).
   - **Training (studying):** crew gain knowledge by studying "advanced tech
     documents," obtained either by purchasing them at the hub or finding them
     as mission loot (see § Hub, § Missions).
-- Open: the full range of condition types for companion skills beyond the two
-  examples above, what happens when multiple companion skills' conditions are
-  met at once (priority/cooldowns); the range/tiers of extraordinary samples and
-  how their point values differ; and how "researching" a sample or "studying" a
-  document plays out as an action (time cost, task assignment, etc.) — see
-  design/OPEN_QUESTIONS.md.
+- Open: the range/tiers of extraordinary samples and how their point values
+  differ, and how "researching" a sample or "studying" a document plays out as
+  an action (time cost, task assignment, etc.) — see design/OPEN_QUESTIONS.md.
+  The full range of condition types for companion skills beyond the two
+  examples above, and what happens when multiple companion skills' conditions
+  are met at once (priority/cooldowns), is deliberately left open too: Wei
+  decided this needs the detailed skill design pass to fine-tune rather than a
+  call made this early.
 
 ## Hub
 

@@ -27,9 +27,9 @@ pass through that loop, repeatable, is the whole target.
 - **Mission:** one hand-built space segment, one objective type (e.g. clear the
   area / reach the exit with loot), solo only. Launched directly from the
   carrier — no hub.
-- **Battleship combat:** click-to-move battleship, basic attack (if kept — see
-  TAKOAI-3), 2-3 main-character skills on Q/W/E/R, 1-2 companion auto-trigger
-  skills, 2 void-monster enemy types.
+- **Battleship combat:** click-to-move battleship, auto-fire basic attack,
+  2-3 main-character skills on Q/W/E/R, 1-2 companion auto-trigger skills, 2
+  void-monster enemy types.
 - **Progression:** Combat points from kills and Research points from one source
   (tech document as mission loot, *or* one kind of extraordinary sample). Each
   crew member has a stub of both skill trees, 3-5 nodes each — enough to unlock

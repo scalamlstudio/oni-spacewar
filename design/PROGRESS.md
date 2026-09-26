@@ -146,3 +146,16 @@ _Running log of what's decided and what's built. Newest entries on top._
   enemy/, projectile/, shader/, world/), separating it from `design/` at the
   repo root. No Lua changed; `love.sh`, `README.md` and `ARCHITECTURE.md`
   updated to point at `src/`.
+- Basic attack decided (TAKOAI-3): the battleship's main weapon auto-fires at
+  the nearest enemy within weapon range at a fixed rate, rather than a
+  targeted LoL-style auto-attack or no basic attack at all. Click-to-move
+  stays the movement input; Q/W/E/R Combat Operation skills are unaffected.
+  Updated DESIGN.md § Player and READINESS.md § First Playable Scope;
+  removed from OPEN_QUESTIONS.md.
+- Companion combat skill trigger conditions (TAKOAI-3) deliberately left
+  undecided: Wei doesn't want the full condition range or multi-trigger
+  priority rule fixed this early, since it'll need fine-tuning once detailed
+  skill design starts. The existing two examples in DESIGN.md § Crew Skill
+  Trees (repair on low HP, damage on enemy in range) stand as-is for the
+  first playable. Re-tagged `Deferred` in OPEN_QUESTIONS.md instead of
+  resolving it.
