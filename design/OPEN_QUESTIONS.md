@@ -19,15 +19,13 @@ The blocking questions, in the order that lets each answer constrain the next.
 Confirming design/READINESS.md § First Playable Scope (TAKOAI-1) comes first,
 since it decides what "partial" means below.
 
-1. Basic weapon-fire action
-2. Companion combat skill trigger conditions
-3. Enemies/opposition
-4. Level design within missions
-5. Carrier control outside missions
-6. Resource categories + Machines/rooms progression
-7. Research/training as an action
+1. Enemies/opposition
+2. Level design within missions
+3. Carrier control outside missions
+4. Resource categories + Machines/rooms progression
+5. Research/training as an action
 
-Steps 1-4 (combat) and step 5 (carrier) are independent and can run in parallel.
+Steps 1-2 (combat) and step 3 (carrier) are independent and can run in parallel.
 
 ## Mechanics (design/DESIGN.md)
 
@@ -36,8 +34,10 @@ Steps 1-4 (combat) and step 5 (carrier) are independent and can run in parallel.
   range) — what's the full range of condition types, and what happens when
   multiple skills' conditions are met simultaneously (priority/cooldowns)?
   _(§ Crew Skill Trees)_
-  `Blocks (partial)` · TAKOAI-3 — needed now: the trigger model and
-  multi-trigger rule for 1-2 skills.
+  `Deferred` · TAKOAI-3 — Wei decided this needs the detailed skill design
+  pass to fine-tune, not a call made this early; the existing two examples
+  (repair on low HP, damage on enemy in range) are enough for the first
+  playable.
 - **Extraordinary sample variety:** what different kinds of samples exist, and
   how do their Research point payouts differ? _(§ Crew Skill Trees, § Ship
   Modules)_
@@ -49,10 +49,6 @@ Steps 1-4 (combat) and step 5 (carrier) are independent and can run in parallel.
   time, something else? _(§ Crew Skill Trees, § Ship Modules)_
   `Blocks (partial)` · TAKOAI-8 — needed now: one Research source, enough to
   close the loop from loot to skill points.
-- **Basic weapon-fire action:** is there a plain attack separate from Combat
-  Operation skills (LoL champions have basic attacks alongside abilities), or is
-  all offense skill-based? _(§ Player)_
-  `Blocks first playable` · TAKOAI-3
 - **Carrier control outside missions:** how does the player actually
   control/manage the carrier itself (building placement, task assignment,
   whether/how it "moves") when not on a mission with the battleship? What does
