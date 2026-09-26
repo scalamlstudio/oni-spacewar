@@ -131,3 +131,14 @@ _Running log of what's decided and what's built. Newest entries on top._
   (exterior + Mindustry-style interior), a battleship-vs-void-monsters mission
   moment with a Q/W/E/R bar, and a mood/palette board. These are for reaction
   only, not a decided art direction; art direction stays open under TAKOAI-7.
+
+## 2026-09-26
+
+- Revised the concept art in `design/concept-art/` after Wei's feedback on
+  TAKOAI-12 (still exploratory, not a decided art direction; palette kept):
+  rounder, chubbier Oni; the carrier redrawn as a spine of repeatable module
+  sockets (several Docks each holding a different battleship, several
+  Manufacturing modules each on a different production line); and the mission
+  sheet redrawn as a bullet-hell fight with a much smaller battleship. The
+  design docs are not yet updated for the multi-module carrier or bullet-hell
+  combat — those await Wei's confirmation as design decisions.
