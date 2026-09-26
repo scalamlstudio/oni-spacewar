@@ -142,3 +142,7 @@ _Running log of what's decided and what's built. Newest entries on top._
   sheet redrawn as a bullet-hell fight with a much smaller battleship. The
   design docs are not yet updated for the multi-module carrier or bullet-hell
   combat — those await Wei's confirmation as design decisions.
+- Moved the game code into `src/` (main.lua, requirement.lua, class/, general/,
+  enemy/, projectile/, shader/, world/), separating it from `design/` at the
+  repo root. No Lua changed; `love.sh`, `README.md` and `ARCHITECTURE.md`
+  updated to point at `src/`.
