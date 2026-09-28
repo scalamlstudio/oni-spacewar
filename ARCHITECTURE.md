@@ -17,3 +17,9 @@ Projectile -+
             |
 Portal -----+
 ```
+
+## `spike/bevy-netcode/` (TAKOAI-18)
+
+A stand-alone Rust/Bevy test build for the Love2D → Bevy go/no-go decision. It is
+not part of the game and shares no code with `src/`. See its README for layout and
+the determinism choices (fixed-point integer simulation, no floats in rollback state).
