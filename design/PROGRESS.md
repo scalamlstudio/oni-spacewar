@@ -166,13 +166,3 @@ _Running log of what's decided and what's built. Newest entries on top._
   `generate.py` and `render.sh`) after Wei approved the v3 renders
   (TAKOAI-16). `design/art/` replaces it; the old files remain in git history.
   README now links to `design/art/` (TAKOAI-17).
-
-## 2026-09-29
-
-- Bevy port Stage 2 (TAKOAI-26): the Rust sim (`crates/sim`) now has the
-  structure gameplay will be built on — plain-data entities in rolled-back
-  `Vec`s, a fixed-phase `step()`, placeholder tuning in one module, integer
-  collision, and mouse/Q/W/E/R input with click-to-move (DESIGN.md § Player).
-  Gameplay is a placeholder (Q shot, waves of chasing enemies) supporting 1–4
-  battleships. The LÖVE2D code in `src/` is a prototype from another project
-  and was deliberately not ported (Wei); it stays until the final port stage.
