@@ -40,6 +40,19 @@ impl FxVec2 {
     pub fn length(self) -> i64 {
         self.length_squared().isqrt()
     }
+
+    /// This vector rescaled to length `len` (zero stays zero). Integer-only,
+    /// so aiming at a point needs no trig.
+    pub fn scale_to(self, len: i32) -> Self {
+        let l = self.length();
+        if l == 0 {
+            return Self::ZERO;
+        }
+        Self::new(
+            (self.x as i64 * len as i64 / l) as i32,
+            (self.y as i64 * len as i64 / l) as i32,
+        )
+    }
 }
 
 impl core::ops::Add for FxVec2 {
@@ -70,5 +83,7 @@ mod tests {
         assert_eq!(FxVec2::new(3 * SUB, 4 * SUB).length(), (5 * SUB) as i64);
         assert_eq!(mul_q16(1000, Q16_ONE / 2), 500);
         assert_eq!(mul_q16(-1000, Q16_ONE / 2), -500);
+        assert_eq!(FxVec2::new(0, -900).scale_to(30), FxVec2::new(0, -30));
+        assert_eq!(FxVec2::ZERO.scale_to(30), FxVec2::ZERO);
     }
 }

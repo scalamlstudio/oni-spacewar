@@ -5,8 +5,8 @@
 //!   synctest  GGRS SyncTestSession: every frame is re-simulated and checksummed.
 //!   p2p       Up to 4 peers connected through a matchbox signaling server.
 //!
-//! There is no gameplay yet; ships are placeholders that move 8-way so the
-//! rollback plumbing can be exercised end to end.
+//! Gameplay is a placeholder that exercises the foundation (see `sim`):
+//! click-to-move battleships, a Q shot, and waves of chasing enemies.
 
 mod input;
 mod net;

@@ -7,8 +7,8 @@ LÖVE2D to Rust/Bevy:
 
 | path | what | status |
 |---|---|---|
-| `Cargo.toml`, `crates/` | Rust/Bevy workspace (the game going forward) | skeleton, no gameplay yet |
-| `src/` | LÖVE2D/Lua game shell | untouched until its content is ported |
+| `Cargo.toml`, `crates/` | Rust/Bevy workspace (the game going forward) | foundation + placeholder gameplay (TAKOAI-26) |
+| `src/` | LÖVE2D/Lua game shell | prototype from another project, not ported; deleted in the final port stage |
 | `spike/bevy-netcode/` | TAKOAI-18 rollback spike (own `Cargo.toml`, excluded from the workspace) | reference only; delete once fully migrated |
 
 ## Rust workspace
@@ -18,18 +18,21 @@ Cargo.toml            workspace; exact version pins live in [workspace.dependenc
 crates/
   sim/                package `oni-sim`, lib `sim` — deterministic mission simulation, NO Bevy
     src/lib.rs          crate docs + determinism rules
-    src/state.rs        SimState (all rolled-back state), SimParams, Ship, step()
-    src/fixed.rs        fixed-point: SUB (1 px = 256), FxVec2, mul_q16
+    src/state.rs        SimState (all rolled-back state), step() and its phases
+    src/entity.rs       plain-data entities: Ship, Enemy, Projectile
+    src/tuning.rs       placeholder gameplay numbers + unit conversion (px/s -> sub-px/tick)
+    src/collision.rs    integer circle overlap + separation
+    src/fixed.rs        fixed-point: SUB (1 px = 256), FxVec2 (+ scale_to), mul_q16
     src/trig.rs         integer sin/cos from a committed Q16 table (from the spike)
     src/rng.rs          SimRng, seeded xorshift64* (part of SimState)
-    src/input.rs        NetInput, the per-tick input peers exchange
+    src/input.rs        NetInput: buttons (move, Q/W/E/R) + cursor target, exchanged per tick
   client/             package `oni-client`, bin `oni-spacewar` — everything else
     src/main.rs         CLI (synctest / p2p modes), app + GGRS session setup
     src/rollback.rs     SimWorld resource, rollback/checksum registration, GgrsSchedule
-    src/input.rs        keyboard / bot → NetInput (ReadInputs)
+    src/input.rs        mouse + keyboard / bot → NetInput (ReadInputs)
     src/net.rs          matchbox ↔ ggrs socket adapter + latency/loss emulator (from the spike)
     src/stats.rs        rollback / frame-time / desync measurement + report (from the spike)
-    src/render.rs       placeholder visuals + HUD (Update, outside rollback)
+    src/render.rs       placeholder shapes, camera follow, HUD (Update, outside rollback)
 ```
 
 Dependency direction is one-way: `client → sim`. `sim` depends only on `serde`,
@@ -48,10 +51,35 @@ so it cannot reach the engine, the clock, the renderer or the network.
 - Multiplayer is the default shape: `SimState::ships` holds one ship per player
   handle (1..=4, `MAX_PLAYERS`); single-player is `num_players = 1`.
 
+### Simulation structure
+
+The gameplay in `sim` is a placeholder (click-to-move battleships, a Q shot on
+a cooldown, waves of enemies that chase the nearest ship). It exists to
+exercise the foundation and will be replaced; the structure is what new
+gameplay should follow:
+
+- **Entities are plain data** (`entity.rs`), one `Vec` per kind inside
+  `SimState`. Removal uses `retain`, so order stays stable. No Bevy entities or
+  components in the simulation.
+- **`step()` is a fixed list of phases** (`state.rs`): spawn → apply inputs →
+  move → hits → separation → remove dead. Each phase is a method over whole
+  collections, so the order of effects is explicit and identical on every
+  peer. New mechanics add a phase (or a new module with one) rather than
+  hooking into Bevy schedules.
+- **Numbers live in `tuning.rs`** in human units (px, px/s, seconds) and are
+  converted at use (`px_per_tick`, `ticks`). They are placeholders, not design
+  values.
+- **Input** (`NetInput`) is a button bitmask (move, Q/W/E/R) plus the cursor in
+  world pixels: click-to-move sets the ship's target, skills aim at the cursor.
+- **Collision** is integer circle overlap; pairs are checked brute-force in
+  `Vec` order, which is fine at current entity counts. A deterministic broad
+  phase can be added when counts grow.
+
 ### Determinism choices
 
 - **Fixed-point integers, no floats in the simulation.** Positions and
-  velocities are `i32` sub-pixels (`SUB = 256`). Directions come from the
+  velocities are `i32` sub-pixels (`SUB = 256`). Aiming at a point rescales
+  the integer delta vector (`FxVec2::scale_to`); angle-based directions come from the
   committed Q16 sine table in `sim::trig`; lengths use `i64::isqrt`. This is
   bit-identical across platforms and compilers without depending on libm or FMA
   behaviour. Floats appear only in the client when converting a sim position to
