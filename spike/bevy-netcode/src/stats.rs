@@ -38,6 +38,8 @@ pub struct Stats {
     pub bullet_min_after_warmup: Option<usize>,
     // Rendered frame times (after warmup)
     pub frame_times_ms: Vec<f32>,
+    /// (frame time, sim frame reached) for the five worst rendered frames.
+    pub worst_frames: Vec<(f32, u32)>,
     pub rendered_frames: u64,
     // Time spent inside the GGRS update (save/load/advance incl. rollback)
     pub ggrs_ms: Vec<f32>,
@@ -58,7 +60,7 @@ impl Plugin for StatsPlugin {
             .add_systems(PreUpdate, ggrs_timer_start.before(RunGgrsSystems))
             .add_systems(PreUpdate, ggrs_timer_end.after(RunGgrsSystems))
             .add_systems(Update, (drain_p2p_events, check_finished).chain())
-            .add_systems(Last, record_frame_time)
+            .add_systems(Last, (record_frame_time, report_on_exit))
             .add_observer(on_synctest_mismatch);
     }
 }
@@ -111,7 +113,12 @@ fn ggrs_timer_end(mut stats: ResMut<Stats>, limit: Res<RunLimit>) {
 fn record_frame_time(time: Res<Time<Real>>, mut stats: ResMut<Stats>, limit: Res<RunLimit>) {
     stats.rendered_frames += 1;
     if stats.max_frame > limit.warmup_frames {
-        stats.frame_times_ms.push(time.delta_secs() * 1000.0);
+        let ms = time.delta_secs() * 1000.0;
+        stats.frame_times_ms.push(ms);
+        let at = stats.max_frame;
+        stats.worst_frames.push((ms, at));
+        stats.worst_frames.sort_by(|a, b| b.0.total_cmp(&a.0));
+        stats.worst_frames.truncate(5);
     }
 }
 
@@ -158,7 +165,18 @@ fn check_finished(
     limit: Res<RunLimit>,
     mut exit: MessageWriter<AppExit>,
 ) {
-    if stats.finished || limit.frames == 0 {
+    if stats.finished {
+        return;
+    }
+    // A synctest mismatch stalls the session (bevy_ggrs stops advancing), so
+    // stop right away and fail.
+    if stats.synctest_mismatches > 0 {
+        stats.finished = true;
+        println!("{}", stats.report());
+        exit.write(AppExit::error());
+        return;
+    }
+    if limit.frames == 0 {
         return;
     }
     // The other peer may quit a few frames before us; treat that as the end too.
@@ -167,6 +185,14 @@ fn check_finished(
         stats.finished = true;
         println!("{}", stats.report());
         exit.write(AppExit::Success);
+    }
+}
+
+/// Prints the report when the app exits for any other reason (window closed).
+fn report_on_exit(mut exits: MessageReader<AppExit>, mut stats: ResMut<Stats>) {
+    if exits.read().next().is_some() && !stats.finished {
+        stats.finished = true;
+        println!("{}", stats.report());
     }
 }
 
@@ -186,7 +212,11 @@ impl Stats {
         let mut gg = self.ggrs_ms.clone();
         gg.sort_by(|a, b| a.total_cmp(b));
         let over = |limit: f32| ft.iter().filter(|&&t| t > limit).count();
-        let worst: Vec<String> = ft.iter().rev().take(5).map(|t| format!("{t:.2}")).collect();
+        let worst: Vec<String> = self
+            .worst_frames
+            .iter()
+            .map(|(t, f)| format!("{t:.2}@f{f}"))
+            .collect();
         let avg_fps = if ft.is_empty() {
             0.0
         } else {

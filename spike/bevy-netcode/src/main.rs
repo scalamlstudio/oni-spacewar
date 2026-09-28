@@ -26,7 +26,7 @@ use matchbox_socket::WebRtcSocket;
 
 use net::{EmulatedGgrsSocket, NetEmuConfig};
 use sim::*;
-use stats::{RunLimit, Stats, StatsPlugin};
+use stats::{RunLimit, StatsPlugin};
 
 const USAGE: &str = "\
 usage:
@@ -34,7 +34,7 @@ usage:
   bevy-netcode-spike p2p [--room ws://127.0.0.1:3536/spike?next=2] [--players 2]
                          [--delay-ms 50] [--jitter-ms 0] [--loss 0.0] [--input-delay 2]
                          [--minutes M] [--headless] [--bot]
-common: [--bullets 1000] [--seed 42] [--no-vsync]";
+common: [--bullets 1000] [--seed 42] [--no-vsync] [--inject-desync]";
 
 #[derive(Clone, Debug)]
 struct Args {
@@ -51,6 +51,7 @@ struct Args {
     input_delay: usize,
     max_prediction: usize,
     desync_interval: u32,
+    inject_desync: bool,
     emu: NetEmuConfig,
 }
 
@@ -74,9 +75,10 @@ fn parse_args() -> Args {
         input_delay: 2,
         max_prediction: 8,
         desync_interval: 10,
+        inject_desync: false,
         emu: NetEmuConfig::default(),
     };
-    let mut val = |name: &str, it: &mut dyn Iterator<Item = String>| -> String {
+    let val = |name: &str, it: &mut dyn Iterator<Item = String>| -> String {
         it.next().unwrap_or_else(|| {
             eprintln!("missing value for {name}\n{USAGE}");
             std::process::exit(2)
@@ -87,6 +89,7 @@ fn parse_args() -> Args {
             "--headless" => a.headless = true,
             "--bot" => a.bot = true,
             "--no-vsync" => a.vsync = false,
+            "--inject-desync" => a.inject_desync = true,
             "--minutes" => a.minutes = val(&flag, &mut it).parse().unwrap(),
             "--bullets" => a.bullets = val(&flag, &mut it).parse().unwrap(),
             "--seed" => a.seed = val(&flag, &mut it).parse().unwrap(),
@@ -178,6 +181,7 @@ fn main() {
             frames,
             warmup_frames: 180,
         })
+        .insert_resource(InjectDesync(args.inject_desync))
         .init_resource::<NetStatus>()
         .init_resource::<BotBrains>()
         .insert_resource(AppArgs(args.clone()))
@@ -222,10 +226,11 @@ fn main() {
         }
     }
 
-    app.run();
-    let stats = app.world().resource::<Stats>();
-    if !stats.finished {
-        println!("{}", stats.report());
+    // The report is printed by StatsPlugin on any AppExit (limit reached,
+    // window closed); `App::run` hands the world to the runner, so it can't be
+    // read here afterwards.
+    if app.run().is_error() {
+        std::process::exit(1);
     }
 }
 
@@ -250,7 +255,9 @@ fn wait_for_peers(
         status.0 = format!("waiting for peers ({}/{})", connected + 1, args.players);
         return;
     }
-    let players = socket.0.players();
+    let Some(players) = net::ggrs_players(&mut socket.0) else {
+        return;
+    };
     let mut builder = SessionBuilder::<SpikeConfig>::new()
         .with_num_players(args.players)
         .unwrap()

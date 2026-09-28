@@ -141,6 +141,7 @@ impl Plugin for SimPlugin {
             .checksum_resource_with_hash::<SimRng>()
             .checksum_resource_with_hash::<SimFrame>()
             .checksum_resource_with_hash::<Emitters>()
+            .init_resource::<InjectDesync>()
             .add_systems(Startup, spawn_match)
             .add_systems(
                 GgrsSchedule,
@@ -151,10 +152,28 @@ impl Plugin for SimPlugin {
                     emit_maw_ring,
                     emit_swarmling_streams,
                     collide_bullets_with_ships,
+                    inject_desync,
                     advance_frame,
                 )
                     .chain(),
             );
+    }
+}
+
+/// Negative control for the SyncTest check (`--inject-desync`): deliberately
+/// breaks determinism by mixing a counter that is NOT rolled back into the RNG
+/// once every 997 sim steps (prime, so it is not aligned with the
+/// synctest's 8-steps-per-update pattern). A correct checker must report mismatches.
+#[derive(Resource, Clone, Copy, Default)]
+pub struct InjectDesync(pub bool);
+
+fn inject_desync(flag: Res<InjectDesync>, mut rng: ResMut<SimRng>, mut calls: Local<u64>) {
+    if !flag.0 {
+        return;
+    }
+    *calls += 1;
+    if *calls % 997 == 0 {
+        rng.0 ^= *calls;
     }
 }
 

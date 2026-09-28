@@ -5,9 +5,17 @@ Stand-alone test build that answers one question: can Bevy + `bevy_ggrs` +
 with P2P rollback? It is a go/no-go gate for moving from LÖVE2D to Bevy. The Lua
 game in `src/` is untouched.
 
-> **Status: not yet compiled.** The code is complete but the first build is
-> blocked on a very slow crates.io connection. See the PR/issue for the latest
-> results.
+> **Status:** builds and runs on macOS (Apple M2, rustc 1.96.1). Results from
+> the short runs on 2026-09-28 are in the table below; full numbers are on
+> TAKOAI-18 / the PR.
+
+## Results (2026-09-28, Apple M2 / 8 GB, both peers on one machine)
+
+| criterion | run | result |
+|---|---|---|
+| 1. SyncTest, 1,000 bullets, 10+ min | headless, 36,000 ticks (10 sim-min) in 30 s wall; plus 2 sim-min on seed 7 | **pass**: 0 mismatches. The negative control (`--inject-desync`) is caught at frame 132 |
+| 2. P2P, ~100 ms RTT, 2% loss, 5+ min | 60 s headless and 60 s windowed (partial: short-checks only) | **partial pass**: 0 desyncs, measured loss 1.97–2.16%. The negative control is caught on both peers within 10 frames |
+| 3. 60 fps with 1,000 bullets while rolling back | 30 s windowed P2P, vsync | **pass with caveat**: 60.0 fps avg, p99 ~22 ms, ~1.3% of frames >20 ms, worst 53 ms. Sim + rollback p99 ≤ 2.8 ms |
 
 ## Versions
 
@@ -102,6 +110,22 @@ reached) containing:
 - time spent inside the GGRS update
 
 Frame times exclude the first 3 s (warm-up).
+
+Frame times in **headless synctest** are synthetic (each update is fed exactly
+1/60 s), so use the `ggrs update ms` line there. Headless p2p frame times
+measure the 240 Hz loop, not rendering. Use a windowed run for criterion 3.
+
+### Negative control
+
+`--inject-desync` deliberately breaks determinism by mixing a counter that is
+not rolled back into the RNG every 997 sim steps. Use it to check that the
+checker fires:
+
+```sh
+cargo run --release -- synctest --headless --minutes 1 --inject-desync   # stops at the first mismatch, exit code 1
+```
+
+In p2p mode, pass it to one peer only. `DESYNC at frame N` should then appear on both.
 
 Other options: `--bullets N` sets the target live-bullet count (emitters pause
 at the cap), `--input-delay`, `--max-prediction`, `--desync-interval`, and

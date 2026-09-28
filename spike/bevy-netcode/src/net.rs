@@ -14,7 +14,7 @@ use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
 use ggrs::{Message, NonBlockingSocket};
-use matchbox_socket::{Packet, PeerId, WebRtcChannel};
+use matchbox_socket::{Packet, PeerId, WebRtcChannel, WebRtcSocket};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct NetEmuConfig {
@@ -125,4 +125,27 @@ impl Drop for EmulatedGgrsSocket {
             100.0 * self.stats.dropped as f64 / self.stats.sent.max(1) as f64
         );
     }
+}
+
+/// Player list in a consistent order on every peer (sorted peer ids).
+/// Mirrors `WebRtcSocket::players` from matchbox's `ggrs` feature, which we
+/// can't enable because it pulls in ggrs 0.11.
+pub fn ggrs_players(socket: &mut WebRtcSocket) -> Option<Vec<ggrs::PlayerType<PeerId>>> {
+    let our_id = socket.id()?;
+    let mut ids: Vec<_> = socket
+        .connected_peers()
+        .chain(std::iter::once(our_id))
+        .collect();
+    ids.sort();
+    Some(
+        ids.into_iter()
+            .map(|id| {
+                if id == our_id {
+                    ggrs::PlayerType::Local
+                } else {
+                    ggrs::PlayerType::Remote(id)
+                }
+            })
+            .collect(),
+    )
 }
