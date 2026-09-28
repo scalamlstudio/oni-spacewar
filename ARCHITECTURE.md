@@ -9,6 +9,7 @@ LÖVE2D to Rust/Bevy:
 |---|---|---|
 | `Cargo.toml`, `crates/` | Rust/Bevy workspace (the game going forward) | skeleton, no gameplay yet |
 | `src/` | LÖVE2D/Lua game shell | untouched until its content is ported |
+| `.github/workflows/`, `ci/` | CI: determinism gate for the sim | see § Verifying determinism |
 | `spike/bevy-netcode/` | TAKOAI-18 rollback spike (own `Cargo.toml`, excluded from the workspace) | reference only; delete once fully migrated |
 
 ## Rust workspace
@@ -73,6 +74,15 @@ cargo test                                                          # sim unit t
 cargo run --release -- synctest --headless --minutes 2 --players 4  # expect 0 mismatches
 cargo run --release -- synctest --headless --minutes 1 --inject-desync  # negative control: must fail
 ```
+
+CI runs the same checks: `.github/workflows/determinism.yml` calls
+`ci/determinism-gate.sh` on every PR touching `crates/sim`, `crates/client`
+(the SyncTest harness) or the Cargo manifests/lock. It fails on any SyncTest
+mismatch, on a run that doesn't reach its frame limit, and if the
+`--inject-desync` negative control is *not* caught (non-zero exit plus a
+reported mismatch), so the checker can't pass vacuously. The job has a timeout
+because a swallowed mismatch would otherwise stall the headless run forever.
+Run `ci/determinism-gate.sh` locally after `cargo build --release`.
 
 P2P needs a matchbox signaling server (`cargo install matchbox_server --version 0.14.0`);
 see `spike/bevy-netcode/README.md` for the p2p flags, which are unchanged.
