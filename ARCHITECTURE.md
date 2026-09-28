@@ -9,7 +9,7 @@ LÖVE2D to Rust/Bevy:
 |---|---|---|
 | `Cargo.toml`, `crates/` | Rust/Bevy workspace (the game going forward) | foundation + placeholder gameplay (TAKOAI-26) |
 | `src/` | LÖVE2D/Lua game shell | prototype from another project, not ported; deleted in the final port stage |
-| `.github/workflows/`, `ci/` | CI: determinism gate for the sim | see § Verifying determinism |
+| `.github/workflows/`, `ci/` | CI: determinism gate for the sim; local P2P soak script | see § Verifying determinism, § Netcode |
 | `spike/bevy-netcode/` | TAKOAI-18 rollback spike (own `Cargo.toml`, excluded from the workspace) | reference only; delete once fully migrated |
 
 ## Rust workspace
@@ -28,11 +28,12 @@ crates/
     src/rng.rs          SimRng, seeded xorshift64* (part of SimState)
     src/input.rs        NetInput: buttons (move, Q/W/E/R) + cursor target, exchanged per tick
   client/             package `oni-client`, bin `oni-spacewar` — everything else
-    src/main.rs         CLI (synctest / p2p modes), app + GGRS session setup
+    src/main.rs         CLI (synctest / p2p modes), app + GGRS session setup, ICE (STUN/TURN) config
     src/rollback.rs     SimWorld resource, rollback/checksum registration, GgrsSchedule
     src/input.rs        mouse + keyboard / bot → NetInput (ReadInputs)
     src/net.rs          matchbox ↔ ggrs socket adapter + latency/loss emulator (from the spike)
     src/stats.rs        rollback / frame-time / desync measurement + report (from the spike)
+    src/pacing.rs       frame-pacing profiler (windowed): main / render / swapchain-acquire split + OS-stall probe
     src/render.rs       placeholder shapes, camera follow, HUD (Update, outside rollback)
 ```
 
@@ -112,8 +113,75 @@ reported mismatch), so the checker can't pass vacuously. The job has a timeout
 because a swallowed mismatch would otherwise stall the headless run forever.
 Run `ci/determinism-gate.sh` locally after `cargo build --release`.
 
-P2P needs a matchbox signaling server (`cargo install matchbox_server --version 0.14.0`);
-see `spike/bevy-netcode/README.md` for the p2p flags, which are unchanged.
+## Netcode
+
+Peers connect through a matchbox signaling server (WebSocket), then talk
+directly over WebRTC data channels in a full mesh (1–4 players). GGRS
+exchanges inputs over one unreliable channel; `net.rs` adapts it to ggrs 0.13
+and can emulate latency/loss on outgoing packets.
+
+```sh
+cargo install matchbox_server --version 0.14.0 --locked   # listens on 0.0.0.0:3536
+# every peer, same --players / --seed / --room:
+cargo run --release -- p2p --players 3 --room 'ws://HOST:3536/oni?next=3'
+```
+
+`--room` names the server and the room; `next=N` starts the match once N peers
+have joined. Handles are assigned by sorted peer id, so every peer agrees.
+Other flags: `--bot`, `--headless`, `--minutes M`, `--input-delay`,
+`--max-prediction`, `--desync-interval`, and the emulator's `--delay-ms`,
+`--jitter-ms`, `--loss` (applied to each peer's outgoing packets, so the added
+RTT is `2 × delay`). A p2p run exits non-zero if any desync was detected or the
+signaling server can't be reached.
+
+### Internet play: signaling, STUN, TURN
+
+- **Signaling** must be reachable by every peer: run `matchbox_server` on a
+  public host and use `ws://host:3536/...`, or `wss://` behind a TLS proxy
+  (matchbox's native client supports TLS).
+- **STUN** lets peers behind ordinary NATs find their public address. By
+  default matchbox uses Google's public STUN servers. `--ice URL` (repeatable)
+  replaces them; `--ice none` disables ICE servers (LAN / same machine only).
+- **TURN** relays traffic when a direct path is impossible (symmetric NAT,
+  strict firewalls). Pass `--ice turn:host:3478` (plus any STUN URLs) and put
+  the credentials in `ONI_ICE_USERNAME` / `ONI_ICE_CREDENTIAL`. They are read
+  from the environment so they never land in the repo, shell history or
+  process list. matchbox 0.14 accepts a single ICE server entry, so one
+  username/credential applies to all URLs (STUN ignores them).
+- matchbox 0.14 has no "relay only" switch, so a TURN server can only be
+  verified from two networks where a direct path really fails.
+
+### Soak test
+
+`ci/p2p-soak.sh` runs N headless bot peers plus a signaling server on one
+machine: 4 peers, 5 minutes, 50 ms ± 5 one-way and 2% loss by default (`PEERS`,
+`MINUTES`, `NET` override). It passes when every peer reaches the frame limit
+with 0 desyncs. `NEGATIVE=1` makes peer 1 inject a desync and passes only if
+every peer catches it. It takes real time, so CI doesn't run it.
+
+### Frame pacing
+
+Windowed runs append a frame-pacing section to the run report (`pacing.rs`).
+Bevy renders pipelined (the main app updates frame N while the render thread
+draws N-1), so each frame over 20 ms is attributed to the main update, render
+prepare, swapchain acquire (`get_current_texture`, which blocks on vsync and
+the compositor), or render graph + submit. A probe thread sleeping 1 ms in a
+loop flags OS scheduler stalls, so a hitch caused by the machine can be told
+apart from one caused by our code. `--frame-latency N` sets the swapchain's
+`desired_maximum_frame_latency` for experiments.
+
+Findings (TAKOAI-23, Apple M2, 60 Hz, same machine as the spike): main update p99
+≈ 2.5–3.5 ms and sim + rollback p99 ≈ 1–2 ms, so the netcode and sim are not
+the cause. Hitches are almost all late swapchain acquires, i.e. the macOS
+compositor handing back a drawable after the vblank. Many coincide with
+scheduler stalls on a loaded machine (load average 15–20 on 8 cores during most
+runs), and two P2P peers in separate processes hitch at the same sim frames,
+which only a system-wide cause can do. The rare long render-prepare spans land
+in a different render stage each time, which also points to preemption rather
+than one slow system. `--no-vsync` removes nearly all of them;
+`--frame-latency 3` on Metal lets frames run uncapped and is not a fix.
+Nothing needs fixing on the game side at current content. Re-measure on an
+idle machine and with real content before optimising.
 
 ## LÖVE2D shell (`src/`)
 

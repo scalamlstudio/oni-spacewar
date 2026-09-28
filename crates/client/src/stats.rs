@@ -8,6 +8,7 @@ use bevy::prelude::*;
 use bevy_ggrs::prelude::*;
 use bevy_ggrs::RunGgrsSystems;
 
+use crate::pacing::Pacing;
 use crate::rollback::{GameConfig, SimWorld};
 
 /// When the run should stop and print its report.
@@ -154,6 +155,7 @@ fn drain_p2p_events(session: Option<ResMut<Session<GameConfig>>>, mut stats: Res
 fn check_finished(
     mut stats: ResMut<Stats>,
     limit: Res<RunLimit>,
+    pacing: Option<Res<Pacing>>,
     mut exit: MessageWriter<AppExit>,
 ) {
     if stats.finished {
@@ -163,7 +165,7 @@ fn check_finished(
     // stop right away and fail.
     if stats.synctest_mismatches > 0 {
         stats.finished = true;
-        println!("{}", stats.report());
+        println!("{}", stats.report(pacing.as_deref()));
         exit.write(AppExit::error());
         return;
     }
@@ -174,16 +176,26 @@ fn check_finished(
     let peer_left_near_end = stats.disconnected && stats.max_frame + 600 >= limit.frames;
     if stats.max_frame >= limit.frames || peer_left_near_end {
         stats.finished = true;
-        println!("{}", stats.report());
-        exit.write(AppExit::Success);
+        println!("{}", stats.report(pacing.as_deref()));
+        // A p2p desync keeps the session running (so every peer reaches the
+        // end and reports), but the run still fails.
+        exit.write(if stats.desyncs > 0 {
+            AppExit::error()
+        } else {
+            AppExit::Success
+        });
     }
 }
 
 /// Prints the report when the app exits for any other reason (window closed).
-fn report_on_exit(mut exits: MessageReader<AppExit>, mut stats: ResMut<Stats>) {
+fn report_on_exit(
+    mut exits: MessageReader<AppExit>,
+    mut stats: ResMut<Stats>,
+    pacing: Option<Res<Pacing>>,
+) {
     if exits.read().next().is_some() && !stats.finished {
         stats.finished = true;
-        println!("{}", stats.report());
+        println!("{}", stats.report(pacing.as_deref()));
     }
 }
 
@@ -196,7 +208,7 @@ fn percentile(sorted: &[f32], p: f64) -> f32 {
 }
 
 impl Stats {
-    pub fn report(&self) -> String {
+    pub fn report(&self, pacing: Option<&Pacing>) -> String {
         let wall = self.started.map_or(Duration::ZERO, |t| t.elapsed());
         let mut ft = self.frame_times_ms.clone();
         ft.sort_by(|a, b| a.total_cmp(b));
@@ -224,7 +236,7 @@ impl Stats {
              rendered frames         : {}  avg fps {:.1}\n\
              frame time ms           : p50 {:.2}  p99 {:.2}  p99.9 {:.2}  worst5 [{}]\n\
              frames > 16.7/20/33 ms  : {} / {} / {}\n\
-             ggrs update ms (sim+rb) : p50 {:.3}  p99 {:.3}  max {:.3}\n\
+             ggrs update ms (sim+rb) : p50 {:.3}  p99 {:.3}  max {:.3}{}\n\
              ======================",
             self.max_frame,
             self.max_frame as f64 / 3600.0,
@@ -248,6 +260,7 @@ impl Stats {
             percentile(&gg, 0.5),
             percentile(&gg, 0.99),
             gg.last().copied().unwrap_or(0.0),
+            pacing.map_or(String::new(), Pacing::report),
         )
     }
 }
