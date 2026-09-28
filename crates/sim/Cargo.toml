@@ -1,0 +1,13 @@
+[package]
+name = "oni-sim"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lib]
+name = "sim"
+
+# Bevy-free on purpose: the deterministic mission simulation must not depend on
+# the engine, the renderer or the network stack.
+[dependencies]
+serde.workspace = true
