@@ -1,1 +1,0 @@
-open -n -a love "$(pwd)/src"

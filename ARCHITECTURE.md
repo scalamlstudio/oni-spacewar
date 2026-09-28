@@ -2,15 +2,16 @@
 
 _Code structure only — see `design/CONCEPT.md` and `design/DESIGN.md` for what the game is/plays like._
 
-The repo currently holds two codebases side by side while the game moves from
-LÖVE2D to Rust/Bevy:
+The game is a Rust/Bevy Cargo workspace. The earlier LÖVE2D/Lua prototype
+(`src/`, `love.sh`) and the TAKOAI-18 netcode spike (`spike/bevy-netcode/`)
+were removed in TAKOAI-24; both remain in git history (the spike's final state
+is commit `b92126c`, its results are recorded on TAKOAI-18).
 
 | path | what | status |
 |---|---|---|
-| `Cargo.toml`, `crates/` | Rust/Bevy workspace (the game going forward) | foundation + placeholder gameplay (TAKOAI-26) |
-| `src/` | LÖVE2D/Lua game shell | prototype from another project, not ported; deleted in the final port stage |
+| `Cargo.toml`, `crates/` | Rust/Bevy workspace | foundation + placeholder gameplay (TAKOAI-26) |
 | `.github/workflows/`, `ci/` | CI: determinism gate for the sim; local P2P soak script | see § Verifying determinism, § Netcode |
-| `spike/bevy-netcode/` | TAKOAI-18 rollback spike (own `Cargo.toml`, excluded from the workspace) | reference only; delete once fully migrated |
+| `design/` | design docs and concept art | source of truth for gameplay |
 
 ## Rust workspace
 
@@ -182,21 +183,3 @@ than one slow system. `--no-vsync` removes nearly all of them;
 `--frame-latency 3` on Metal lets frames run uncapped and is not a fix.
 Nothing needs fixing on the game side at current content. Re-measure on an
 idle machine and with real content before optimising.
-
-## LÖVE2D shell (`src/`)
-
-The code lives under [`src/`](src/), with `src/main.lua` as the entry point.
-
-```
-Agent ------+-- Object --+-- Circle
-            |     |      |
-Enemy ------+     |      +-- Square
-            |   Config   |
-Obstacle ---+            +-- Triangle
-            |            |
-Item -------+            +-- Hexagon
-            |
-Projectile -+
-            |
-Portal -----+
-```
