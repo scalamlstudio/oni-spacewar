@@ -11,9 +11,10 @@ The game code lives in [`src/`](src/), separate from the design docs. The
 Rust/Bevy rewrite is a Cargo workspace under [`crates/`](crates/) — see
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-### Run Rust/Bevy client (skeleton)
+### Run Rust/Bevy client
 
- - `cargo run --release -- synctest` — placeholder ships, WASD/arrows for player 1
+ - `cargo run --release -- synctest --players 1` — placeholder gameplay on the
+   foundation: left-click to move (hold to steer), Q to fire toward the cursor
  - `cargo test` — simulation tests
 
 ### Run Game
