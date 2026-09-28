@@ -1,0 +1,20 @@
+[workspace]
+resolver = "2"
+members = ["crates/sim", "crates/client"]
+# The netcode spike keeps its own Cargo.toml/lock until it is removed.
+exclude = ["spike"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace.dependencies]
+# Exact pins: only upgrade on an explicit issue.
+bevy = "=0.19.1"
+bevy_ggrs = "=0.22.0"
+ggrs = "=0.13.0"
+matchbox_socket = "=0.14.0"
+serde = { version = "1", features = ["derive"] }
+bincode = { version = "2", default-features = false, features = ["serde", "alloc"] }
+sim = { path = "crates/sim", package = "oni-sim" }

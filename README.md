@@ -7,7 +7,14 @@ Warframe-style missions with League of Legends-style click-to-move combat.
 In the design phase — the code is still the running project shell bootstrapped
 from the `space-sandbox` entity/world architecture.
 
-The game code lives in [`src/`](src/), separate from the design docs.
+The game code lives in [`src/`](src/), separate from the design docs. The
+Rust/Bevy rewrite is a Cargo workspace under [`crates/`](crates/) — see
+[`ARCHITECTURE.md`](ARCHITECTURE.md).
+
+### Run Rust/Bevy client (skeleton)
+
+ - `cargo run --release -- synctest` — placeholder ships, WASD/arrows for player 1
+ - `cargo test` — simulation tests
 
 ### Run Game
 
