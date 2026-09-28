@@ -13,10 +13,13 @@
 //!   platform float functions (`sin`, `cos`, `sqrt`, `atan2`, ...): directions
 //!   come from the committed lookup table in [`trig`], lengths from
 //!   `i64::isqrt`.
-//! - Stable iteration order: ships live in a `Vec` indexed by player handle, so
-//!   their order is part of the state.
+//! - Stable iteration order: ships live in a `Vec` indexed by player handle and
+//!   every other entity kind in its own `Vec`, so their order is part of the
+//!   state.
 //! - Never assume a single battleship: one ship per player handle, 1..=4.
 
+pub mod collision;
+pub mod content;
 pub mod fixed;
 pub mod input;
 pub mod rng;
@@ -26,4 +29,6 @@ pub mod trig;
 pub use fixed::{FxVec2, SUB};
 pub use input::NetInput;
 pub use rng::SimRng;
-pub use state::{Ship, SimParams, SimState, MAX_PLAYERS};
+pub use state::{
+    Enemy, Item, Obstacle, Portal, Projectile, Ship, Side, SimParams, SimState, MAX_PLAYERS,
+};

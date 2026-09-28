@@ -166,3 +166,14 @@ _Running log of what's decided and what's built. Newest entries on top._
   `generate.py` and `render.sh`) after Wei approved the v3 renders
   (TAKOAI-16). `design/art/` replaces it; the old files remain in git history.
   README now links to `design/art/` (TAKOAI-17).
+
+## 2026-09-29
+
+- Bevy port Stage 2 (TAKOAI-26): the mission prototype from `src/` now runs on
+  the deterministic Rust sim (`crates/sim`) — battleships, e1/e2 enemies,
+  p1/p2 projectiles, obstacles, portal level switching (levels w1/w2), camera
+  follow and HUD panel, all with placeholder shapes. Ported 1:1 except
+  battleship movement, which is click-to-move per DESIGN.md § Player, and
+  support for 1–4 battleships (enemies chase the nearest living one). Q still
+  fires toward the cursor as in the prototype; the decided auto-firing basic
+  attack is not implemented yet. `src/` is untouched.
