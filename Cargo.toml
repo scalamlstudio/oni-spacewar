@@ -1,8 +1,6 @@
 [workspace]
 resolver = "2"
 members = ["crates/sim", "crates/client"]
-# The netcode spike keeps its own Cargo.toml/lock until it is removed.
-exclude = ["spike"]
 
 [workspace.package]
 version = "0.1.0"
