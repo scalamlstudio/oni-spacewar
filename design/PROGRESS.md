@@ -169,11 +169,10 @@ _Running log of what's decided and what's built. Newest entries on top._
 
 ## 2026-09-29
 
-- Bevy port Stage 2 (TAKOAI-26): the mission prototype from `src/` now runs on
-  the deterministic Rust sim (`crates/sim`) — battleships, e1/e2 enemies,
-  p1/p2 projectiles, obstacles, portal level switching (levels w1/w2), camera
-  follow and HUD panel, all with placeholder shapes. Ported 1:1 except
-  battleship movement, which is click-to-move per DESIGN.md § Player, and
-  support for 1–4 battleships (enemies chase the nearest living one). Q still
-  fires toward the cursor as in the prototype; the decided auto-firing basic
-  attack is not implemented yet. `src/` is untouched.
+- Bevy port Stage 2 (TAKOAI-26): the Rust sim (`crates/sim`) now has the
+  structure gameplay will be built on — plain-data entities in rolled-back
+  `Vec`s, a fixed-phase `step()`, placeholder tuning in one module, integer
+  collision, and mouse/Q/W/E/R input with click-to-move (DESIGN.md § Player).
+  Gameplay is a placeholder (Q shot, waves of chasing enemies) supporting 1–4
+  battleships. The LÖVE2D code in `src/` is a prototype from another project
+  and was deliberately not ported (Wei); it stays until the final port stage.

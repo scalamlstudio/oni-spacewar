@@ -13,8 +13,8 @@ Rust/Bevy rewrite is a Cargo workspace under [`crates/`](crates/) — see
 
 ### Run Rust/Bevy client
 
- - `cargo run --release -- synctest --players 1` — the ported mission prototype:
-   left-click to move (hold to steer), Q to fire toward the cursor
+ - `cargo run --release -- synctest --players 1` — placeholder gameplay on the
+   foundation: left-click to move (hold to steer), Q to fire toward the cursor
  - `cargo test` — simulation tests
 
 ### Run Game

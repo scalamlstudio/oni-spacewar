@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 
 /// Primary mouse button held: set the move target to `target`.
 pub const INPUT_MOVE: u8 = 1 << 0;
-/// Skill hotkeys Q/W/E/R (`src/general/control.lua`). Only Q does anything in
-/// the ported prototype: it fires the basic projectile toward `target`.
+/// Skill hotkeys Q/W/E/R (design/DESIGN.md § Player). Only Q does anything
+/// yet: a placeholder shot toward `target`.
 pub const INPUT_SKILL_Q: u8 = 1 << 1;
 pub const INPUT_SKILL_W: u8 = 1 << 2;
 pub const INPUT_SKILL_E: u8 = 1 << 3;

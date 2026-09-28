@@ -2,9 +2,9 @@
 //! outside the rollback schedule; only the resulting `NetInput`s reach the
 //! simulation.
 //!
-//! Controls (from `src/general/control.lua`, movement per `design/DESIGN.md`):
-//! left mouse button = click-to-move (hold to keep steering), Q = fire toward
-//! the cursor, W/E/R = unused skill slots.
+//! Controls (`design/DESIGN.md` § Player): left mouse button = click-to-move
+//! (hold to keep steering), Q/W/E/R = skills (only Q does anything yet: a
+//! placeholder shot toward the cursor).
 
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;

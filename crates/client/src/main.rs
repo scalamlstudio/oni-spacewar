@@ -5,8 +5,8 @@
 //!   synctest  GGRS SyncTestSession: every frame is re-simulated and checksummed.
 //!   p2p       Up to 4 peers connected through a matchbox signaling server.
 //!
-//! Gameplay is the ported LÖVE2D mission prototype (see `sim`): click-to-move
-//! battleships, Q to fire, enemies, obstacles and a portal between levels.
+//! Gameplay is a placeholder that exercises the foundation (see `sim`):
+//! click-to-move battleships, a Q shot, and waves of chasing enemies.
 
 mod input;
 mod net;

@@ -7,8 +7,8 @@ LÖVE2D to Rust/Bevy:
 
 | path | what | status |
 |---|---|---|
-| `Cargo.toml`, `crates/` | Rust/Bevy workspace (the game going forward) | mission prototype ported (TAKOAI-26) |
-| `src/` | LÖVE2D/Lua game shell | mission content ported to `crates/`; kept until the final port stage deletes it |
+| `Cargo.toml`, `crates/` | Rust/Bevy workspace (the game going forward) | foundation + placeholder gameplay (TAKOAI-26) |
+| `src/` | LÖVE2D/Lua game shell | prototype from another project, not ported; deleted in the final port stage |
 | `spike/bevy-netcode/` | TAKOAI-18 rollback spike (own `Cargo.toml`, excluded from the workspace) | reference only; delete once fully migrated |
 
 ## Rust workspace
@@ -18,10 +18,11 @@ Cargo.toml            workspace; exact version pins live in [workspace.dependenc
 crates/
   sim/                package `oni-sim`, lib `sim` — deterministic mission simulation, NO Bevy
     src/lib.rs          crate docs + determinism rules
-    src/state.rs        SimState (all rolled-back state), entities, step(), collision pass
-    src/content.rs      gameplay data ported from src/ (e1/e2, p1/p2, obstacles, portal, levels w1/w2)
-    src/collision.rs    integer circle / square overlap + push-out (replaces Box2D)
-    src/fixed.rs        fixed-point: SUB (1 px = 256), FxVec2, mul_q16
+    src/state.rs        SimState (all rolled-back state), step() and its phases
+    src/entity.rs       plain-data entities: Ship, Enemy, Projectile
+    src/tuning.rs       placeholder gameplay numbers + unit conversion (px/s -> sub-px/tick)
+    src/collision.rs    integer circle overlap + separation
+    src/fixed.rs        fixed-point: SUB (1 px = 256), FxVec2 (+ scale_to), mul_q16
     src/trig.rs         integer sin/cos from a committed Q16 table (from the spike)
     src/rng.rs          SimRng, seeded xorshift64* (part of SimState)
     src/input.rs        NetInput: buttons (move, Q/W/E/R) + cursor target, exchanged per tick
@@ -48,47 +49,37 @@ so it cannot reach the engine, the clock, the renderer or the network.
 - Rendering, HUD, input reading and stats run in normal Bevy schedules and only
   read `SimWorld`.
 - Multiplayer is the default shape: `SimState::ships` holds one ship per player
-  handle (1..=4, `MAX_PLAYERS`); single-player is `num_players = 1`. Dead ships
-  stay in the `Vec` (`alive = false`) so indices keep matching handles.
+  handle (1..=4, `MAX_PLAYERS`); single-player is `num_players = 1`.
 
-### Mission simulation (port of `src/`)
+### Simulation structure
 
-Each entity kind is a plain struct in its own `Vec` inside `SimState`
-(`ships`, `enemies`, `projectiles`, `obstacles`, `portals`, `items`). Kinds
-(`EnemyKind`, `ProjectileKind`, `ObstacleKind`) index static tables in
-`content.rs`, which keep the prototype's units (px/s, seconds) and convert at
-use (`px_per_tick`, `ticks`).
+The gameplay in `sim` is a placeholder (click-to-move battleships, a Q shot on
+a cooldown, waves of enemies that chase the nearest ship). It exists to
+exercise the foundation and will be replaced; the structure is what new
+gameplay should follow:
 
-`step()` follows `love.update`: apply a pending level switch → ships (timed
-effects, click-to-move target, Q fires p1) → enemies (chase nearest living
-ship, e2 fires p2 with 2%/tick from `SimRng`) → movement → collisions → remove
-dead/expired.
-
-Collisions replace Box2D with the subset the prototype relies on:
-- Shapes are circles and axis-aligned squares (obstacles), in sub-pixels.
-- Broad phase is sort-and-sweep on x with a total sort key `(min_x, body)`, so
-  the pair order is identical on every peer; narrow phase is integer-only.
-- Bodies on the same `Side` never touch (the prototype's category/mask
-  `alias`); static/static pairs are skipped.
-- A projectile touching anything loses 1 hp (so it is removed) and applies its
-  effects (`tmat`: `stat = stat * mul + add`, instant or timed). Only
-  battleships keep timed effects, as in `agent.lua`.
-- Ships and enemies are pushed out of obstacles/portals, and apart from each
-  other by mass (ship 5, enemy 1). Projectiles don't push; there is no
-  bounce, rotation or impulse.
-- A living ship touching the portal queues a switch to a random level; the
-  next tick clears the level, spawns the new one and resets every ship to its
-  spawn point.
-
-Things the port does not carry over: the vignette shader (`src/shader/s1.lua`),
-camera vibration (never triggered), the event-log panel, and the player/char
-save stub (`player.lua`, `char.lua` beyond the battleship stats).
+- **Entities are plain data** (`entity.rs`), one `Vec` per kind inside
+  `SimState`. Removal uses `retain`, so order stays stable. No Bevy entities or
+  components in the simulation.
+- **`step()` is a fixed list of phases** (`state.rs`): spawn → apply inputs →
+  move → hits → separation → remove dead. Each phase is a method over whole
+  collections, so the order of effects is explicit and identical on every
+  peer. New mechanics add a phase (or a new module with one) rather than
+  hooking into Bevy schedules.
+- **Numbers live in `tuning.rs`** in human units (px, px/s, seconds) and are
+  converted at use (`px_per_tick`, `ticks`). They are placeholders, not design
+  values.
+- **Input** (`NetInput`) is a button bitmask (move, Q/W/E/R) plus the cursor in
+  world pixels: click-to-move sets the ship's target, skills aim at the cursor.
+- **Collision** is integer circle overlap; pairs are checked brute-force in
+  `Vec` order, which is fine at current entity counts. A deterministic broad
+  phase can be added when counts grow.
 
 ### Determinism choices
 
 - **Fixed-point integers, no floats in the simulation.** Positions and
   velocities are `i32` sub-pixels (`SUB = 256`). Aiming at a point rescales
-  the integer delta vector (`collision::scale_to`); angle-based directions come from the
+  the integer delta vector (`FxVec2::scale_to`); angle-based directions come from the
   committed Q16 sine table in `sim::trig`; lengths use `i64::isqrt`. This is
   bit-identical across platforms and compilers without depending on libm or FMA
   behaviour. Floats appear only in the client when converting a sim position to
