@@ -24,6 +24,6 @@ The game code lives in [`src/`](src/), separate from the design docs.
  - [`design/READINESS.md`](design/READINESS.md) — first-playable scope and design-done checklist
  - [`design/OPEN_QUESTIONS.md`](design/OPEN_QUESTIONS.md) — open questions, what blocks the first playable, and what to decide next
  - [`design/PROGRESS.md`](design/PROGRESS.md) — decision log
- - [`design/concept-art/`](design/concept-art/) — exploratory concept sheets (not a decided art direction)
+ - [`design/art/`](design/art/) — concept art (concept-art, ships, carriers, enemies)
 
 Tasks are tracked on the project's Multica board, not in this README.

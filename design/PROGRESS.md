@@ -159,3 +159,10 @@ _Running log of what's decided and what's built. Newest entries on top._
   Trees (repair on low HP, damage on enemy in range) stand as-is for the
   first playable. Re-tagged `Deferred` in OPEN_QUESTIONS.md instead of
   resolving it.
+
+## 2026-09-28
+
+- Removed the superseded `design/concept-art/` folder (v1/v2 sheets plus
+  `generate.py` and `render.sh`) after Wei approved the v3 renders
+  (TAKOAI-16). `design/art/` replaces it; the old files remain in git history.
+  README now links to `design/art/` (TAKOAI-17).
