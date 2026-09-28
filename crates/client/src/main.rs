@@ -10,6 +10,7 @@
 
 mod input;
 mod net;
+mod pacing;
 mod render;
 mod rollback;
 mod stats;
@@ -24,7 +25,7 @@ use bevy::window::{PresentMode, WindowResolution};
 use bevy::winit::WinitSettings;
 use bevy_ggrs::prelude::*;
 use ggrs::DesyncDetection;
-use matchbox_socket::WebRtcSocket;
+use matchbox_socket::{RtcIceServerConfig, WebRtcSocket};
 use sim::{SimParams, SimState, MAX_PLAYERS};
 
 use input::{BotBrains, KeyboardPlayer};
@@ -38,7 +39,10 @@ usage:
   oni-spacewar p2p [--room ws://127.0.0.1:3536/oni?next=2]
                    [--delay-ms 50] [--jitter-ms 0] [--loss 0.0] [--input-delay 2]
                    [--minutes M] [--headless] [--bot]
-common: [--players 2] [--seed 42] [--no-vsync] [--inject-desync]";
+                   [--ice URL]...   STUN/TURN servers (default: public Google STUN;
+                                    `--ice none` = host candidates only, LAN)
+                   TURN auth from env: ONI_ICE_USERNAME, ONI_ICE_CREDENTIAL
+common: [--players 2] [--seed 42] [--no-vsync] [--frame-latency N] [--inject-desync]";
 
 #[derive(Clone, Debug)]
 struct Args {
@@ -46,6 +50,8 @@ struct Args {
     headless: bool,
     bot: bool,
     vsync: bool,
+    /// Swapchain images the GPU may queue ahead (wgpu default 2).
+    frame_latency: Option<u32>,
     minutes: f64,
     seed: u64,
     check_distance: usize,
@@ -56,6 +62,8 @@ struct Args {
     desync_interval: u32,
     inject_desync: bool,
     emu: NetEmuConfig,
+    /// `--ice` URLs; empty = matchbox's default STUN servers.
+    ice: Vec<String>,
 }
 
 fn usage_exit(msg: &str) -> ! {
@@ -71,6 +79,7 @@ fn parse_args() -> Args {
         headless: false,
         bot: false,
         vsync: true,
+        frame_latency: None,
         minutes: 0.0,
         seed: 42,
         check_distance: 7,
@@ -81,6 +90,7 @@ fn parse_args() -> Args {
         desync_interval: 10,
         inject_desync: false,
         emu: NetEmuConfig::default(),
+        ice: Vec::new(),
     };
     fn val<T: std::str::FromStr>(name: &str, it: &mut dyn Iterator<Item = String>) -> T {
         let raw = it
@@ -95,6 +105,7 @@ fn parse_args() -> Args {
             "--headless" => a.headless = true,
             "--bot" => a.bot = true,
             "--no-vsync" => a.vsync = false,
+            "--frame-latency" => a.frame_latency = Some(val(&flag, it)),
             "--inject-desync" => a.inject_desync = true,
             "--minutes" => a.minutes = val(&flag, it),
             "--seed" => a.seed = val(&flag, it),
@@ -107,6 +118,7 @@ fn parse_args() -> Args {
             "--delay-ms" => a.emu.delay = Duration::from_millis(val(&flag, it)),
             "--jitter-ms" => a.emu.jitter = Duration::from_millis(val(&flag, it)),
             "--loss" => a.emu.loss = val(&flag, it),
+            "--ice" => a.ice.push(val(&flag, it)),
             _ => usage_exit(&format!("unknown flag {flag}\n")),
         }
     }
@@ -162,13 +174,14 @@ fn main() {
                 } else {
                     PresentMode::AutoNoVsync
                 },
+                desired_maximum_frame_latency: args.frame_latency.and_then(std::num::NonZero::new),
                 ..default()
             }),
             ..default()
         }))
         // Keep simulating when the window is in the background (two windows side by side).
         .insert_resource(WinitSettings::continuous())
-        .add_plugins(render::RenderPlugin);
+        .add_plugins((render::RenderPlugin, pacing::PacingPlugin));
     }
 
     let frames = if args.minutes > 0.0 {
@@ -213,7 +226,10 @@ fn main() {
         }
         "p2p" => {
             info!("connecting to matchbox signaling server at {}", args.room);
+            let ice = ice_config(&args.ice);
+            info!("ICE servers: {:?}", ice.urls);
             let (socket, message_loop) = WebRtcSocket::builder(args.room.clone())
+                .ice_server(ice)
                 .add_unreliable_channel()
                 .build();
             // The message loop drives signaling + WebRTC; run it on its own thread.
@@ -236,12 +252,32 @@ fn main() {
     }
 }
 
+/// STUN/TURN servers for NAT traversal. matchbox takes one ICE server entry
+/// with a URL list and a single username/credential, which TURN servers use
+/// and STUN servers ignore. Credentials come from the environment so they
+/// never end up in the repo, shell history or process list.
+fn ice_config(urls: &[String]) -> RtcIceServerConfig {
+    let mut ice = RtcIceServerConfig::default();
+    if urls.iter().any(|u| u == "none") {
+        ice.urls.clear();
+    } else if !urls.is_empty() {
+        ice.urls = urls.to_vec();
+    }
+    ice.username = std::env::var("ONI_ICE_USERNAME").ok();
+    ice.credential = std::env::var("ONI_ICE_CREDENTIAL").ok();
+    if ice.urls.iter().any(|u| u.starts_with("turn")) && ice.credential.is_none() {
+        warn!("a turn: server is configured but ONI_ICE_CREDENTIAL is not set");
+    }
+    ice
+}
+
 fn wait_for_peers(
     mut commands: Commands,
     socket: Option<ResMut<MatchboxSocket>>,
     session: Option<Res<Session<GameConfig>>>,
     args: Res<AppArgs>,
     mut status: ResMut<NetStatus>,
+    mut exit: MessageWriter<AppExit>,
 ) {
     let Some(mut socket) = socket else { return };
     if session.is_some() {
@@ -249,7 +285,11 @@ fn wait_for_peers(
     }
     let args = &args.0;
     if socket.0.try_update_peers().is_err() {
+        // matchbox gave up on the signaling server; without it no peer can
+        // ever join, so fail instead of waiting forever.
         status.0 = "signaling connection failed".into();
+        error!("{} ({})", status.0, args.room);
+        exit.write(AppExit::error());
         return;
     }
     let connected = socket.0.connected_peers().count();
