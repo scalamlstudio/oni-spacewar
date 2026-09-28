@@ -166,11 +166,3 @@ _Running log of what's decided and what's built. Newest entries on top._
   `generate.py` and `render.sh`) after Wei approved the v3 renders
   (TAKOAI-16). `design/art/` replaces it; the old files remain in git history.
   README now links to `design/art/` (TAKOAI-17).
-
-## 2026-09-29
-
-- Added a CI determinism gate (TAKOAI-21): `.github/workflows/determinism.yml`
-  runs `ci/determinism-gate.sh` on PRs touching the sim/client crates. It
-  runs a 2 sim-minute, 4-player headless SyncTest (must reach the limit with
-  0 mismatches) and the `--inject-desync` negative control (must be caught),
-  failing the build otherwise.
