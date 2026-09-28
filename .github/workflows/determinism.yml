@@ -1,0 +1,46 @@
+name: determinism
+
+# Gate for the deterministic mission sim (TAKOAI-21). The client paths are
+# included because the SyncTest harness and rollback registration live there.
+on:
+  pull_request:
+    paths:
+      - "crates/sim/**"
+      - "crates/client/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "ci/determinism-gate.sh"
+      - ".github/workflows/determinism.yml"
+  push:
+    branches: [master]
+    paths:
+      - "crates/sim/**"
+      - "crates/client/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "ci/determinism-gate.sh"
+      - ".github/workflows/determinism.yml"
+  workflow_dispatch:
+
+jobs:
+  determinism:
+    runs-on: ubuntu-latest
+    # A SyncTest mismatch that bevy_ggrs swallows would stall the headless run
+    # forever instead of failing; the timeout turns that into a failure too.
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: System libraries for Bevy
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: cargo build --release --locked -p oni-client
+      - name: Sim unit tests
+        run: cargo test --release --locked -p oni-sim
+      - name: SyncTest + negative control
+        timeout-minutes: 10
+        run: ci/determinism-gate.sh
