@@ -155,6 +155,30 @@ Generated shipped assets are committed because this repo currently has no
 external asset CDN; later release automation can upload the bundle directory and
 leave only source plus manifest in git if install size becomes a problem.
 
+### Expression portrait cutouts
+
+Expression sprite sheets from `design/art/expressions/*-expression-sheet-v1.png`
+are imported with a deterministic Rust tool:
+
+```sh
+cargo run --bin sprite-sheet-cutouts -- .
+cargo run --bin content-pipeline -- .
+```
+
+The cutout tool samples the flat sheet background from the image border, removes
+only border-connected background pixels with a soft alpha edge, finds connected
+foreground regions, splits touching poses on the lowest-density vertical seam,
+reattaches small floating expression marks to the nearest pose, drops the text
+label row, and writes normalized transparent PNGs to
+`assets/source/core/portraits/<character>/<expression>.png`. Each character's
+nine expressions share a fixed canvas and baseline anchor so swapping portraits
+does not jitter.
+
+The expected sheet format is one row of nine poses in this order: Angry, Happy,
+Sleepy, Confused, Shocked, Excited, Sad, Surprised, Shy. Sheets need a flat
+solid background connected to the border, clear gaps between poses, and no text
+labels in the pose area; labels below the ground line are ignored during import.
+
 ### How the sim plugs into rollback
 
 - The whole simulation is one value, `sim::SimState`. The client wraps it in the
