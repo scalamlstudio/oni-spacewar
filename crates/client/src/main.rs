@@ -24,6 +24,7 @@ use bevy::time::TimeUpdateStrategy;
 use bevy::window::{PresentMode, WindowResolution};
 use bevy::winit::WinitSettings;
 use bevy_ggrs::prelude::*;
+use content::ContentManifest;
 use ggrs::DesyncDetection;
 use matchbox_socket::{RtcIceServerConfig, WebRtcSocket};
 use sim::{SimParams, SimState, MAX_PLAYERS};
@@ -135,6 +136,10 @@ fn parse_args() -> Args {
 #[derive(Resource, Default)]
 pub struct NetStatus(pub String);
 
+/// Human-readable proof that the client resolved a shipped asset by stable ID.
+#[derive(Resource, Clone)]
+pub struct ContentStatus(pub String);
+
 /// The matchbox socket. Kept for the whole run: the GGRS session owns its
 /// data channel, but the socket must stay alive for the connection to live.
 #[derive(Resource)]
@@ -146,6 +151,7 @@ struct AppArgs(Args);
 fn main() {
     let args = parse_args();
     let mut app = App::new();
+    let content_status = load_content_status();
 
     if args.headless {
         // No window, no renderer. Synctest runs as fast as the CPU allows (each
@@ -202,6 +208,7 @@ fn main() {
         .insert_resource(InjectDesync(args.inject_desync))
         .insert_resource(KeyboardPlayer(!args.bot && !args.headless))
         .init_resource::<NetStatus>()
+        .insert_resource(ContentStatus(content_status))
         .init_resource::<BotBrains>()
         .insert_resource(AppArgs(args.clone()))
         .add_plugins((RollbackPlugin, StatsPlugin))
@@ -249,6 +256,23 @@ fn main() {
     // window closed).
     if app.run().is_error() {
         std::process::exit(1);
+    }
+}
+
+fn load_content_status() -> String {
+    let manifest = match ContentManifest::load("assets/manifest.json") {
+        Ok(manifest) => manifest,
+        Err(e) => return format!("content unavailable ({e})"),
+    };
+    match manifest.load_text("assets", "core.ui.hud_status") {
+        Ok(text) => {
+            let pack = manifest
+                .pack("core")
+                .map(|pack| pack.version.as_str())
+                .unwrap_or("unknown");
+            format!("{} | core pack {}", text.trim(), pack)
+        }
+        Err(e) => format!("content asset unavailable ({e})"),
     }
 }
 

@@ -9,7 +9,7 @@ use sim::{FxVec2, SUB};
 
 use crate::rollback::SimWorld;
 use crate::stats::Stats;
-use crate::NetStatus;
+use crate::{ContentStatus, NetStatus};
 
 pub struct RenderPlugin;
 
@@ -141,6 +141,7 @@ fn update_hud(
     diagnostics: Res<DiagnosticsStore>,
     stats: Res<Stats>,
     status: Res<NetStatus>,
+    content: Res<ContentStatus>,
     world: Option<Res<SimWorld>>,
     local: Option<Res<LocalPlayers>>,
 ) {
@@ -152,8 +153,9 @@ fn update_hud(
         .and_then(|d| d.smoothed())
         .unwrap_or(0.0);
     let mut s = format!(
-        "{} | fps {:.0} | frame {} | rollbacks {} (max depth {}) | desyncs {} | mismatches {}",
+        "{} | {} | fps {:.0} | frame {} | rollbacks {} (max depth {}) | desyncs {} | mismatches {}",
         status.0,
+        content.0,
         fps,
         stats.max_frame,
         stats.rollbacks,

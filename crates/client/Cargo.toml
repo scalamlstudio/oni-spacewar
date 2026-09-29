@@ -10,6 +10,7 @@ path = "src/main.rs"
 
 [dependencies]
 sim.workspace = true
+content.workspace = true
 bevy.workspace = true
 bevy_ggrs.workspace = true
 ggrs.workspace = true
