@@ -1,0 +1,576 @@
+use std::collections::VecDeque;
+
+use image::{Rgba, RgbaImage};
+
+pub const EXPRESSIONS: [&str; 9] = [
+    "angry",
+    "happy",
+    "sleepy",
+    "confused",
+    "shocked",
+    "excited",
+    "sad",
+    "surprised",
+    "shy",
+];
+
+#[derive(Clone, Debug)]
+pub struct Cutout {
+    pub expression: &'static str,
+    pub image: RgbaImage,
+}
+
+#[derive(Clone, Debug)]
+struct Region {
+    pixels: Vec<(u32, u32)>,
+    bbox: BBox,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct BBox {
+    min_x: u32,
+    min_y: u32,
+    max_x: u32,
+    max_y: u32,
+}
+
+#[derive(Clone, Debug)]
+struct Pose {
+    body: Region,
+    attachments: Vec<Region>,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct AlphaKey {
+    bg: [u8; 3],
+    full_alpha_distance: u32,
+    zero_alpha_distance: u32,
+}
+
+pub fn extract_expression_cutouts(sheet: &RgbaImage) -> Result<Vec<Cutout>, String> {
+    extract_cutouts_with_count(sheet, EXPRESSIONS.len(), &EXPRESSIONS)
+}
+
+fn extract_cutouts_with_count(
+    sheet: &RgbaImage,
+    expected_count: usize,
+    names: &[&'static str],
+) -> Result<Vec<Cutout>, String> {
+    if expected_count == 0 || names.len() != expected_count {
+        return Err("cutout count and names must be non-empty and match".into());
+    }
+
+    let key = AlphaKey {
+        bg: sample_background(sheet),
+        zero_alpha_distance: 10,
+        full_alpha_distance: 44,
+    };
+    let keyed = key_background(sheet, key);
+    let mask = foreground_mask(&keyed);
+    let mut regions = connected_regions(&mask, sheet.width(), sheet.height());
+    regions.retain(|region| region.pixels.len() >= 12);
+
+    let mut bodies = take_body_regions(regions.clone(), sheet.height());
+    split_until_expected(&mut bodies, expected_count)?;
+    if bodies.len() != expected_count {
+        return Err(format!(
+            "expected {expected_count} character regions, found {}",
+            bodies.len()
+        ));
+    }
+    bodies.sort_by_key(|region| (region.bbox.min_x + region.bbox.max_x, region.bbox.min_y));
+
+    let mut poses: Vec<Pose> = bodies
+        .into_iter()
+        .map(|body| Pose {
+            body,
+            attachments: Vec::new(),
+        })
+        .collect();
+    attach_small_regions(&mut poses, regions);
+
+    let layout = compute_layout(&poses);
+    let cutouts = poses
+        .iter()
+        .zip(names.iter().copied())
+        .map(|(pose, expression)| Cutout {
+            expression,
+            image: render_pose(&keyed, pose, layout),
+        })
+        .collect();
+    Ok(cutouts)
+}
+
+pub fn make_contact_sheet(cutouts: &[(String, RgbaImage)], columns: u32) -> RgbaImage {
+    let columns = columns.max(1);
+    let cell_w = cutouts
+        .iter()
+        .map(|(_, image)| image.width())
+        .max()
+        .unwrap_or(1)
+        + 16;
+    let cell_h = cutouts
+        .iter()
+        .map(|(_, image)| image.height())
+        .max()
+        .unwrap_or(1)
+        + 16;
+    let rows = (cutouts.len() as u32 + columns - 1) / columns;
+    let mut out = RgbaImage::new(cell_w * columns, cell_h * rows.max(1));
+    for y in 0..out.height() {
+        for x in 0..out.width() {
+            let v = if ((x / 8) + (y / 8)) % 2 == 0 {
+                216
+            } else {
+                168
+            };
+            out.put_pixel(x, y, Rgba([v, v, v, 255]));
+        }
+    }
+    for (index, (_, image)) in cutouts.iter().enumerate() {
+        let x0 = (index as u32 % columns) * cell_w + 8 + (cell_w - 16 - image.width()) / 2;
+        let y0 = (index as u32 / columns) * cell_h + 8 + (cell_h - 16 - image.height()) / 2;
+        overlay(&mut out, image, x0, y0);
+    }
+    out
+}
+
+fn sample_background(image: &RgbaImage) -> [u8; 3] {
+    let mut totals = [0u64; 3];
+    let mut count = 0u64;
+    let w = image.width();
+    let h = image.height();
+    for y in 0..h {
+        for x in 0..w {
+            if x < 3 || y < 3 || x + 3 >= w || y + 3 >= h {
+                let p = image.get_pixel(x, y).0;
+                totals[0] += p[0] as u64;
+                totals[1] += p[1] as u64;
+                totals[2] += p[2] as u64;
+                count += 1;
+            }
+        }
+    }
+    [
+        (totals[0] / count) as u8,
+        (totals[1] / count) as u8,
+        (totals[2] / count) as u8,
+    ]
+}
+
+fn key_background(image: &RgbaImage, key: AlphaKey) -> RgbaImage {
+    let mut out = image.clone();
+    let width = image.width();
+    let height = image.height();
+    let bg_like: Vec<bool> = image
+        .pixels()
+        .map(|pixel| color_distance(pixel.0, key.bg) < key.full_alpha_distance)
+        .collect();
+    let border_bg = border_connected(&bg_like, width, height);
+
+    for (index, pixel) in out.pixels_mut().enumerate() {
+        if !border_bg[index] {
+            pixel.0[3] = 255;
+            continue;
+        }
+        let d = color_distance(pixel.0, key.bg);
+        let alpha = if d <= key.zero_alpha_distance {
+            0
+        } else if d >= key.full_alpha_distance {
+            255
+        } else {
+            let n = d - key.zero_alpha_distance;
+            let den = key.full_alpha_distance - key.zero_alpha_distance;
+            ((n * 255) / den) as u8
+        };
+        pixel.0[3] = alpha;
+        if alpha == 0 {
+            pixel.0[0] = key.bg[0];
+            pixel.0[1] = key.bg[1];
+            pixel.0[2] = key.bg[2];
+        }
+    }
+    out
+}
+
+fn border_connected(mask: &[bool], width: u32, height: u32) -> Vec<bool> {
+    let mut seen = vec![false; mask.len()];
+    let mut queue = VecDeque::new();
+    for x in 0..width {
+        push_if_masked(mask, &mut seen, &mut queue, x, 0, width);
+        push_if_masked(mask, &mut seen, &mut queue, x, height - 1, width);
+    }
+    for y in 0..height {
+        push_if_masked(mask, &mut seen, &mut queue, 0, y, width);
+        push_if_masked(mask, &mut seen, &mut queue, width - 1, y, width);
+    }
+    while let Some((x, y)) = queue.pop_front() {
+        if x > 0 {
+            push_if_masked(mask, &mut seen, &mut queue, x - 1, y, width);
+        }
+        if x + 1 < width {
+            push_if_masked(mask, &mut seen, &mut queue, x + 1, y, width);
+        }
+        if y > 0 {
+            push_if_masked(mask, &mut seen, &mut queue, x, y - 1, width);
+        }
+        if y + 1 < height {
+            push_if_masked(mask, &mut seen, &mut queue, x, y + 1, width);
+        }
+    }
+    seen
+}
+
+fn push_if_masked(
+    mask: &[bool],
+    seen: &mut [bool],
+    queue: &mut VecDeque<(u32, u32)>,
+    x: u32,
+    y: u32,
+    width: u32,
+) {
+    let index = idx(x, y, width);
+    if mask[index] && !seen[index] {
+        seen[index] = true;
+        queue.push_back((x, y));
+    }
+}
+
+fn color_distance(pixel: [u8; 4], bg: [u8; 3]) -> u32 {
+    let dr = pixel[0].abs_diff(bg[0]) as u32;
+    let dg = pixel[1].abs_diff(bg[1]) as u32;
+    let db = pixel[2].abs_diff(bg[2]) as u32;
+    dr.max(dg).max(db)
+}
+
+fn foreground_mask(image: &RgbaImage) -> Vec<bool> {
+    image.pixels().map(|pixel| pixel.0[3] > 24).collect()
+}
+
+fn connected_regions(mask: &[bool], width: u32, height: u32) -> Vec<Region> {
+    let mut seen = vec![false; mask.len()];
+    let mut regions = Vec::new();
+    for y in 0..height {
+        for x in 0..width {
+            let index = idx(x, y, width);
+            if !mask[index] || seen[index] {
+                continue;
+            }
+            seen[index] = true;
+            let mut queue = VecDeque::from([(x, y)]);
+            let mut pixels = Vec::new();
+            let mut bbox = BBox {
+                min_x: x,
+                min_y: y,
+                max_x: x,
+                max_y: y,
+            };
+            while let Some((px, py)) = queue.pop_front() {
+                pixels.push((px, py));
+                bbox.min_x = bbox.min_x.min(px);
+                bbox.min_y = bbox.min_y.min(py);
+                bbox.max_x = bbox.max_x.max(px);
+                bbox.max_y = bbox.max_y.max(py);
+                let y0 = py.saturating_sub(1);
+                let y1 = (py + 1).min(height - 1);
+                let x0 = px.saturating_sub(1);
+                let x1 = (px + 1).min(width - 1);
+                for ny in y0..=y1 {
+                    for nx in x0..=x1 {
+                        let next = idx(nx, ny, width);
+                        if mask[next] && !seen[next] {
+                            seen[next] = true;
+                            queue.push_back((nx, ny));
+                        }
+                    }
+                }
+            }
+            regions.push(Region { pixels, bbox });
+        }
+    }
+    regions
+}
+
+fn take_body_regions(regions: Vec<Region>, sheet_height: u32) -> Vec<Region> {
+    let min_height = (sheet_height / 7).max(24);
+    let min_area = ((sheet_height * sheet_height) / 300).max(500) as usize;
+    regions
+        .into_iter()
+        .filter(|region| region.bbox.height() >= min_height && region.pixels.len() >= min_area)
+        .collect()
+}
+
+fn split_until_expected(regions: &mut Vec<Region>, expected: usize) -> Result<(), String> {
+    while regions.len() < expected {
+        let Some((index, _)) = regions
+            .iter()
+            .enumerate()
+            .filter(|(_, region)| region.bbox.width() > 10)
+            .max_by_key(|(_, region)| region.bbox.width() * region.bbox.height())
+        else {
+            break;
+        };
+        let region = regions.remove(index);
+        let Some((left, right)) = split_region_at_low_density_seam(&region) else {
+            regions.push(region);
+            break;
+        };
+        regions.push(left);
+        regions.push(right);
+    }
+    if regions.len() > expected {
+        return Err(format!(
+            "expected {expected} character regions, found {} before attachment",
+            regions.len()
+        ));
+    }
+    Ok(())
+}
+
+fn split_region_at_low_density_seam(region: &Region) -> Option<(Region, Region)> {
+    let width = region.bbox.width();
+    if width < 20 {
+        return None;
+    }
+    let mut counts = vec![0u32; width as usize];
+    for &(x, _) in &region.pixels {
+        counts[(x - region.bbox.min_x) as usize] += 1;
+    }
+    let start = width / 5;
+    let end = width - start;
+    let seam_offset = (start..end).min_by_key(|&offset| counts[offset as usize])?;
+    let seam_x = region.bbox.min_x + seam_offset;
+    let mut left = Vec::new();
+    let mut right = Vec::new();
+    for &pixel in &region.pixels {
+        if pixel.0 <= seam_x {
+            left.push(pixel);
+        } else {
+            right.push(pixel);
+        }
+    }
+    if left.is_empty() || right.is_empty() {
+        return None;
+    }
+    Some((region_from_pixels(left), region_from_pixels(right)))
+}
+
+fn attach_small_regions(poses: &mut [Pose], regions: Vec<Region>) {
+    let body_boxes: Vec<BBox> = poses.iter().map(|pose| pose.body.bbox).collect();
+    let min_body_area = poses
+        .iter()
+        .map(|pose| pose.body.pixels.len())
+        .min()
+        .unwrap_or(usize::MAX);
+    let min_body_height = poses
+        .iter()
+        .map(|pose| pose.body.bbox.height())
+        .min()
+        .unwrap_or(u32::MAX);
+    for region in regions {
+        if body_boxes.iter().any(|bbox| *bbox == region.bbox) {
+            continue;
+        }
+        let region_is_body_sized =
+            region.pixels.len() > min_body_area / 4 || region.bbox.height() > min_body_height / 2;
+        if region_is_body_sized {
+            continue;
+        }
+        let center = region.bbox.center();
+        let Some((pose_index, distance)) = body_boxes
+            .iter()
+            .enumerate()
+            .map(|(index, bbox)| {
+                let body_center = bbox.center();
+                let dx = (center.0 - body_center.0).round() as i64;
+                let dy = (center.1 - body_center.1).round() as i64;
+                (index, dx * dx + dy * dy)
+            })
+            .min_by_key(|(_, distance)| *distance)
+        else {
+            continue;
+        };
+        let body = body_boxes[pose_index];
+        let below_body = region.bbox.min_y > body.max_y + 8;
+        let far_away = distance > 260 * 260;
+        if !below_body && !far_away {
+            poses[pose_index].attachments.push(region);
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct Layout {
+    width: u32,
+    height: u32,
+    baseline: u32,
+}
+
+fn compute_layout(poses: &[Pose]) -> Layout {
+    let mut left_span = 0i32;
+    let mut right_span = 0i32;
+    let mut above = 0i32;
+    let mut below = 0i32;
+    for pose in poses {
+        let bbox = pose_bbox(pose);
+        let body_center = pose.body.bbox.center().0.round() as i32;
+        let body_base = pose.body.bbox.max_y as i32;
+        left_span = left_span.max(body_center - bbox.min_x as i32);
+        right_span = right_span.max(bbox.max_x as i32 - body_center);
+        above = above.max(body_base - bbox.min_y as i32);
+        below = below.max(bbox.max_y as i32 - body_base);
+    }
+    let padding = 6;
+    Layout {
+        width: (left_span + right_span + padding * 2 + 1).max(1) as u32,
+        height: (above + below + padding * 2 + 1).max(1) as u32,
+        baseline: (above + padding) as u32,
+    }
+}
+
+fn render_pose(source: &RgbaImage, pose: &Pose, layout: Layout) -> RgbaImage {
+    let mut out = RgbaImage::new(layout.width, layout.height);
+    let source_center = pose.body.bbox.center().0.round() as i32;
+    let target_center = (layout.width / 2) as i32;
+    let dy = layout.baseline as i32 - pose.body.bbox.max_y as i32;
+    let dx = target_center - source_center;
+    blit_region(&mut out, source, &pose.body, dx, dy);
+    for attachment in &pose.attachments {
+        blit_region(&mut out, source, attachment, dx, dy);
+    }
+    out
+}
+
+fn blit_region(target: &mut RgbaImage, source: &RgbaImage, region: &Region, dx: i32, dy: i32) {
+    for &(sx, sy) in &region.pixels {
+        let tx = sx as i32 + dx;
+        let ty = sy as i32 + dy;
+        if tx >= 0 && ty >= 0 && tx < target.width() as i32 && ty < target.height() as i32 {
+            target.put_pixel(tx as u32, ty as u32, *source.get_pixel(sx, sy));
+        }
+    }
+}
+
+fn overlay(target: &mut RgbaImage, source: &RgbaImage, x0: u32, y0: u32) {
+    for y in 0..source.height() {
+        for x in 0..source.width() {
+            let src = source.get_pixel(x, y).0;
+            if src[3] == 0 {
+                continue;
+            }
+            target.put_pixel(x0 + x, y0 + y, Rgba(src));
+        }
+    }
+}
+
+fn pose_bbox(pose: &Pose) -> BBox {
+    let mut bbox = pose.body.bbox;
+    for attachment in &pose.attachments {
+        bbox = bbox.union(attachment.bbox);
+    }
+    bbox
+}
+
+fn region_from_pixels(pixels: Vec<(u32, u32)>) -> Region {
+    let mut bbox = BBox {
+        min_x: u32::MAX,
+        min_y: u32::MAX,
+        max_x: 0,
+        max_y: 0,
+    };
+    for &(x, y) in &pixels {
+        bbox.min_x = bbox.min_x.min(x);
+        bbox.min_y = bbox.min_y.min(y);
+        bbox.max_x = bbox.max_x.max(x);
+        bbox.max_y = bbox.max_y.max(y);
+    }
+    Region { pixels, bbox }
+}
+
+fn idx(x: u32, y: u32, width: u32) -> usize {
+    (y * width + x) as usize
+}
+
+impl BBox {
+    fn width(self) -> u32 {
+        self.max_x - self.min_x + 1
+    }
+
+    fn height(self) -> u32 {
+        self.max_y - self.min_y + 1
+    }
+
+    fn center(self) -> (f32, f32) {
+        (
+            (self.min_x + self.max_x) as f32 * 0.5,
+            (self.min_y + self.max_y) as f32 * 0.5,
+        )
+    }
+
+    fn union(self, other: BBox) -> BBox {
+        BBox {
+            min_x: self.min_x.min(other.min_x),
+            min_y: self.min_y.min(other.min_y),
+            max_x: self.max_x.max(other.max_x),
+            max_y: self.max_y.max(other.max_y),
+        }
+    }
+}
+
+impl PartialEq for BBox {
+    fn eq(&self, other: &Self) -> bool {
+        self.min_x == other.min_x
+            && self.min_y == other.min_y
+            && self.max_x == other.max_x
+            && self.max_y == other.max_y
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn synthetic_sheet_extracts_alpha_marks_and_drops_labels() {
+        let bg = Rgba([244, 241, 232, 255]);
+        let mut sheet = RgbaImage::from_pixel(180, 96, bg);
+        rect(&mut sheet, 14, 24, 42, 62, [216, 48, 48, 255]);
+        rect(&mut sheet, 22, 14, 28, 20, [216, 48, 48, 255]);
+        rect(&mut sheet, 72, 22, 104, 62, [48, 160, 72, 255]);
+        rect(&mut sheet, 94, 12, 100, 18, [48, 160, 72, 255]);
+        rect(&mut sheet, 132, 24, 164, 62, [64, 96, 224, 255]);
+        rect(&mut sheet, 52, 28, 55, 62, [180, 64, 64, 255]);
+        rect(&mut sheet, 92, 68, 98, 74, [20, 20, 20, 255]);
+
+        let cutouts = extract_cutouts_with_count(&sheet, 3, &["a", "b", "c"]).unwrap();
+        assert_eq!(cutouts.len(), 3);
+        let size = (cutouts[0].image.width(), cutouts[0].image.height());
+        assert!(cutouts
+            .iter()
+            .all(|cutout| { cutout.image.width() == size.0 && cutout.image.height() == size.1 }));
+        assert!(cutouts
+            .iter()
+            .all(|cutout| cutout.image.pixels().any(|pixel| pixel.0[3] == 0)));
+        assert!(!has_color(&cutouts[0].image, [64, 96, 224]));
+        assert!(has_color(&cutouts[1].image, [48, 160, 72]));
+        assert!(has_color(&cutouts[1].image, [20, 20, 20]));
+        assert!(!has_color(&cutouts[1].image, [244, 241, 232]));
+    }
+
+    fn rect(image: &mut RgbaImage, x0: u32, y0: u32, x1: u32, y1: u32, color: [u8; 4]) {
+        for y in y0..=y1 {
+            for x in x0..=x1 {
+                image.put_pixel(x, y, Rgba(color));
+            }
+        }
+    }
+
+    fn has_color(image: &RgbaImage, color: [u8; 3]) -> bool {
+        image.pixels().any(|pixel| {
+            pixel.0[3] > 0
+                && pixel.0[0] == color[0]
+                && pixel.0[1] == color[1]
+                && pixel.0[2] == color[2]
+        })
+    }
+}

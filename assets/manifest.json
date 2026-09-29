@@ -6,8 +6,332 @@
       "id": "core",
       "version": "0.1.0",
       "gameplay_affecting": false,
-      "content_hash": "685f97fd3054d54eb7be324551a59580317760a5535978fa4c2615ee4d173826",
+      "content_hash": "0d748d7e28543ba60a76e9a48af825baba5b69d7697ff7a0a54f1ba73abb4ede",
       "assets": [
+        {
+          "id": "core.portraits.engineer.angry",
+          "kind": "image/png",
+          "source": "source/core/portraits/engineer/angry.png",
+          "processed": "packs/core/processed/portraits/engineer/angry.png",
+          "compressed": "packs/core/bundles/portraits/engineer/angry.png.zst",
+          "hash": "ac93c8cb9ae4eb953b292fbed1f81c98d403bcf8f7490aade681e078dc553e84",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.engineer.confused",
+          "kind": "image/png",
+          "source": "source/core/portraits/engineer/confused.png",
+          "processed": "packs/core/processed/portraits/engineer/confused.png",
+          "compressed": "packs/core/bundles/portraits/engineer/confused.png.zst",
+          "hash": "203f3a88bf01dec64e051e2cb5faafc5e0d37bba3742325c71c781759e277870",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.engineer.excited",
+          "kind": "image/png",
+          "source": "source/core/portraits/engineer/excited.png",
+          "processed": "packs/core/processed/portraits/engineer/excited.png",
+          "compressed": "packs/core/bundles/portraits/engineer/excited.png.zst",
+          "hash": "2f117458c9dba87e79b933b49c2640af49334ea8e4195afd6300a71e9042e4bd",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.engineer.happy",
+          "kind": "image/png",
+          "source": "source/core/portraits/engineer/happy.png",
+          "processed": "packs/core/processed/portraits/engineer/happy.png",
+          "compressed": "packs/core/bundles/portraits/engineer/happy.png.zst",
+          "hash": "679a01573e423af68bd28661a518eee076f14b1f5b9f96b30d62c85cdc725e6d",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.engineer.sad",
+          "kind": "image/png",
+          "source": "source/core/portraits/engineer/sad.png",
+          "processed": "packs/core/processed/portraits/engineer/sad.png",
+          "compressed": "packs/core/bundles/portraits/engineer/sad.png.zst",
+          "hash": "39ccbd3ed7b76fde037075a145546479ab4a47a4bf0d8b6e03a0f8e616f234da",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.engineer.shocked",
+          "kind": "image/png",
+          "source": "source/core/portraits/engineer/shocked.png",
+          "processed": "packs/core/processed/portraits/engineer/shocked.png",
+          "compressed": "packs/core/bundles/portraits/engineer/shocked.png.zst",
+          "hash": "a102c2283c0130e882254d3039f68ccc7a20c23bce67b8a46022e074d560c65c",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.engineer.shy",
+          "kind": "image/png",
+          "source": "source/core/portraits/engineer/shy.png",
+          "processed": "packs/core/processed/portraits/engineer/shy.png",
+          "compressed": "packs/core/bundles/portraits/engineer/shy.png.zst",
+          "hash": "27554ccf251068bad0de63535820da6c942892502a8b9fe3983a523877c46ead",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.engineer.sleepy",
+          "kind": "image/png",
+          "source": "source/core/portraits/engineer/sleepy.png",
+          "processed": "packs/core/processed/portraits/engineer/sleepy.png",
+          "compressed": "packs/core/bundles/portraits/engineer/sleepy.png.zst",
+          "hash": "1e376db339a1c8d91a3324966314cdf096047bd6c25c1585184e9437b1ce23b3",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.engineer.surprised",
+          "kind": "image/png",
+          "source": "source/core/portraits/engineer/surprised.png",
+          "processed": "packs/core/processed/portraits/engineer/surprised.png",
+          "compressed": "packs/core/bundles/portraits/engineer/surprised.png.zst",
+          "hash": "114feaee3dcd1f6e88da4cf56e5fd60a5cd113d90789af637c87955b9cd7405a",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.gunner.angry",
+          "kind": "image/png",
+          "source": "source/core/portraits/gunner/angry.png",
+          "processed": "packs/core/processed/portraits/gunner/angry.png",
+          "compressed": "packs/core/bundles/portraits/gunner/angry.png.zst",
+          "hash": "18663d926cc9eca420d7a9d7783cf2958fbd6a6137c64db68c02ab1284c10e74",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.gunner.confused",
+          "kind": "image/png",
+          "source": "source/core/portraits/gunner/confused.png",
+          "processed": "packs/core/processed/portraits/gunner/confused.png",
+          "compressed": "packs/core/bundles/portraits/gunner/confused.png.zst",
+          "hash": "5c1ef42f8841f0174549b854d02d8b6f7cfbc16de1992767f0f85d7a81ab80aa",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.gunner.excited",
+          "kind": "image/png",
+          "source": "source/core/portraits/gunner/excited.png",
+          "processed": "packs/core/processed/portraits/gunner/excited.png",
+          "compressed": "packs/core/bundles/portraits/gunner/excited.png.zst",
+          "hash": "7c96bdcd440a92fe5aabdd593e35e915996ae87ceea7ac6c7c2e97daa07eeb21",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.gunner.happy",
+          "kind": "image/png",
+          "source": "source/core/portraits/gunner/happy.png",
+          "processed": "packs/core/processed/portraits/gunner/happy.png",
+          "compressed": "packs/core/bundles/portraits/gunner/happy.png.zst",
+          "hash": "16bd41b53e4da7e78e807ed0fe1b165499ffdede0aeb47f7537ef61bb0eeac52",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.gunner.sad",
+          "kind": "image/png",
+          "source": "source/core/portraits/gunner/sad.png",
+          "processed": "packs/core/processed/portraits/gunner/sad.png",
+          "compressed": "packs/core/bundles/portraits/gunner/sad.png.zst",
+          "hash": "5f40a841bbde5034efbdbc1a47b36d499270c0031751a00dd30a3894ede97d60",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.gunner.shocked",
+          "kind": "image/png",
+          "source": "source/core/portraits/gunner/shocked.png",
+          "processed": "packs/core/processed/portraits/gunner/shocked.png",
+          "compressed": "packs/core/bundles/portraits/gunner/shocked.png.zst",
+          "hash": "df3259ed55b3c27bfcb780764a2f07763393427b5bcff38aff6517a67ae6a3be",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.gunner.shy",
+          "kind": "image/png",
+          "source": "source/core/portraits/gunner/shy.png",
+          "processed": "packs/core/processed/portraits/gunner/shy.png",
+          "compressed": "packs/core/bundles/portraits/gunner/shy.png.zst",
+          "hash": "88b1176b049c832bdee07ed0faeb331edbc52b864419a78f8baad9e261dfa3a9",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.gunner.sleepy",
+          "kind": "image/png",
+          "source": "source/core/portraits/gunner/sleepy.png",
+          "processed": "packs/core/processed/portraits/gunner/sleepy.png",
+          "compressed": "packs/core/bundles/portraits/gunner/sleepy.png.zst",
+          "hash": "60b86aaee140c432991c789b7811b5354f740535e28d720b67f5c7ebfa69cb6d",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.gunner.surprised",
+          "kind": "image/png",
+          "source": "source/core/portraits/gunner/surprised.png",
+          "processed": "packs/core/processed/portraits/gunner/surprised.png",
+          "compressed": "packs/core/bundles/portraits/gunner/surprised.png.zst",
+          "hash": "6c850778acc6b4c333875e131609c8fc67efca039637fde532de8b8889da198f",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.pilot.angry",
+          "kind": "image/png",
+          "source": "source/core/portraits/pilot/angry.png",
+          "processed": "packs/core/processed/portraits/pilot/angry.png",
+          "compressed": "packs/core/bundles/portraits/pilot/angry.png.zst",
+          "hash": "ce3a45d081fedcc9f5bcdb6d315e9363f241833303a56dcbcf9f479a45b7c0a2",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.pilot.confused",
+          "kind": "image/png",
+          "source": "source/core/portraits/pilot/confused.png",
+          "processed": "packs/core/processed/portraits/pilot/confused.png",
+          "compressed": "packs/core/bundles/portraits/pilot/confused.png.zst",
+          "hash": "1e61ec1a84495469045ba18baf75119e724666396ca177dc8b8dc7458962eaf6",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.pilot.excited",
+          "kind": "image/png",
+          "source": "source/core/portraits/pilot/excited.png",
+          "processed": "packs/core/processed/portraits/pilot/excited.png",
+          "compressed": "packs/core/bundles/portraits/pilot/excited.png.zst",
+          "hash": "aa2bf5ce83622543d4b9bab957176fbfc83807340069c2b6d432611198d83f19",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.pilot.happy",
+          "kind": "image/png",
+          "source": "source/core/portraits/pilot/happy.png",
+          "processed": "packs/core/processed/portraits/pilot/happy.png",
+          "compressed": "packs/core/bundles/portraits/pilot/happy.png.zst",
+          "hash": "2a0dc352d24aa2e7eb0c91f1838dca7de5468f34a5f2724f0b852e2052298586",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.pilot.sad",
+          "kind": "image/png",
+          "source": "source/core/portraits/pilot/sad.png",
+          "processed": "packs/core/processed/portraits/pilot/sad.png",
+          "compressed": "packs/core/bundles/portraits/pilot/sad.png.zst",
+          "hash": "edb25eb60edec52a3bd54cccd9c31e041ca3b7e5ef7742bb94afebdf14cf12aa",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.pilot.shocked",
+          "kind": "image/png",
+          "source": "source/core/portraits/pilot/shocked.png",
+          "processed": "packs/core/processed/portraits/pilot/shocked.png",
+          "compressed": "packs/core/bundles/portraits/pilot/shocked.png.zst",
+          "hash": "035b4a3680efad14540cf6328afedc0d6d0f18aad0e8cf14ff306af342d1d22f",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.pilot.shy",
+          "kind": "image/png",
+          "source": "source/core/portraits/pilot/shy.png",
+          "processed": "packs/core/processed/portraits/pilot/shy.png",
+          "compressed": "packs/core/bundles/portraits/pilot/shy.png.zst",
+          "hash": "78d1c9c269d28af744b5868632fc12efbef77870b5af694e060885d1a0b2b135",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.pilot.sleepy",
+          "kind": "image/png",
+          "source": "source/core/portraits/pilot/sleepy.png",
+          "processed": "packs/core/processed/portraits/pilot/sleepy.png",
+          "compressed": "packs/core/bundles/portraits/pilot/sleepy.png.zst",
+          "hash": "bcebccdfc223741aa95256fa9c6f4dac8ae438c924ba2cb21653a947e411eb5b",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.pilot.surprised",
+          "kind": "image/png",
+          "source": "source/core/portraits/pilot/surprised.png",
+          "processed": "packs/core/processed/portraits/pilot/surprised.png",
+          "compressed": "packs/core/bundles/portraits/pilot/surprised.png.zst",
+          "hash": "1de2ea05455e7ef00f524a900d66796b5eff2cf1e16b597a37e0dbc916b14192",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.researcher.angry",
+          "kind": "image/png",
+          "source": "source/core/portraits/researcher/angry.png",
+          "processed": "packs/core/processed/portraits/researcher/angry.png",
+          "compressed": "packs/core/bundles/portraits/researcher/angry.png.zst",
+          "hash": "d7fdda44836edc071213b9b5db3dcc7810ec67878f16722342bd2233e912da29",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.researcher.confused",
+          "kind": "image/png",
+          "source": "source/core/portraits/researcher/confused.png",
+          "processed": "packs/core/processed/portraits/researcher/confused.png",
+          "compressed": "packs/core/bundles/portraits/researcher/confused.png.zst",
+          "hash": "741cb4451fa67043fcc5b1bf06b92e96b50020edaf09d1bd7e2d86fe84da7615",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.researcher.excited",
+          "kind": "image/png",
+          "source": "source/core/portraits/researcher/excited.png",
+          "processed": "packs/core/processed/portraits/researcher/excited.png",
+          "compressed": "packs/core/bundles/portraits/researcher/excited.png.zst",
+          "hash": "c6b469da5a1f1398d24f5a3b04d550d6b31fe59693fef6f8e12692548434a222",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.researcher.happy",
+          "kind": "image/png",
+          "source": "source/core/portraits/researcher/happy.png",
+          "processed": "packs/core/processed/portraits/researcher/happy.png",
+          "compressed": "packs/core/bundles/portraits/researcher/happy.png.zst",
+          "hash": "6ab3f74e0c0e8e2e0098f2c30266779ed9899a7048246a310460897a7e638bc6",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.researcher.sad",
+          "kind": "image/png",
+          "source": "source/core/portraits/researcher/sad.png",
+          "processed": "packs/core/processed/portraits/researcher/sad.png",
+          "compressed": "packs/core/bundles/portraits/researcher/sad.png.zst",
+          "hash": "255f26b904be00bef19291cbceec049494774a4c1eff939545c7a3c63ca24c20",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.researcher.shocked",
+          "kind": "image/png",
+          "source": "source/core/portraits/researcher/shocked.png",
+          "processed": "packs/core/processed/portraits/researcher/shocked.png",
+          "compressed": "packs/core/bundles/portraits/researcher/shocked.png.zst",
+          "hash": "af3c65090212e8604d6981a93fc50acdf18a58c47c8056359c5edd4ddab39771",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.researcher.shy",
+          "kind": "image/png",
+          "source": "source/core/portraits/researcher/shy.png",
+          "processed": "packs/core/processed/portraits/researcher/shy.png",
+          "compressed": "packs/core/bundles/portraits/researcher/shy.png.zst",
+          "hash": "f1dc8a9a69f452d108b4d52023404db9f17f3746a37b1350f0d8fd2f88e4563a",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.researcher.sleepy",
+          "kind": "image/png",
+          "source": "source/core/portraits/researcher/sleepy.png",
+          "processed": "packs/core/processed/portraits/researcher/sleepy.png",
+          "compressed": "packs/core/bundles/portraits/researcher/sleepy.png.zst",
+          "hash": "f6182f4f40b29624220b684f7fbe934a0e43bd22088f0f052bb0064b0447d468",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.researcher.surprised",
+          "kind": "image/png",
+          "source": "source/core/portraits/researcher/surprised.png",
+          "processed": "packs/core/processed/portraits/researcher/surprised.png",
+          "compressed": "packs/core/bundles/portraits/researcher/surprised.png.zst",
+          "hash": "a4d060e7ba408d9328a84560956b894a144fc2a8a037d306942a3a2d0b889402",
+          "gameplay_affecting": false
+        },
         {
           "id": "core.ui.hud_status",
           "kind": "text",

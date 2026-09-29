@@ -15,7 +15,12 @@ path = "src/bin/content_pipeline.rs"
 name = "content-manifest-diff"
 path = "src/bin/content_manifest_diff.rs"
 
+[[bin]]
+name = "sprite-sheet-cutouts"
+path = "src/bin/sprite_sheet_cutouts.rs"
+
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+image.workspace = true
