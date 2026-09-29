@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "sim_version": "0.1.0",
+  "packs": [
+    {
+      "id": "core",
+      "version": "0.1.0",
+      "gameplay_affecting": false,
+      "content_hash": "685f97fd3054d54eb7be324551a59580317760a5535978fa4c2615ee4d173826",
+      "assets": [
+        {
+          "id": "core.ui.hud_status",
+          "kind": "text",
+          "source": "source/core/ui/hud_status.txt",
+          "processed": "packs/core/processed/ui/hud_status.txt",
+          "compressed": "packs/core/bundles/ui/hud_status.txt.zst",
+          "hash": "3b056a9f5666aa4ce65ee715f8fd35763ca97b66ff28824ef03a8fc213464b0d",
+          "gameplay_affecting": false
+        }
+      ]
+    }
+  ]
+}

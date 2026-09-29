@@ -10,6 +10,7 @@ is commit `b92126c`, its results are recorded on TAKOAI-18).
 | path | what | status |
 |---|---|---|
 | `Cargo.toml`, `crates/` | Rust/Bevy workspace | foundation + placeholder gameplay (TAKOAI-26) |
+| `assets/` | source and shipped content packs | modular content-patch foundation (TAKOAI-30) |
 | `.github/workflows/`, `ci/` | CI: determinism gate for the sim; local P2P soak script | see § Verifying determinism, § Netcode |
 | `design/` | design docs and concept art | source of truth for gameplay |
 
@@ -28,6 +29,10 @@ crates/
     src/trig.rs         integer sin/cos from a committed Q16 table (from the spike)
     src/rng.rs          SimRng, seeded xorshift64* (part of SimState)
     src/input.rs        NetInput: buttons (move, Q/W/E/R) + cursor target, exchanged per tick
+  content/            package `oni-content`, lib `content` — content manifests, stable IDs, patch diffing
+    src/lib.rs          manifest types, hash validation, stable-ID resolution, manifest diff
+    src/bin/content_pipeline.rs        source -> processed asset + zstd bundle + manifest
+    src/bin/content_manifest_diff.rs   compare manifests and list packs/assets a patch needs
   client/             package `oni-client`, bin `oni-spacewar` — everything else
     src/main.rs         CLI (synctest / p2p modes), app + GGRS session setup, ICE (STUN/TURN) config
     src/rollback.rs     SimWorld resource, rollback/checksum registration, GgrsSchedule
@@ -38,8 +43,117 @@ crates/
     src/render.rs       placeholder shapes, camera follow, HUD (Update, outside rollback)
 ```
 
-Dependency direction is one-way: `client → sim`. `sim` depends only on `serde`,
-so it cannot reach the engine, the clock, the renderer or the network.
+Dependency direction is one-way for gameplay: `client → sim`, while content
+tooling is a sibling crate used only by the client and tools. `sim` depends only
+on `serde`, so it cannot reach assets, the engine, the clock, the renderer or
+the network.
+
+## Modular content packs
+
+Shipped game content lives under `assets/` and is split into independently
+versioned packs. Source art and design exploration remain in `design/art/`;
+that tree is never loaded directly by the game and is not rewritten by the
+content pipeline. When art is ready to ship, an import step copies or exports it
+into `assets/source/<pack>/...`, then the pipeline writes processed files and
+compressed bundles under `assets/packs/<pack>/...`.
+
+```
+assets/
+  manifest.json                 versioned manifest for every shipped pack
+  source/
+    core/...                    editable pack inputs tracked in git
+  packs/
+    core/
+      processed/...             files the client can load by stable asset ID
+      bundles/...               compressed patch/download payloads
+```
+
+`crates/content` owns the manifest schema and stable-ID lookup. Code must refer
+to content as IDs such as `core.ui.hud_status`, not as source or processed file
+paths. The first shipped asset is the HUD status text:
+
+```
+assets/source/core/ui/hud_status.txt
+  -> assets/packs/core/processed/ui/hud_status.txt
+  -> assets/packs/core/bundles/ui/hud_status.txt.zst
+  -> assets/manifest.json asset id core.ui.hud_status
+```
+
+The client loads that processed asset through `ContentManifest::load_text()` and
+shows it in the HUD. This proves the path is manifest-driven without putting
+asset IO inside rollback.
+
+### Manifest and stable IDs
+
+`assets/manifest.json` is schema-versioned and lists:
+
+- each pack id, semantic-ish pack version, `gameplay_affecting` flag and pack
+  content hash;
+- each asset's stable ID, kind, source path, processed path, compressed payload
+  path, per-asset content hash and `gameplay_affecting` flag;
+- the sim/content compatibility version that peers can compare before a
+  mission starts.
+
+The pack hash is derived from stable IDs, asset hashes, processed paths,
+compressed paths and gameplay-affecting flags. It is not derived from local
+filesystem metadata, so two peers with identical content bytes produce the same
+manifest identity regardless of checkout path.
+
+### Patch model
+
+Content-only patches update `assets/manifest.json` plus only changed compressed
+pack payloads/chunks. `content-manifest-diff OLD NEW` compares two manifests and
+prints the packs and stable asset IDs a patch needs, for example:
+
+```sh
+cargo run --bin content-manifest-diff -- old_manifest.json assets/manifest.json
+```
+
+Code patches ship a new binary and may also ship content packs. A mission lobby
+must reject peers unless all players have the same sim binary/protocol version
+and the same hashes for every gameplay-affecting pack or asset. Cosmetic-only
+packs can differ outside a mission if the client has fallbacks, but any asset or
+data table that changes simulation inputs, timing, hitboxes, tuning, spawn
+tables, level collision, enemy behaviour or ability rules is
+`gameplay_affecting = true` and must match exactly for every peer in the same
+rollback session.
+
+`crates/sim` still does not read assets from disk at runtime. If future gameplay
+data is content-authored, the client will validate matching manifest hashes in
+the lobby and pass a deterministic, already-parsed data value into `SimState`
+construction. That value then becomes rolled-back/checksummed state like any
+other gameplay input.
+
+### Compression and build-time processing
+
+The target shipped formats are:
+
+- GPU textures: KTX2/Basis Universal, so texture transcodes happen for the
+  player's GPU format instead of shipping raw PNGs. Trade-off: slower/offline
+  build processing and occasional quality tuning, but much smaller installs and
+  less VRAM/upload cost.
+- Audio: Ogg Vorbis or Opus for music/voice/ambience, with short latency-critical
+  SFX allowed as processed WAV only when profiling shows the decode cost is not
+  worth it. Trade-off: compressed audio saves install/update size but adds
+  decode work and looping metadata must be tested.
+- Pack payloads: zstd-compressed bundles/chunks under `assets/packs/*/bundles`.
+  Trade-off: zstd is CPU-cheap and patches well, but the client needs a bundle
+  index before random access to large packs.
+- Bevy asset processing: use Bevy's asset processor/import settings for
+  build-time conversion once real sprites/audio land. The checked-in
+  `content-pipeline` is deliberately small; it establishes the manifest and
+  zstd packaging contract while the art pipeline is still placeholder-scale.
+
+Run the current pipeline after editing pack source files:
+
+```sh
+cargo run --bin content-pipeline -- .
+```
+
+The pipeline writes processed assets, `.zst` payloads and a validated manifest.
+Generated shipped assets are committed because this repo currently has no
+external asset CDN; later release automation can upload the bundle directory and
+leave only source plus manifest in git if install size becomes a problem.
 
 ### How the sim plugs into rollback
 
