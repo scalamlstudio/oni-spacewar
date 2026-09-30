@@ -6,7 +6,7 @@
       "id": "core",
       "version": "0.1.0",
       "gameplay_affecting": false,
-      "content_hash": "0d748d7e28543ba60a76e9a48af825baba5b69d7697ff7a0a54f1ba73abb4ede",
+      "content_hash": "b3d821d43b7f652bbb3fdf1a7e47ed57ef3086bbd2598150b557bac0970a3ba4",
       "assets": [
         {
           "id": "core.portraits.engineer.angry",
@@ -45,12 +45,30 @@
           "gameplay_affecting": false
         },
         {
+          "id": "core.portraits.engineer.normal",
+          "kind": "image/png",
+          "source": "source/core/portraits/engineer/normal.png",
+          "processed": "packs/core/processed/portraits/engineer/normal.png",
+          "compressed": "packs/core/bundles/portraits/engineer/normal.png.zst",
+          "hash": "3318f4d20bbabc0f52801e6d90bc31b09717320fdf017848676f8391aba97c90",
+          "gameplay_affecting": false
+        },
+        {
           "id": "core.portraits.engineer.sad",
           "kind": "image/png",
           "source": "source/core/portraits/engineer/sad.png",
           "processed": "packs/core/processed/portraits/engineer/sad.png",
           "compressed": "packs/core/bundles/portraits/engineer/sad.png.zst",
           "hash": "39ccbd3ed7b76fde037075a145546479ab4a47a4bf0d8b6e03a0f8e616f234da",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.engineer.serious",
+          "kind": "image/png",
+          "source": "source/core/portraits/engineer/serious.png",
+          "processed": "packs/core/processed/portraits/engineer/serious.png",
+          "compressed": "packs/core/bundles/portraits/engineer/serious.png.zst",
+          "hash": "673932d7e2c3bc9212537179f6435675009bd7a60837aab52cfd74d4d80168f1",
           "gameplay_affecting": false
         },
         {
@@ -126,12 +144,30 @@
           "gameplay_affecting": false
         },
         {
+          "id": "core.portraits.gunner.normal",
+          "kind": "image/png",
+          "source": "source/core/portraits/gunner/normal.png",
+          "processed": "packs/core/processed/portraits/gunner/normal.png",
+          "compressed": "packs/core/bundles/portraits/gunner/normal.png.zst",
+          "hash": "470423df1c051e7666de9f99f30682d46377709f2b7b6ad60720cb29dd14b36a",
+          "gameplay_affecting": false
+        },
+        {
           "id": "core.portraits.gunner.sad",
           "kind": "image/png",
           "source": "source/core/portraits/gunner/sad.png",
           "processed": "packs/core/processed/portraits/gunner/sad.png",
           "compressed": "packs/core/bundles/portraits/gunner/sad.png.zst",
           "hash": "5f40a841bbde5034efbdbc1a47b36d499270c0031751a00dd30a3894ede97d60",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.gunner.serious",
+          "kind": "image/png",
+          "source": "source/core/portraits/gunner/serious.png",
+          "processed": "packs/core/processed/portraits/gunner/serious.png",
+          "compressed": "packs/core/bundles/portraits/gunner/serious.png.zst",
+          "hash": "7057c9d15e93d988e2de1a305bb73cf5aa0b6d13e2458fe4aa852916c231c16e",
           "gameplay_affecting": false
         },
         {
@@ -207,12 +243,30 @@
           "gameplay_affecting": false
         },
         {
+          "id": "core.portraits.pilot.normal",
+          "kind": "image/png",
+          "source": "source/core/portraits/pilot/normal.png",
+          "processed": "packs/core/processed/portraits/pilot/normal.png",
+          "compressed": "packs/core/bundles/portraits/pilot/normal.png.zst",
+          "hash": "f12ad3bf282c2158c89108a2eef023d748a433784d0894a06b733505535149bd",
+          "gameplay_affecting": false
+        },
+        {
           "id": "core.portraits.pilot.sad",
           "kind": "image/png",
           "source": "source/core/portraits/pilot/sad.png",
           "processed": "packs/core/processed/portraits/pilot/sad.png",
           "compressed": "packs/core/bundles/portraits/pilot/sad.png.zst",
           "hash": "edb25eb60edec52a3bd54cccd9c31e041ca3b7e5ef7742bb94afebdf14cf12aa",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.pilot.serious",
+          "kind": "image/png",
+          "source": "source/core/portraits/pilot/serious.png",
+          "processed": "packs/core/processed/portraits/pilot/serious.png",
+          "compressed": "packs/core/bundles/portraits/pilot/serious.png.zst",
+          "hash": "6b5092cd3cdeab4b49216b24df538a39835aa93cc39ae80270f81a83a49a5da9",
           "gameplay_affecting": false
         },
         {
@@ -288,12 +342,30 @@
           "gameplay_affecting": false
         },
         {
+          "id": "core.portraits.researcher.normal",
+          "kind": "image/png",
+          "source": "source/core/portraits/researcher/normal.png",
+          "processed": "packs/core/processed/portraits/researcher/normal.png",
+          "compressed": "packs/core/bundles/portraits/researcher/normal.png.zst",
+          "hash": "33ff70517e9d256062ccafb42cf8ca6d30c7138075eeed9a2ddc5f9def59a9ec",
+          "gameplay_affecting": false
+        },
+        {
           "id": "core.portraits.researcher.sad",
           "kind": "image/png",
           "source": "source/core/portraits/researcher/sad.png",
           "processed": "packs/core/processed/portraits/researcher/sad.png",
           "compressed": "packs/core/bundles/portraits/researcher/sad.png.zst",
           "hash": "255f26b904be00bef19291cbceec049494774a4c1eff939545c7a3c63ca24c20",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.portraits.researcher.serious",
+          "kind": "image/png",
+          "source": "source/core/portraits/researcher/serious.png",
+          "processed": "packs/core/processed/portraits/researcher/serious.png",
+          "compressed": "packs/core/bundles/portraits/researcher/serious.png.zst",
+          "hash": "fa346777bb22857ff01a05a35952d2940f5ac6d1f5baa8bbcfe32844025a81b3",
           "gameplay_affecting": false
         },
         {

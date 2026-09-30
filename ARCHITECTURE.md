@@ -162,6 +162,9 @@ are imported with a deterministic Rust tool:
 
 ```sh
 cargo run --bin sprite-sheet-cutouts -- .
+cargo run --bin sprite-sheet-cutouts -- . \
+  --extra-sheet-suffix normal-serious-v1 \
+  --extra-expressions normal,serious
 cargo run --bin content-pipeline -- .
 ```
 
@@ -178,6 +181,12 @@ The expected sheet format is one row of nine poses in this order: Angry, Happy,
 Sleepy, Confused, Shocked, Excited, Sad, Surprised, Shy. Sheets need a flat
 solid background connected to the border, clear gaps between poses, and no text
 labels in the pose area; labels below the ground line are ignored during import.
+Additional expression sheets can be imported with `--extra-sheet-suffix` and a
+comma-separated `--extra-expressions` list. Extra sheets are extracted with the
+same per-character canvas and baseline computed from that character's default
+nine-pose sheet. Extra poses that exceed that target layout are scaled down to
+fit the established character canvas and baseline; the tool still fails if the
+detected pose count differs from the provided expression count.
 
 ### How the sim plugs into rollback
 
