@@ -128,10 +128,9 @@ fn compress_zstd(input: &Path, output: &Path) -> io::Result<()> {
         .arg(input)
         .status()?;
     if !status.success() {
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!("zstd failed with status {status}"),
-        ));
+        return Err(io::Error::other(format!(
+            "zstd failed with status {status}"
+        )));
     }
     Ok(())
 }

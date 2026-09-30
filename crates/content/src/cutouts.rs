@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use image::{Rgba, RgbaImage};
+use image::{imageops::FilterType, Rgba, RgbaImage};
 
 pub const EXPRESSIONS: [&str; 9] = [
     "angry",
@@ -16,8 +16,21 @@ pub const EXPRESSIONS: [&str; 9] = [
 
 #[derive(Clone, Debug)]
 pub struct Cutout {
-    pub expression: &'static str,
+    pub expression: String,
     pub image: RgbaImage,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct CutoutLayout {
+    width: u32,
+    height: u32,
+    baseline: u32,
+}
+
+#[derive(Clone, Debug)]
+pub struct CutoutSheet {
+    pub layout: CutoutLayout,
+    pub cutouts: Vec<Cutout>,
 }
 
 #[derive(Clone, Debug)]
@@ -48,16 +61,17 @@ struct AlphaKey {
 }
 
 pub fn extract_expression_cutouts(sheet: &RgbaImage) -> Result<Vec<Cutout>, String> {
-    extract_cutouts_with_count(sheet, EXPRESSIONS.len(), &EXPRESSIONS)
+    extract_expression_cutout_sheet(sheet, &EXPRESSIONS, None).map(|sheet| sheet.cutouts)
 }
 
-fn extract_cutouts_with_count(
+pub fn extract_expression_cutout_sheet<N: AsRef<str>>(
     sheet: &RgbaImage,
-    expected_count: usize,
-    names: &[&'static str],
-) -> Result<Vec<Cutout>, String> {
+    names: &[N],
+    layout_override: Option<CutoutLayout>,
+) -> Result<CutoutSheet, String> {
+    let expected_count = names.len();
     if expected_count == 0 || names.len() != expected_count {
-        return Err("cutout count and names must be non-empty and match".into());
+        return Err("cutout names must be non-empty".into());
     }
 
     let key = AlphaKey {
@@ -89,16 +103,19 @@ fn extract_cutouts_with_count(
         .collect();
     attach_small_regions(&mut poses, regions);
 
-    let layout = compute_layout(&poses);
+    let layout = layout_override.unwrap_or_else(|| compute_layout(&poses));
     let cutouts = poses
         .iter()
-        .zip(names.iter().copied())
-        .map(|(pose, expression)| Cutout {
-            expression,
-            image: render_pose(&keyed, pose, layout),
+        .zip(names.iter().map(AsRef::as_ref))
+        .map(|(pose, expression)| {
+            let image = render_pose(&keyed, pose, layout)?;
+            Ok(Cutout {
+                expression: expression.to_string(),
+                image,
+            })
         })
-        .collect();
-    Ok(cutouts)
+        .collect::<Result<Vec<_>, String>>()?;
+    Ok(CutoutSheet { layout, cutouts })
 }
 
 pub fn make_contact_sheet(cutouts: &[(String, RgbaImage)], columns: u32) -> RgbaImage {
@@ -115,7 +132,7 @@ pub fn make_contact_sheet(cutouts: &[(String, RgbaImage)], columns: u32) -> Rgba
         .max()
         .unwrap_or(1)
         + 16;
-    let rows = (cutouts.len() as u32 + columns - 1) / columns;
+    let rows = (cutouts.len() as u32).div_ceil(columns);
     let mut out = RgbaImage::new(cell_w * columns, cell_h * rows.max(1));
     for y in 0..out.height() {
         for x in 0..out.width() {
@@ -368,7 +385,7 @@ fn attach_small_regions(poses: &mut [Pose], regions: Vec<Region>) {
         .min()
         .unwrap_or(u32::MAX);
     for region in regions {
-        if body_boxes.iter().any(|bbox| *bbox == region.bbox) {
+        if body_boxes.contains(&region.bbox) {
             continue;
         }
         let region_is_body_sized =
@@ -399,14 +416,7 @@ fn attach_small_regions(poses: &mut [Pose], regions: Vec<Region>) {
     }
 }
 
-#[derive(Clone, Copy)]
-struct Layout {
-    width: u32,
-    height: u32,
-    baseline: u32,
-}
-
-fn compute_layout(poses: &[Pose]) -> Layout {
+fn compute_layout(poses: &[Pose]) -> CutoutLayout {
     let mut left_span = 0i32;
     let mut right_span = 0i32;
     let mut above = 0i32;
@@ -421,24 +431,113 @@ fn compute_layout(poses: &[Pose]) -> Layout {
         below = below.max(bbox.max_y as i32 - body_base);
     }
     let padding = 6;
-    Layout {
+    CutoutLayout {
         width: (left_span + right_span + padding * 2 + 1).max(1) as u32,
         height: (above + below + padding * 2 + 1).max(1) as u32,
         baseline: (above + padding) as u32,
     }
 }
 
-fn render_pose(source: &RgbaImage, pose: &Pose, layout: Layout) -> RgbaImage {
+fn render_pose(source: &RgbaImage, pose: &Pose, layout: CutoutLayout) -> Result<RgbaImage, String> {
+    if !pose_fits(pose, layout) {
+        return render_pose_scaled_to_layout(source, pose, layout);
+    }
+    render_pose_unscaled(source, pose, layout)
+}
+
+fn render_pose_unscaled(
+    source: &RgbaImage,
+    pose: &Pose,
+    layout: CutoutLayout,
+) -> Result<RgbaImage, String> {
     let mut out = RgbaImage::new(layout.width, layout.height);
     let source_center = pose.body.bbox.center().0.round() as i32;
     let target_center = (layout.width / 2) as i32;
     let dy = layout.baseline as i32 - pose.body.bbox.max_y as i32;
     let dx = target_center - source_center;
+    ensure_region_fits(&pose.body, dx, dy, layout)?;
     blit_region(&mut out, source, &pose.body, dx, dy);
     for attachment in &pose.attachments {
+        ensure_region_fits(attachment, dx, dy, layout)?;
         blit_region(&mut out, source, attachment, dx, dy);
     }
-    out
+    Ok(out)
+}
+
+fn pose_fits(pose: &Pose, layout: CutoutLayout) -> bool {
+    let source_center = pose.body.bbox.center().0.round() as i32;
+    let target_center = (layout.width / 2) as i32;
+    let dy = layout.baseline as i32 - pose.body.bbox.max_y as i32;
+    let dx = target_center - source_center;
+    std::iter::once(&pose.body)
+        .chain(pose.attachments.iter())
+        .all(|region| region_fits(region, dx, dy, layout))
+}
+
+fn render_pose_scaled_to_layout(
+    source: &RgbaImage,
+    pose: &Pose,
+    layout: CutoutLayout,
+) -> Result<RgbaImage, String> {
+    let source_layout = compute_layout(std::slice::from_ref(pose));
+    let unscaled = render_pose_unscaled(source, pose, source_layout)?;
+    let above = source_layout.baseline as f32;
+    let below = (source_layout.height - source_layout.baseline) as f32;
+    let mut scale = (layout.width as f32 / source_layout.width as f32).min(1.0);
+    if above > 0.0 {
+        scale = scale.min(layout.baseline as f32 / above);
+    }
+    if below > 0.0 {
+        scale = scale.min((layout.height - layout.baseline) as f32 / below);
+    }
+    scale *= 0.98;
+    if scale <= 0.0 {
+        return Err(format!(
+            "pose cannot be scaled into target layout {}x{} baseline {}",
+            layout.width, layout.height, layout.baseline
+        ));
+    }
+    let scaled_w = ((source_layout.width as f32 * scale).floor() as u32).max(1);
+    let scaled_h = ((source_layout.height as f32 * scale).floor() as u32).max(1);
+    let scaled_baseline = ((source_layout.baseline as f32 * scale).round() as u32).min(scaled_h);
+    let scaled = image::imageops::resize(&unscaled, scaled_w, scaled_h, FilterType::Lanczos3);
+    let mut out = RgbaImage::new(layout.width, layout.height);
+    let x0 = (layout.width - scaled_w) / 2;
+    let y0 = layout
+        .baseline
+        .checked_sub(scaled_baseline)
+        .ok_or_else(|| "scaled pose baseline does not fit target layout".to_string())?;
+    if y0 + scaled_h > layout.height {
+        return Err(format!(
+            "scaled pose does not fit target layout {}x{} baseline {}",
+            layout.width, layout.height, layout.baseline
+        ));
+    }
+    overlay(&mut out, &scaled, x0, y0);
+    Ok(out)
+}
+
+fn ensure_region_fits(
+    region: &Region,
+    dx: i32,
+    dy: i32,
+    layout: CutoutLayout,
+) -> Result<(), String> {
+    if region_fits(region, dx, dy, layout) {
+        return Ok(());
+    }
+    Err(format!(
+        "pose does not fit target layout {}x{} baseline {}",
+        layout.width, layout.height, layout.baseline
+    ))
+}
+
+fn region_fits(region: &Region, dx: i32, dy: i32, layout: CutoutLayout) -> bool {
+    let min_x = region.bbox.min_x as i32 + dx;
+    let max_x = region.bbox.max_x as i32 + dx;
+    let min_y = region.bbox.min_y as i32 + dy;
+    let max_y = region.bbox.max_y as i32 + dy;
+    min_x >= 0 && min_y >= 0 && max_x < layout.width as i32 && max_y < layout.height as i32
 }
 
 fn blit_region(target: &mut RgbaImage, source: &RgbaImage, region: &Region, dx: i32, dy: i32) {
@@ -542,7 +641,9 @@ mod tests {
         rect(&mut sheet, 52, 28, 55, 62, [180, 64, 64, 255]);
         rect(&mut sheet, 92, 68, 98, 74, [20, 20, 20, 255]);
 
-        let cutouts = extract_cutouts_with_count(&sheet, 3, &["a", "b", "c"]).unwrap();
+        let cutouts = extract_expression_cutout_sheet(&sheet, &["a", "b", "c"], None)
+            .unwrap()
+            .cutouts;
         assert_eq!(cutouts.len(), 3);
         let size = (cutouts[0].image.width(), cutouts[0].image.height());
         assert!(cutouts
@@ -555,6 +656,24 @@ mod tests {
         assert!(has_color(&cutouts[1].image, [48, 160, 72]));
         assert!(has_color(&cutouts[1].image, [20, 20, 20]));
         assert!(!has_color(&cutouts[1].image, [244, 241, 232]));
+    }
+
+    #[test]
+    fn two_pose_sheet_uses_custom_expression_names() {
+        let bg = Rgba([244, 241, 232, 255]);
+        let mut sheet = RgbaImage::from_pixel(128, 96, bg);
+        rect(&mut sheet, 16, 22, 46, 64, [216, 48, 48, 255]);
+        rect(&mut sheet, 76, 24, 108, 64, [48, 160, 72, 255]);
+
+        let cutouts = extract_expression_cutout_sheet(&sheet, &["normal", "serious"], None)
+            .unwrap()
+            .cutouts;
+
+        assert_eq!(cutouts.len(), 2);
+        assert_eq!(cutouts[0].expression, "normal");
+        assert_eq!(cutouts[1].expression, "serious");
+        assert!(has_color(&cutouts[0].image, [216, 48, 48]));
+        assert!(has_color(&cutouts[1].image, [48, 160, 72]));
     }
 
     fn rect(image: &mut RgbaImage, x0: u32, y0: u32, x1: u32, y1: u32, color: [u8; 4]) {
