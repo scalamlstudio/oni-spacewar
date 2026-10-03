@@ -43,6 +43,13 @@ pub struct MissionResult {
     pub waves_cleared: u32,
 }
 
+/// Sent by the Carrier's Dock console on Launch. The flow stores the pick in
+/// the save and enters Battle; `config_from_save` turns it into a config.
+#[derive(bevy::prelude::Message, Clone, Debug, PartialEq, Eq)]
+pub struct MissionRequest {
+    pub battleship_id: String,
+}
+
 pub fn config_from_save(save: &SaveGame) -> MissionConfig {
     MissionConfig {
         mission_type: MissionType::Elimination,

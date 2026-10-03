@@ -8,6 +8,7 @@
 //! Gameplay is a placeholder that exercises the foundation (see `sim`):
 //! click-to-move battleships, a Q shot, and waves of chasing enemies.
 
+mod carrier;
 mod flow;
 mod input;
 mod mission;
@@ -191,7 +192,11 @@ fn main() {
         }))
         // Keep simulating when the window is in the background (two windows side by side).
         .insert_resource(WinitSettings::continuous())
-        .add_plugins((render::RenderPlugin, pacing::PacingPlugin));
+        .add_plugins(render::RenderPlugin);
+        // Pacing feeds the synctest/p2p run report and needs their RunLimit.
+        if args.mode != "demo" {
+            app.add_plugins(pacing::PacingPlugin);
+        }
     }
 
     let frames = if args.minutes > 0.0 {
@@ -203,14 +208,11 @@ fn main() {
         if args.headless {
             usage_exit("demo mode requires a window\n");
         }
-        app.insert_resource(SimWorld(SimState::new(SimParams {
-            num_players: 1,
-            seed: args.seed,
-        })))
-        .insert_resource(NetStatus("demo flow".into()))
-        .insert_resource(ContentStatus(content_status))
-        .init_resource::<Stats>()
-        .add_plugins(flow::FlowPlugin);
+        // The battle inserts its own SimWorld on entry; none exists outside it.
+        app.insert_resource(NetStatus("demo flow".into()))
+            .insert_resource(ContentStatus(content_status))
+            .init_resource::<Stats>()
+            .add_plugins((flow::FlowPlugin, carrier::CarrierPlugin));
         if app.run().is_error() {
             std::process::exit(1);
         }
