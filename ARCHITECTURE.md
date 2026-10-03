@@ -34,8 +34,12 @@ crates/
     src/lib.rs          manifest types, hash validation, stable-ID resolution, manifest diff
     src/bin/content_pipeline.rs        source -> processed asset + zstd bundle + manifest
     src/bin/content_manifest_diff.rs   compare manifests and list packs/assets a patch needs
+    src/cutouts.rs                     background keying, sheet slicing, single-sprite crop, resize
+    src/bin/sprite_sheet_cutouts.rs    expression sheets -> portraits
+    src/bin/demo_art_import.rs         design/art/demo -> battle / carrier / title / icon sources
   client/             package `oni-client`, bin `oni-spacewar` — everything else
     src/main.rs         CLI (synctest / p2p modes), app + GGRS session setup, ICE (STUN/TURN) config
+    src/art.rs          ContentImages: shipped images by stable content ID (manifest -> processed PNG), cached
     src/flow.rs         first-playable scene state machine, Title / Result UI, --autoplay QA driver: Title → Carrier → Battle → Result
     src/carrier.rs      Carrier scene: walkable one-deck cross-section, crew dialogue, Dock briefing + ship select, Workshop shop panel
     src/workshop.rs     Workshop upgrade rules: costs, levels, buy() writing the purchase IDs the battle reads
@@ -47,7 +51,7 @@ crates/
     src/net.rs          matchbox ↔ ggrs socket adapter + latency/loss emulator (from the spike)
     src/stats.rs        rollback / frame-time / desync measurement + report (from the spike)
     src/pacing.rs       frame-pacing profiler (windowed): main / render / swapchain-acquire split + OS-stall probe
-    src/render.rs       placeholder shapes keyed by stable content IDs, camera follow, battle HUD + wave banner (Update, outside rollback)
+    src/render.rs       battle sprites keyed by stable content IDs + gizmo FX, camera follow, battle HUD + wave banner (Update, outside rollback)
 ```
 
 Dependency direction is one-way for gameplay: `client → sim`, while content
@@ -147,9 +151,11 @@ The target shipped formats are:
   Trade-off: zstd is CPU-cheap and patches well, but the client needs a bundle
   index before random access to large packs.
 - Bevy asset processing: use Bevy's asset processor/import settings for
-  build-time conversion once real sprites/audio land. The checked-in
-  `content-pipeline` is deliberately small; it establishes the manifest and
-  zstd packaging contract while the art pipeline is still placeholder-scale.
+  build-time conversion once the art volume justifies it. The checked-in
+  `content-pipeline` is deliberately small: it copies every PNG under
+  `assets/source/core/` (stable ID from its path, e.g.
+  `battle/ship/kite.png` -> `core.battle.ship.kite`) plus the HUD text, and
+  writes the zstd bundles and manifest. Images ship as PNG for now.
 
 Run the current pipeline after editing pack source files:
 
@@ -195,6 +201,24 @@ nine-pose sheet. Extra poses that exceed that target layout are scaled down to
 fit the established character canvas and baseline; the tool still fails if the
 detected pose count differs from the provided expression count.
 
+### Demo art import
+
+The First Playable art set (`design/art/demo/*-v1.png`) is imported with:
+
+```sh
+cargo run --release --bin demo-art-import -- .
+cargo run --release --bin content-pipeline -- .
+```
+
+`demo-art-import` keys out each image's flat background (art that already
+has a transparent background is only cropped), cuts the Pilot walk sheet
+(idle + 4 frames, shared canvas) and the icon sheet (5 icons) with the same
+sheet slicer as the portraits, scales everything down to its in-game size
+and writes `assets/source/core/{battle,carrier,title,ui/icon}/...`. It also
+writes `target/demo-art-contact-sheet.png` for a visual check. The file
+names and target sizes are tables at the top of the tool; a new art file
+means a new table row.
+
 ### How the sim plugs into rollback
 
 - The whole simulation is one value, `sim::SimState`. The client wraps it in the
@@ -213,11 +237,12 @@ detected pose count differs from the provided expression count.
   `SimWorld` resource at a fixed rate without opening a network session; the
   `synctest` and `p2p` modes still use `RollbackPlugin` and GGRS.
 - The Carrier (`carrier.rs`) is plain Bevy in `Update`, gated on
-  `GameScreen::Carrier`; it owns no sim state. Rooms, crew, props and the
-  Pilot are placeholder sprites, each tagged with a stable `ContentId`
-  (`core.carrier.*`, `core.ships.*.berth`) so the art import swaps sprites
-  without changing layout. Portraits are decoded from the manifest's processed
-  files by stable ID (`core.portraits.<crew>.<expression>`). Pure helpers
+  `GameScreen::Carrier`; it owns no sim state. Each room is its art
+  (`core.carrier.room.*`) fitted to the room width, crew stand as their
+  `normal` portrait, and the Pilot animates through `core.carrier.pilot.*`
+  (a frame per 12 px walked, mirrored when walking left). The camera zooms
+  in (`CAMERA_ZOOM`) while on the Carrier and resets on leaving. Every image
+  comes from `art::ContentImages` by stable ID. Pure helpers
   (`walk`, `nearest_hotspot`, `crew_lines`, `ship_card`, `upgrade_preview`)
   hold the rules and are unit tested. The Dock's Launch writes a
   `mission::MissionRequest` message; the flow stores the picked battleship in
@@ -244,11 +269,16 @@ detected pose count differs from the provided expression count.
   read `SimWorld` in `Update` (never in the rollback schedule). One box shows
   one hint for 6 s; queued hints from a scene the player has left are
   dropped.
-- Battle visuals are drawn through stable content IDs
+- Battle visuals are sprites drawn by stable content ID
   (`core.battle.ship.kite`, `core.battle.enemy.void_swarmer`,
-  `core.battle.loot.void_crystal`, `core.battle.fx.bolt`, ... in
-  `render::ids`). Each maps to a placeholder gizmo shape today; the art
-  import ships assets under the same IDs and swaps the shape for a sprite.
+  `core.battle.fx.spit`, loot as `core.ui.icon.*`, ... in `render::ids`)
+  from a reused pool of sprite entities, sized from the sim hit radius.
+  Ship facing is visual-only client state (from the move target / dash).
+  Player bolts are a generated soft glow tinted per player; shields, the
+  Shockwave ring, hull bars and the move marker stay gizmo effects. The
+  Title shows `core.title.key_art`, the Result screen a dimmed
+  `core.carrier.interior`, and the Workshop rows, Dock cards and Carrier
+  wallet show icons / ship art.
 - `oni-spacewar --autoplay [--ship kite|bulwark] [--missions N] [--continue]
   [--abandon] [--shots DIR]` is a QA mode for the whole demo loop: New Game
   (or Continue the existing save), fly N battles (default 1) with a scripted

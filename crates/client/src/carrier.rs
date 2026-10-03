@@ -2,16 +2,12 @@
 //! between missions (design/READINESS.md § Demo Spec › Carrier). Client only;
 //! nothing here touches the sim.
 //!
-//! Visuals are placeholder shapes. Every placeholder carries a stable
-//! [`ContentId`] so the demo art import swaps sprites in place instead of
-//! reworking the layout. Portraits already ship and load by stable ID through
-//! the content manifest.
+//! Rooms, crew and the Pilot's walk cycle are shipped art (design/art/demo,
+//! imported by `demo-art-import`), loaded by stable content ID through the
+//! manifest (`crate::art`).
 
-use bevy::asset::RenderAssetUsages;
-use bevy::image::{CompressedImageFormats, ImageSampler, ImageType};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use content::ContentManifest;
 
 use sim::tuning::{
     AFTERBURN_DISTANCE, BASTION_DURATION, BASTION_SHIELD, SCATTER_BOLTS, SHOCKWAVE_PUSH,
@@ -19,6 +15,7 @@ use sim::tuning::{
 };
 use sim::{Loadout, ShipKind, ShipSheet, Upgrades};
 
+use crate::art::{self, icon_node, ContentImages};
 use crate::flow::{self, GameScreen, PauseMenu, SaveSlot, ScreenEntity};
 use crate::hints::{Hint, Hints};
 use crate::mission::MissionRequest;
@@ -28,7 +25,6 @@ use crate::workshop::{self, BuyError, Upgrade, UPGRADES};
 /// Width of one room; the deck is four rooms long.
 pub const ROOM_W: f32 = 320.0;
 pub const DECK_LEN: f32 = ROOM_W * 4.0;
-const ROOM_H: f32 = 240.0;
 /// A / D walking speed, px/s.
 pub const WALK_SPEED: f32 = 120.0;
 /// E reaches the nearest hotspot within this many px.
@@ -36,7 +32,25 @@ pub const INTERACT_RANGE: f32 = 40.0;
 const PILOT_HALF_W: f32 = 10.0;
 const PILOT_SPAWN_NEW_GAME: f32 = 110.0;
 const PILOT_SPAWN_AFTER_MISSION: f32 = 1060.0;
-const CAMERA_Y: f32 = 50.0;
+const CAMERA_Y: f32 = 70.0;
+/// Carrier camera zoom (world px per screen px); the deck art reads better
+/// close up than at 1:1.
+const CAMERA_ZOOM: f32 = 0.7;
+/// Room art is fitted to the room width; this much of it hangs below the
+/// walking line (the art's lower frame).
+const ROOM_ART_SINK: f32 = 34.0;
+/// On-screen height of the Pilot and crew sprites, px.
+const PILOT_H: f32 = 64.0;
+const CREW_H: f32 = 70.0;
+/// Pilot walk cycle: a new frame every this many px walked.
+const STRIDE: f32 = 12.0;
+const PILOT_FRAMES: [&str; 4] = [
+    "core.carrier.pilot.walk_1",
+    "core.carrier.pilot.walk_2",
+    "core.carrier.pilot.walk_3",
+    "core.carrier.pilot.walk_4",
+];
+const PILOT_IDLE: &str = "core.carrier.pilot.idle";
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Room {
@@ -46,31 +60,15 @@ pub enum Room {
     Dock,
 }
 
-const ROOMS: [(Room, &str, &str, Color); 4] = [
-    (
-        Room::Bridge,
-        "Bridge",
-        "core.carrier.room.bridge",
-        Color::srgb(0.10, 0.14, 0.22),
-    ),
+const ROOMS: [(Room, &str, &str); 4] = [
+    (Room::Bridge, "Bridge", "core.carrier.room.bridge"),
     (
         Room::CrewQuarters,
         "Crew Quarters",
         "core.carrier.room.crew_quarters",
-        Color::srgb(0.16, 0.13, 0.18),
     ),
-    (
-        Room::Workshop,
-        "Workshop",
-        "core.carrier.room.workshop",
-        Color::srgb(0.17, 0.15, 0.11),
-    ),
-    (
-        Room::Dock,
-        "Dock",
-        "core.carrier.room.dock",
-        Color::srgb(0.10, 0.17, 0.16),
-    ),
+    (Room::Workshop, "Workshop", "core.carrier.room.workshop"),
+    (Room::Dock, "Dock", "core.carrier.room.dock"),
 ];
 
 pub fn room_at(x: f32) -> Room {
@@ -104,6 +102,11 @@ impl Crew {
             Crew::Researcher => "researcher",
             Crew::Engineer => "engineer",
         }
+    }
+
+    /// Standing sprite on the deck.
+    fn sprite_id(self) -> String {
+        format!("core.portraits.{}.normal", self.key())
     }
 
     fn color(self) -> Color {
@@ -248,6 +251,8 @@ pub struct ShipInfo {
     pub name: &'static str,
     pub role: &'static str,
     pub kind: ShipKind,
+    /// Battle sprite, also shown on the Dock card.
+    pub image_id: &'static str,
 }
 
 pub const SHIPS: [ShipInfo; 2] = [
@@ -256,12 +261,14 @@ pub const SHIPS: [ShipInfo; 2] = [
         name: "Kite",
         role: "fast, fragile, short cooldowns",
         kind: ShipKind::Kite,
+        image_id: crate::render::ids::SHIP_KITE,
     },
     ShipInfo {
         id: "bulwark",
         name: "Bulwark",
         role: "slow, tanky, stronger basic attack",
         kind: ShipKind::Bulwark,
+        image_id: crate::render::ids::SHIP_BULWARK,
     },
 ];
 
@@ -443,71 +450,51 @@ pub struct CarrierArrival {
     pub from_mission: bool,
 }
 
-/// Stable content ID of a placeholder, for the later art swap.
-#[derive(Component, Clone, Copy, Debug)]
-#[allow(
-    dead_code,
-    reason = "read by the demo art import that replaces placeholders"
-)]
-pub struct ContentId(pub &'static str);
-
-#[derive(Component)]
-pub(crate) struct Pilot;
+/// The player character. `walked` (px since it last stood still) drives
+/// the walk cycle.
+#[derive(Component, Default)]
+pub(crate) struct Pilot {
+    walked: f32,
+    last_x: Option<f32>,
+}
 
 #[derive(Component)]
 struct Prompt;
 
-#[derive(Component)]
-struct CarrierHud;
+/// One live value in the Carrier HUD.
+#[derive(Component, Clone, Copy, PartialEq)]
+enum HudField {
+    Credits,
+    Crystal,
+    Room,
+}
 
 #[derive(Component)]
 struct OverlayUi;
 
-/// Portrait images by stable asset ID, decoded once from the manifest's
-/// processed files.
-#[derive(Resource, Default)]
-struct Portraits {
-    manifest: Option<ContentManifest>,
-    loaded: std::collections::HashMap<String, Option<Handle<Image>>>,
+fn portrait(
+    art: &mut ContentImages,
+    images: &mut Assets<Image>,
+    crew: Crew,
+    expression: &str,
+) -> Option<Handle<Image>> {
+    art.get(
+        images,
+        &format!("core.portraits.{}.{}", crew.key(), expression),
+    )
 }
 
-impl Portraits {
-    fn get(
-        &mut self,
-        images: &mut Assets<Image>,
-        crew: Crew,
-        expression: &str,
-    ) -> Option<Handle<Image>> {
-        let id = format!("core.portraits.{}.{}", crew.key(), expression);
-        if let Some(handle) = self.loaded.get(&id) {
-            return handle.clone();
-        }
-        if self.manifest.is_none() {
-            self.manifest = ContentManifest::load("assets/manifest.json").ok();
-        }
-        let handle = self
-            .manifest
-            .as_ref()
-            .and_then(|m| m.processed_path("assets", &id).ok())
-            .and_then(|path| std::fs::read(path).ok())
-            .and_then(|bytes| {
-                Image::from_buffer(
-                    &bytes,
-                    ImageType::Extension("png"),
-                    CompressedImageFormats::NONE,
-                    true,
-                    ImageSampler::Default,
-                    RenderAssetUsages::default(),
-                )
-                .ok()
-            })
-            .map(|image| images.add(image));
-        if handle.is_none() {
-            warn!("portrait {id} unavailable");
-        }
-        self.loaded.insert(id, handle.clone());
-        handle
+/// Every manifest image the Carrier draws (besides dialogue portraits).
+#[cfg(test)]
+pub fn image_ids() -> Vec<String> {
+    let mut ids: Vec<String> = ROOMS.iter().map(|r| r.2.to_string()).collect();
+    ids.extend(PILOT_FRAMES.iter().map(|f| f.to_string()));
+    ids.push(PILOT_IDLE.into());
+    ids.extend(SHIPS.iter().map(|s| s.image_id.to_string()));
+    for crew in [Crew::Gunner, Crew::Researcher, Crew::Engineer] {
+        ids.push(crew.sprite_id());
     }
+    ids
 }
 
 pub struct CarrierPlugin;
@@ -516,7 +503,6 @@ impl Plugin for CarrierPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Overlay>()
             .init_resource::<CarrierArrival>()
-            .init_resource::<Portraits>()
             .add_systems(
                 OnEnter(GameScreen::Carrier),
                 spawn_carrier.after(flow::enter_carrier),
@@ -527,6 +513,7 @@ impl Plugin for CarrierPlugin {
                 (
                     carrier_input,
                     follow_pilot,
+                    animate_pilot,
                     update_prompt,
                     update_hud,
                     carrier_hints,
@@ -551,12 +538,24 @@ fn label(text: &str, size: f32, color: Color, pos: Vec3) -> impl Bundle {
     )
 }
 
-fn block(id: &'static str, color: Color, size: Vec2, pos: Vec3) -> impl Bundle {
+/// A sprite `height` px tall standing with its feet at `pos`.
+fn standing(
+    art: &mut ContentImages,
+    images: &mut Assets<Image>,
+    id: &str,
+    height: f32,
+    pos: Vec3,
+) -> impl Bundle {
+    let image = art.get(images, id).unwrap_or_default();
+    let px = ContentImages::size(images, &image);
     (
         ScreenEntity,
-        ContentId(id),
-        Sprite::from_color(color, size),
-        Transform::from_translation(pos),
+        Sprite {
+            image,
+            custom_size: Some(Vec2::new(px.x * height / px.y, height)),
+            ..default()
+        },
+        Transform::from_translation(pos + Vec3::Y * height / 2.0),
     )
 }
 
@@ -564,140 +563,63 @@ fn spawn_carrier(
     mut commands: Commands,
     arrival: Res<CarrierArrival>,
     mut overlay: ResMut<Overlay>,
+    mut art: ResMut<ContentImages>,
+    mut images: ResMut<Assets<Image>>,
+    mut camera: Query<&mut Projection, With<Camera2d>>,
 ) {
     *overlay = Overlay::None;
-    let hull = Color::srgb(0.32, 0.36, 0.42);
-    // Hull shell: floor, ceiling, end walls, and bulkheads between rooms.
-    commands.spawn(block(
-        "core.carrier.hull.floor",
-        hull,
-        Vec2::new(DECK_LEN + 24.0, 16.0),
-        Vec3::new(DECK_LEN / 2.0, -8.0, 0.0),
-    ));
-    commands.spawn(block(
-        "core.carrier.hull.ceiling",
-        hull,
-        Vec2::new(DECK_LEN + 24.0, 12.0),
-        Vec3::new(DECK_LEN / 2.0, ROOM_H + 6.0, 0.0),
-    ));
-    for x in [-6.0, DECK_LEN + 6.0] {
-        commands.spawn(block(
-            "core.carrier.hull.end_wall",
-            hull,
-            Vec2::new(12.0, ROOM_H + 28.0),
-            Vec3::new(x, ROOM_H / 2.0, 0.0),
-        ));
+    if let Ok(mut projection) = camera.single_mut() {
+        if let Projection::Orthographic(ortho) = &mut *projection {
+            ortho.scale = CAMERA_ZOOM;
+        }
     }
-    for (i, (_, name, id, color)) in ROOMS.iter().enumerate() {
+    // Rooms: each room's art fitted to its width, its lower frame below the
+    // walking line (y = 0).
+    for (i, (_, name, id)) in ROOMS.iter().enumerate() {
         let x0 = i as f32 * ROOM_W;
-        commands.spawn(block(
-            id,
-            *color,
-            Vec2::new(ROOM_W, ROOM_H),
-            Vec3::new(x0 + ROOM_W / 2.0, ROOM_H / 2.0, -1.0),
+        let image = art.get(&mut images, id).unwrap_or_default();
+        let px = ContentImages::size(&images, &image);
+        let h = ROOM_W * px.y / px.x;
+        commands.spawn((
+            ScreenEntity,
+            Sprite {
+                image,
+                custom_size: Some(Vec2::new(ROOM_W, h)),
+                ..default()
+            },
+            Transform::from_xyz(x0 + ROOM_W / 2.0, h / 2.0 - ROOM_ART_SINK, -1.0),
         ));
         commands.spawn(label(
             name,
             16.0,
             Color::srgb(0.75, 0.82, 0.9),
-            Vec3::new(x0 + ROOM_W / 2.0, ROOM_H - 18.0, 1.0),
+            Vec3::new(x0 + ROOM_W / 2.0, h - ROOM_ART_SINK + 14.0, 1.0),
         ));
-        if i > 0 {
-            // Bulkhead with an open doorway at floor level.
-            commands.spawn(block(
-                "core.carrier.hull.bulkhead",
-                hull,
-                Vec2::new(8.0, ROOM_H - 90.0),
-                Vec3::new(x0, 90.0 + (ROOM_H - 90.0) / 2.0, 0.5),
-            ));
-        }
     }
-
-    // Props.
-    let prop = Color::srgb(0.45, 0.5, 0.58);
-    commands.spawn(block(
-        "core.carrier.prop.star_map",
-        Color::srgb(0.15, 0.35, 0.55),
-        Vec2::new(110.0, 70.0),
-        Vec3::new(80.0, 130.0, 0.2),
-    ));
     commands.spawn(label(
         "Next: Elimination",
         11.0,
         Color::srgb(0.7, 0.9, 1.0),
-        Vec3::new(80.0, 130.0, 0.3),
+        Vec3::new(90.0, 100.0, 0.3),
     ));
-    for x in [370.0, 600.0] {
-        commands.spawn(block(
-            "core.carrier.prop.bunk",
-            prop,
-            Vec2::new(80.0, 22.0),
-            Vec3::new(x, 30.0, 0.2),
-        ));
-    }
-    commands.spawn(block(
-        "core.carrier.prop.upgrade_bench",
-        Color::srgb(0.6, 0.48, 0.25),
-        Vec2::new(70.0, 36.0),
-        Vec3::new(840.0, 18.0, 0.2),
-    ));
-    commands.spawn(block(
-        "core.carrier.prop.launch_console",
-        Color::srgb(0.25, 0.6, 0.5),
-        Vec2::new(26.0, 50.0),
-        Vec3::new(LAUNCH_CONSOLE_X, 25.0, 0.2),
-    ));
-    for (x, ship, size) in [
-        (1120.0, &SHIPS[0], Vec2::new(70.0, 28.0)),
-        (1220.0, &SHIPS[1], Vec2::new(84.0, 44.0)),
-    ] {
-        commands.spawn(block(
-            "core.carrier.prop.berth",
-            prop,
-            Vec2::new(92.0, 8.0),
-            Vec3::new(x, 4.0, 0.2),
-        ));
-        let id = if ship.id == "kite" {
-            "core.ships.kite.berth"
-        } else {
-            "core.ships.bulwark.berth"
-        };
-        commands.spawn(block(
-            id,
-            Color::srgb(0.55, 0.62, 0.7),
-            size,
-            Vec3::new(x, 8.0 + size.y / 2.0, 0.3),
-        ));
-        commands.spawn(label(
-            ship.name,
-            12.0,
-            Color::srgb(0.85, 0.9, 0.95),
-            Vec3::new(x, 8.0 + size.y + 12.0, 0.4),
-        ));
-    }
 
     // Crew.
     for (hotspot, x) in HOTSPOTS {
         let Hotspot::Crew(crew) = hotspot else {
             continue;
         };
-        let id = match crew {
-            Crew::Gunner => "core.carrier.crew.gunner",
-            Crew::Researcher => "core.carrier.crew.researcher",
-            Crew::Engineer => "core.carrier.crew.engineer",
-            Crew::Pilot => "core.carrier.crew.pilot",
-        };
-        commands.spawn(block(
-            id,
-            crew.color(),
-            Vec2::new(20.0, 46.0),
-            Vec3::new(x, 23.0, 0.5),
+        commands.spawn(standing(
+            &mut art,
+            &mut images,
+            &crew.sprite_id(),
+            CREW_H,
+            Vec3::new(x, 0.0, 0.5),
         ));
         commands.spawn(label(
             crew.name(),
             11.0,
             crew.color(),
-            Vec3::new(x, 58.0, 0.6),
+            Vec3::new(x, CREW_H + 8.0, 0.6),
         ));
     }
 
@@ -708,47 +630,76 @@ fn spawn_carrier(
         PILOT_SPAWN_NEW_GAME
     };
     commands.spawn((
-        block(
-            "core.carrier.pilot",
-            Crew::Pilot.color(),
-            Vec2::new(PILOT_HALF_W * 2.0, 48.0),
-            Vec3::new(x, 24.0, 2.0),
+        standing(
+            &mut art,
+            &mut images,
+            PILOT_IDLE,
+            PILOT_H,
+            Vec3::new(x, 0.0, 2.0),
         ),
-        Pilot,
+        Pilot::default(),
     ));
 
     commands.spawn((
         label("", 14.0, Color::WHITE, Vec3::new(0.0, 0.0, 5.0)),
         Prompt,
     ));
-    commands.spawn((
-        ScreenEntity,
-        CarrierHud,
-        Text::new(""),
-        TextFont {
-            font_size: FontSize::Px(18.0),
-            ..default()
-        },
-        TextColor(Color::srgb(0.95, 0.9, 0.6)),
-        Node {
-            position_type: PositionType::Absolute,
-            right: px(16),
-            top: px(36),
-            ..default()
-        },
-    ));
+    // Wallet and current room, top right.
+    let credits = art.get(&mut images, art::ids::ICON_CREDITS);
+    let crystal = art.get(&mut images, art::ids::ICON_VOID_CRYSTAL);
+    let hud_font = || {
+        (
+            TextFont {
+                font_size: FontSize::Px(18.0),
+                ..default()
+            },
+            TextColor(Color::srgb(0.95, 0.9, 0.6)),
+        )
+    };
+    commands
+        .spawn((
+            ScreenEntity,
+            Node {
+                position_type: PositionType::Absolute,
+                right: px(16),
+                top: px(36),
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::End,
+                row_gap: px(2),
+                ..default()
+            },
+        ))
+        .with_children(|p| {
+            p.spawn(Node {
+                align_items: AlignItems::Center,
+                column_gap: px(6),
+                ..default()
+            })
+            .with_children(|row| {
+                for (icon, field) in [(credits, HudField::Credits), (crystal, HudField::Crystal)] {
+                    if let Some(icon) = icon {
+                        row.spawn(icon_node(icon, 26.0));
+                    }
+                    row.spawn((field, Text::new(""), hud_font()));
+                }
+            });
+            p.spawn((HudField::Room, Text::new(""), hud_font()));
+        });
 }
 
 fn leave_carrier(
     mut overlay: ResMut<Overlay>,
     mut arrival: ResMut<CarrierArrival>,
-    mut camera: Query<&mut Transform, With<Camera2d>>,
+    mut camera: Query<(&mut Transform, &mut Projection), With<Camera2d>>,
 ) {
     *overlay = Overlay::None;
     arrival.from_mission = false;
-    if let Ok(mut cam) = camera.single_mut() {
+    if let Ok((mut cam, mut projection)) = camera.single_mut() {
         cam.translation.x = 0.0;
         cam.translation.y = 0.0;
+        if let Projection::Orthographic(ortho) = &mut *projection {
+            ortho.scale = 1.0;
+        }
     }
 }
 
@@ -904,6 +855,40 @@ fn carrier_hints(
     }
 }
 
+/// Walk-cycle frame for the Pilot after `walked` px; idle when standing.
+fn pilot_frame(moving: bool, walked: f32) -> &'static str {
+    if !moving {
+        return PILOT_IDLE;
+    }
+    PILOT_FRAMES[(walked / STRIDE) as usize % PILOT_FRAMES.len()]
+}
+
+fn animate_pilot(
+    mut art: ResMut<ContentImages>,
+    mut images: ResMut<Assets<Image>>,
+    mut pilot: Query<(&mut Pilot, &Transform, &mut Sprite)>,
+) {
+    let Ok((mut pilot, tf, mut sprite)) = pilot.single_mut() else {
+        return;
+    };
+    let x = tf.translation.x;
+    let dx = x - pilot.last_x.unwrap_or(x);
+    pilot.last_x = Some(x);
+    let moving = dx.abs() > 0.01;
+    if moving {
+        pilot.walked += dx.abs();
+        // The art faces right.
+        sprite.flip_x = dx < 0.0;
+    } else {
+        pilot.walked = 0.0;
+    }
+    if let Some(image) = art.get(&mut images, pilot_frame(moving, pilot.walked)) {
+        if sprite.image != image {
+            sprite.image = image;
+        }
+    }
+}
+
 fn follow_pilot(
     pilot: Query<&Transform, (With<Pilot>, Without<Camera2d>)>,
     windows: Query<&Window, With<PrimaryWindow>>,
@@ -912,7 +897,7 @@ fn follow_pilot(
     let (Ok(pilot), Ok(mut cam)) = (pilot.single(), camera.single_mut()) else {
         return;
     };
-    let half = windows.single().map(|w| w.width() / 2.0).unwrap_or(500.0);
+    let half = windows.single().map(|w| w.width() / 2.0).unwrap_or(500.0) * CAMERA_ZOOM;
     let x = if DECK_LEN <= half * 2.0 {
         DECK_LEN / 2.0
     } else {
@@ -938,7 +923,7 @@ fn update_prompt(
         Some((hotspot, x)) if *overlay == Overlay::None => {
             text.0 = format!("[E] {}", hotspot.verb());
             tf.translation.x = x;
-            tf.translation.y = 84.0;
+            tf.translation.y = PILOT_H + 20.0;
             *vis = Visibility::Visible;
         }
         _ => *vis = Visibility::Hidden,
@@ -948,11 +933,8 @@ fn update_prompt(
 fn update_hud(
     save: Res<SaveSlot>,
     pilot: Query<&Transform, With<Pilot>>,
-    mut hud: Query<&mut Text, With<CarrierHud>>,
+    mut hud: Query<(&mut Text, &HudField)>,
 ) {
-    let Ok(mut text) = hud.single_mut() else {
-        return;
-    };
     let (credits, crystal) = save
         .game
         .as_ref()
@@ -972,13 +954,22 @@ fn update_hud(
                 .map_or("", |r| r.1)
         })
         .unwrap_or("");
-    text.0 = format!("Credits {credits}    Void Crystal {crystal}\n{room}");
+    for (mut text, field) in &mut hud {
+        let value = match field {
+            HudField::Credits => format!("{credits} credits  "),
+            HudField::Crystal => format!("{crystal} Void Crystal"),
+            HudField::Room => room.to_string(),
+        };
+        if text.0 != value {
+            text.0 = value;
+        }
+    }
 }
 
 fn sync_overlay(
     mut commands: Commands,
     overlay: Res<Overlay>,
-    mut portraits: ResMut<Portraits>,
+    mut art: ResMut<ContentImages>,
     mut images: ResMut<Assets<Image>>,
     save: Res<SaveSlot>,
     existing: Query<Entity, With<OverlayUi>>,
@@ -1010,7 +1001,7 @@ fn sync_overlay(
             briefing,
         } => {
             let line = lines[*index];
-            let portrait = portraits.get(&mut images, line.speaker, line.expression);
+            let portrait = portrait(&mut art, &mut images, line.speaker, line.expression);
             let more = if *index + 1 < lines.len() {
                 "[E] Next"
             } else if *briefing {
@@ -1135,6 +1126,16 @@ fn sync_overlay(
                                     Text::new(format!("{} {}", i + 1, ship.name)),
                                     font(20.0, Color::WHITE),
                                 ));
+                                if let Some(image) = art.get(&mut images, ship.image_id) {
+                                    card.spawn((
+                                        ImageNode::new(image),
+                                        Node {
+                                            height: px(72),
+                                            align_self: AlignSelf::Center,
+                                            ..default()
+                                        },
+                                    ));
+                                }
                                 card.spawn((
                                     Text::new(ship_card(ship, levels)),
                                     font(14.0, Color::srgb(0.82, 0.86, 0.9)),
@@ -1213,6 +1214,9 @@ fn sync_overlay(
                             },
                         ))
                         .with_children(|row| {
+                            if let Some(icon) = art.get(&mut images, upgrade.icon_id()) {
+                                row.spawn(icon_node(icon, 24.0));
+                            }
                             let cells = [
                                 (format!("{} {}", i + 1, upgrade.name()), 180.0),
                                 (
@@ -1292,6 +1296,14 @@ mod tests {
     }
 
     #[test]
+    fn pilot_walk_cycle_steps_with_distance_and_idles_when_still() {
+        assert_eq!(pilot_frame(false, 50.0), PILOT_IDLE);
+        assert_eq!(pilot_frame(true, 0.0), PILOT_FRAMES[0]);
+        assert_eq!(pilot_frame(true, STRIDE * 2.5), PILOT_FRAMES[2]);
+        assert_eq!(pilot_frame(true, STRIDE * 5.0), PILOT_FRAMES[1]);
+    }
+
+    #[test]
     fn nearest_hotspot_respects_range() {
         assert_eq!(
             nearest_hotspot(1010.0 + INTERACT_RANGE).map(|h| h.0),
@@ -1314,7 +1326,7 @@ mod tests {
 
     #[test]
     fn every_line_has_a_shipped_portrait() {
-        let manifest = ContentManifest::load(concat!(
+        let manifest = content::ContentManifest::load(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../../assets/manifest.json"
         ))

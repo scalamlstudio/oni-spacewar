@@ -4,10 +4,145 @@
   "packs": [
     {
       "id": "core",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "gameplay_affecting": false,
-      "content_hash": "b3d821d43b7f652bbb3fdf1a7e47ed57ef3086bbd2598150b557bac0970a3ba4",
+      "content_hash": "6e66476e2810fb11706468693fe477ed2658ec4de7671f92481d070eb33c69c9",
       "assets": [
+        {
+          "id": "core.battle.enemy.void_spitter",
+          "kind": "image/png",
+          "source": "source/core/battle/enemy/void_spitter.png",
+          "processed": "packs/core/processed/battle/enemy/void_spitter.png",
+          "compressed": "packs/core/bundles/battle/enemy/void_spitter.png.zst",
+          "hash": "11d4d7a8fbd24a3d745e4d3dfd168a1c001eabb1b45501e7e8d2e759ca931d63",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.enemy.void_swarmer",
+          "kind": "image/png",
+          "source": "source/core/battle/enemy/void_swarmer.png",
+          "processed": "packs/core/processed/battle/enemy/void_swarmer.png",
+          "compressed": "packs/core/bundles/battle/enemy/void_swarmer.png.zst",
+          "hash": "0521c88b8dbff0812adfaf4bda94a824421e435edbcba48710b8d4b66eca1019",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.fx.spit",
+          "kind": "image/png",
+          "source": "source/core/battle/fx/spit.png",
+          "processed": "packs/core/processed/battle/fx/spit.png",
+          "compressed": "packs/core/bundles/battle/fx/spit.png.zst",
+          "hash": "639d5ce0ddae0c8910dceaf0e5d41882a20b6b3a0cde3221a30078cebcd1b7d2",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.ship.bulwark",
+          "kind": "image/png",
+          "source": "source/core/battle/ship/bulwark.png",
+          "processed": "packs/core/processed/battle/ship/bulwark.png",
+          "compressed": "packs/core/bundles/battle/ship/bulwark.png.zst",
+          "hash": "52ecce14ddeb43a5672ba8c6afa933c14367143a2a1794c91660c8c424180d08",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.ship.kite",
+          "kind": "image/png",
+          "source": "source/core/battle/ship/kite.png",
+          "processed": "packs/core/processed/battle/ship/kite.png",
+          "compressed": "packs/core/bundles/battle/ship/kite.png.zst",
+          "hash": "e793ef65f5659f84e95b052ed7c0c8a0490cc8ad19987d466b9de8f4fe8b10de",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.interior",
+          "kind": "image/png",
+          "source": "source/core/carrier/interior.png",
+          "processed": "packs/core/processed/carrier/interior.png",
+          "compressed": "packs/core/bundles/carrier/interior.png.zst",
+          "hash": "e9cd071818b3c26f3feeae01f809fcf7123a237a49faa2fd180ba5142ba4e6fe",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.pilot.idle",
+          "kind": "image/png",
+          "source": "source/core/carrier/pilot/idle.png",
+          "processed": "packs/core/processed/carrier/pilot/idle.png",
+          "compressed": "packs/core/bundles/carrier/pilot/idle.png.zst",
+          "hash": "122e902e754f4ad7ca7db663fa8df99a85c80a7807d2183e2f121b21da4adf4e",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.pilot.walk_1",
+          "kind": "image/png",
+          "source": "source/core/carrier/pilot/walk_1.png",
+          "processed": "packs/core/processed/carrier/pilot/walk_1.png",
+          "compressed": "packs/core/bundles/carrier/pilot/walk_1.png.zst",
+          "hash": "492785a16cf522e6ba029914383ae635261192fd67f0c873cff298485a28c776",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.pilot.walk_2",
+          "kind": "image/png",
+          "source": "source/core/carrier/pilot/walk_2.png",
+          "processed": "packs/core/processed/carrier/pilot/walk_2.png",
+          "compressed": "packs/core/bundles/carrier/pilot/walk_2.png.zst",
+          "hash": "ad02fcd7e4960a5c9107675485af61e9603ba87e3f558299edcbce9c3dfcd31d",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.pilot.walk_3",
+          "kind": "image/png",
+          "source": "source/core/carrier/pilot/walk_3.png",
+          "processed": "packs/core/processed/carrier/pilot/walk_3.png",
+          "compressed": "packs/core/bundles/carrier/pilot/walk_3.png.zst",
+          "hash": "8434f71165f53f7decb7d3a5315fab2a3f672ce73da00ecab8b64bbf975c0e72",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.pilot.walk_4",
+          "kind": "image/png",
+          "source": "source/core/carrier/pilot/walk_4.png",
+          "processed": "packs/core/processed/carrier/pilot/walk_4.png",
+          "compressed": "packs/core/bundles/carrier/pilot/walk_4.png.zst",
+          "hash": "4f6f34c846570789a44f5c29b3e2bc281f07feef1327c3e61cfacf83f41a1e4e",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.room.bridge",
+          "kind": "image/png",
+          "source": "source/core/carrier/room/bridge.png",
+          "processed": "packs/core/processed/carrier/room/bridge.png",
+          "compressed": "packs/core/bundles/carrier/room/bridge.png.zst",
+          "hash": "5818018bdba0588cef67ec3d05fdab33a2830e076512d8ba2776722e80f218ac",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.room.crew_quarters",
+          "kind": "image/png",
+          "source": "source/core/carrier/room/crew_quarters.png",
+          "processed": "packs/core/processed/carrier/room/crew_quarters.png",
+          "compressed": "packs/core/bundles/carrier/room/crew_quarters.png.zst",
+          "hash": "e19d77f2415fe8d0992d57844a0b97861516c53edce99d79ae0d360e260f8304",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.room.dock",
+          "kind": "image/png",
+          "source": "source/core/carrier/room/dock.png",
+          "processed": "packs/core/processed/carrier/room/dock.png",
+          "compressed": "packs/core/bundles/carrier/room/dock.png.zst",
+          "hash": "5d81da6d7b28c6c2f2b4f54b948cd86e860dd9ea0b5e7fdeb2563c58c27ede72",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.room.workshop",
+          "kind": "image/png",
+          "source": "source/core/carrier/room/workshop.png",
+          "processed": "packs/core/processed/carrier/room/workshop.png",
+          "compressed": "packs/core/bundles/carrier/room/workshop.png.zst",
+          "hash": "2c580aa3963fd1a67033fd6f04fa436a9ca5ff197923f780033b661356fff3a8",
+          "gameplay_affecting": false
+        },
         {
           "id": "core.portraits.engineer.angry",
           "kind": "image/png",
@@ -405,12 +540,66 @@
           "gameplay_affecting": false
         },
         {
+          "id": "core.title.key_art",
+          "kind": "image/png",
+          "source": "source/core/title/key_art.png",
+          "processed": "packs/core/processed/title/key_art.png",
+          "compressed": "packs/core/bundles/title/key_art.png.zst",
+          "hash": "02e405918e4e6df24975a7b8dd4de86e3b4df634b6214b0c396fd2d51aaf3f18",
+          "gameplay_affecting": false
+        },
+        {
           "id": "core.ui.hud_status",
           "kind": "text",
           "source": "source/core/ui/hud_status.txt",
           "processed": "packs/core/processed/ui/hud_status.txt",
           "compressed": "packs/core/bundles/ui/hud_status.txt.zst",
           "hash": "3b056a9f5666aa4ce65ee715f8fd35763ca97b66ff28824ef03a8fc213464b0d",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.ui.icon.credits",
+          "kind": "image/png",
+          "source": "source/core/ui/icon/credits.png",
+          "processed": "packs/core/processed/ui/icon/credits.png",
+          "compressed": "packs/core/bundles/ui/icon/credits.png.zst",
+          "hash": "5a489761f0cf6cdcdf2b49070db1231465d08141da0b5990cdd48221885d8d50",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.ui.icon.hull_plating",
+          "kind": "image/png",
+          "source": "source/core/ui/icon/hull_plating.png",
+          "processed": "packs/core/processed/ui/icon/hull_plating.png",
+          "compressed": "packs/core/bundles/ui/icon/hull_plating.png.zst",
+          "hash": "ee168578da1432da789907a8bc7afb019da27a0291c4a0c136263ca91570d8eb",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.ui.icon.thruster_tuning",
+          "kind": "image/png",
+          "source": "source/core/ui/icon/thruster_tuning.png",
+          "processed": "packs/core/processed/ui/icon/thruster_tuning.png",
+          "compressed": "packs/core/bundles/ui/icon/thruster_tuning.png.zst",
+          "hash": "20ce2f800925957797056a5524524f8925b26ac55e37692af6e8ec8a8cd605d9",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.ui.icon.void_crystal",
+          "kind": "image/png",
+          "source": "source/core/ui/icon/void_crystal.png",
+          "processed": "packs/core/processed/ui/icon/void_crystal.png",
+          "compressed": "packs/core/bundles/ui/icon/void_crystal.png.zst",
+          "hash": "a283836fd4a68481e4e682f9712484ef2df6ea506a01d752833ebbafcdf7827b",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.ui.icon.weapon_tuning",
+          "kind": "image/png",
+          "source": "source/core/ui/icon/weapon_tuning.png",
+          "processed": "packs/core/processed/ui/icon/weapon_tuning.png",
+          "compressed": "packs/core/bundles/ui/icon/weapon_tuning.png.zst",
+          "hash": "bc8807c5870c6f8e0a2ec5aa76090008702168a65b2cc0e6a6b91450b05fad04",
           "gameplay_affecting": false
         }
       ]

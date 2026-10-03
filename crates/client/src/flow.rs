@@ -9,6 +9,7 @@ use sim::input::{INPUT_MOVE, INPUT_SKILL_Q, INPUT_SKILL_W};
 use sim::tuning::KILL_TARGET;
 use sim::{FxVec2, NetInput, SimState, SUB};
 
+use crate::art::ContentImages;
 use crate::carrier::{CarrierArrival, Overlay, Pilot};
 use crate::hints::{Hint, Hints};
 use crate::mission::{self, MissionOutcome, MissionRequest, MissionResult};
@@ -274,24 +275,84 @@ fn button(commands: &mut Commands, action: DemoButton, label: &str, top: f32, en
         ));
 }
 
-fn enter_title(mut commands: Commands, save: Res<SaveSlot>) {
+/// Full-window image behind a screen, cropped to keep its aspect ratio.
+fn backdrop(commands: &mut Commands, image: Handle<Image>, aspect: f32, tint: Color) {
+    commands
+        .spawn((
+            ScreenEntity,
+            ZIndex(-1),
+            Node {
+                position_type: PositionType::Absolute,
+                width: percent(100),
+                height: percent(100),
+                justify_content: JustifyContent::Center,
+                overflow: Overflow::clip(),
+                ..default()
+            },
+        ))
+        .with_child((
+            ImageNode::new(image).with_color(tint),
+            Node {
+                height: percent(100),
+                aspect_ratio: Some(aspect),
+                flex_shrink: 0.0,
+                ..default()
+            },
+        ));
+}
+
+fn art_backdrop(
+    commands: &mut Commands,
+    art: &mut ContentImages,
+    images: &mut Assets<Image>,
+    id: &str,
+    tint: Color,
+) {
+    if let Some(image) = art.get(images, id) {
+        let px = ContentImages::size(images, &image);
+        backdrop(commands, image, px.x / px.y, tint);
+    }
+}
+
+fn enter_title(
+    mut commands: Commands,
+    save: Res<SaveSlot>,
+    mut art: ResMut<ContentImages>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    art_backdrop(
+        &mut commands,
+        &mut art,
+        &mut images,
+        crate::art::ids::TITLE_KEY_ART,
+        Color::WHITE,
+    );
     panel(
         &mut commands,
         "Oni Spacewar",
-        format!(
-            "First Playable Demo\n{}\n\nN New Game    C Continue    Q Quit",
-            save.status
-        ),
+        format!("First Playable Demo\n{}", save.status),
     );
-    button(&mut commands, DemoButton::NewGame, "New Game", 170.0, true);
+    button(
+        &mut commands,
+        DemoButton::NewGame,
+        "New Game  [N]",
+        170.0,
+        true,
+    );
     button(
         &mut commands,
         DemoButton::Continue,
-        "Continue",
+        "Continue  [C]",
         222.0,
         save.game.is_some(),
     );
-    button(&mut commands, DemoButton::QuitGame, "Quit", 274.0, true);
+    button(
+        &mut commands,
+        DemoButton::QuitGame,
+        "Quit  [Q]",
+        274.0,
+        true,
+    );
 }
 
 /// Books the returning mission into the save. The deck itself is spawned by
@@ -406,7 +467,20 @@ pub fn result_text(r: &MissionResult, wallet: (u32, u32)) -> String {
     lines.join("\n")
 }
 
-fn enter_result(mut commands: Commands, result: Res<LastMissionResult>, save: Res<SaveSlot>) {
+fn enter_result(
+    mut commands: Commands,
+    result: Res<LastMissionResult>,
+    save: Res<SaveSlot>,
+    mut art: ResMut<ContentImages>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    art_backdrop(
+        &mut commands,
+        &mut art,
+        &mut images,
+        "core.carrier.interior",
+        Color::srgb(0.45, 0.45, 0.5),
+    );
     let wallet = save
         .game
         .as_ref()
@@ -428,7 +502,7 @@ fn enter_result(mut commands: Commands, result: Res<LastMissionResult>, save: Re
     commands
         .spawn((
             ScreenEntity,
-            BackgroundColor(Color::srgba(0.03, 0.05, 0.08, 0.94)),
+            BackgroundColor(Color::srgba(0.03, 0.05, 0.08, 0.85)),
             BorderColor::all(color),
             Node {
                 position_type: PositionType::Absolute,

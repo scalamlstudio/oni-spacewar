@@ -1,9 +1,10 @@
-//! Placeholder visuals, camera and HUD. Runs in `Update`, outside the rollback
+//! Battle visuals, camera and HUD. Runs in `Update`, outside the rollback
 //! schedule, and only reads `SimWorld`.
 //!
-//! Every battle visual is drawn through a stable content ID (`PLACEHOLDERS`),
-//! so the art import (TAKOAI-49) swaps a gizmo shape for a sprite with the
-//! same ID instead of reworking the drawing code.
+//! Ships, enemies, loot and enemy shots are sprites of the shipped art, looked
+//! up by stable content ID (`ids`) through the manifest. Player bolts use a
+//! generated glow tinted per player; shields, the shockwave, hull bars and the
+//! move marker are gizmo effects.
 
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
@@ -14,6 +15,7 @@ use sim::tuning::{
 };
 use sim::{EnemyKind, FxVec2, LootKind, MissionStatus, Ship, ShipKind, SimState, SUB};
 
+use crate::art::ContentImages;
 use crate::rollback::{GameConfig, SimWorld};
 use crate::stats::Stats;
 use crate::{ContentStatus, NetStatus};
@@ -25,10 +27,18 @@ impl Plugin for RenderPlugin {
         app.add_plugins(FrameTimeDiagnosticsPlugin::default())
             .insert_resource(ClearColor(Color::BLACK))
             .init_resource::<CameraFollow>()
+            .init_resource::<ContentImages>()
+            .init_resource::<BattleSprites>()
             .add_systems(Startup, setup_scene)
             .add_systems(
                 Update,
-                (draw_world, follow_camera, update_hud, update_banner),
+                (
+                    draw_world,
+                    draw_sprites,
+                    follow_camera,
+                    update_hud,
+                    update_banner,
+                ),
             );
     }
 }
@@ -39,95 +49,75 @@ struct Hud;
 #[derive(Component)]
 struct Banner;
 
-/// Stable content IDs of the battle visuals. The art set will ship assets
-/// under these IDs (`assets/manifest.json`); until then each is a shape.
+/// Stable content IDs of the battle sprites (`assets/manifest.json`).
 pub mod ids {
     pub const SHIP_KITE: &str = "core.battle.ship.kite";
     pub const SHIP_BULWARK: &str = "core.battle.ship.bulwark";
     pub const ENEMY_SWARMER: &str = "core.battle.enemy.void_swarmer";
     pub const ENEMY_SPITTER: &str = "core.battle.enemy.void_spitter";
-    pub const LOOT_CREDITS: &str = "core.battle.loot.credits";
-    pub const LOOT_VOID_CRYSTAL: &str = "core.battle.loot.void_crystal";
-    pub const FX_BOLT: &str = "core.battle.fx.bolt";
+    pub const LOOT_CREDITS: &str = crate::art::ids::ICON_CREDITS;
+    pub const LOOT_VOID_CRYSTAL: &str = crate::art::ids::ICON_VOID_CRYSTAL;
     pub const FX_SPIT: &str = "core.battle.fx.spit";
-    pub const FX_SHIELD: &str = "core.battle.fx.bastion_shield";
-    pub const FX_SHOCKWAVE: &str = "core.battle.fx.shockwave";
 }
 
-/// How a content ID is drawn until its art exists.
-struct Placeholder {
+/// How big each sprite is drawn: its longest side is `scale` times the sim
+/// hit circle's diameter (the art includes wings, spikes and glow).
+struct SpriteArt {
     id: &'static str,
-    /// Polygon sides (0 = circle).
-    sides: usize,
-    /// Rotation speed in radians/second (visual only).
+    scale: f32,
+    /// Visual spin in radians/second.
     spin: f32,
-    color: Color,
 }
 
-const PLACEHOLDERS: &[Placeholder] = &[
-    Placeholder {
+const SPRITES: &[SpriteArt] = &[
+    SpriteArt {
         id: ids::SHIP_KITE,
-        sides: 3,
+        scale: 2.4,
         spin: 0.0,
-        color: Color::srgb(0.3, 0.8, 1.0),
     },
-    Placeholder {
+    SpriteArt {
         id: ids::SHIP_BULWARK,
-        sides: 6,
+        scale: 2.4,
         spin: 0.0,
-        color: Color::srgb(0.4, 0.6, 1.0),
     },
-    Placeholder {
+    SpriteArt {
         id: ids::ENEMY_SWARMER,
-        sides: 3,
-        spin: 4.0,
-        color: Color::srgb(1.0, 0.35, 0.35),
+        scale: 2.8,
+        spin: 1.5,
     },
-    Placeholder {
+    SpriteArt {
         id: ids::ENEMY_SPITTER,
-        sides: 5,
-        spin: 1.0,
-        color: Color::srgb(0.85, 0.4, 1.0),
+        scale: 2.6,
+        spin: 0.0,
     },
-    Placeholder {
+    SpriteArt {
         id: ids::LOOT_CREDITS,
-        sides: 0,
+        scale: 2.4,
         spin: 0.0,
-        color: Color::srgb(1.0, 0.85, 0.2),
     },
-    Placeholder {
+    SpriteArt {
         id: ids::LOOT_VOID_CRYSTAL,
-        sides: 4,
-        spin: 2.0,
-        color: Color::srgb(0.4, 1.0, 0.9),
-    },
-    Placeholder {
-        id: ids::FX_BOLT,
-        sides: 0,
+        scale: 2.4,
         spin: 0.0,
-        color: Color::srgb(0.9, 0.95, 1.0),
     },
-    Placeholder {
+    SpriteArt {
         id: ids::FX_SPIT,
-        sides: 0,
+        scale: 3.2,
         spin: 0.0,
-        color: Color::srgb(0.7, 1.0, 0.2),
-    },
-    Placeholder {
-        id: ids::FX_SHIELD,
-        sides: 0,
-        spin: 0.0,
-        color: Color::srgb(0.5, 0.8, 1.0),
-    },
-    Placeholder {
-        id: ids::FX_SHOCKWAVE,
-        sides: 0,
-        spin: 0.0,
-        color: Color::srgb(0.6, 0.8, 1.0),
     },
 ];
 
-/// Per-player tint on top of the ship shape.
+/// Every manifest image the battle draws.
+#[cfg(test)]
+pub fn sprite_ids() -> Vec<&'static str> {
+    SPRITES.iter().map(|s| s.id).collect()
+}
+
+/// Loot is drawn this big regardless of its pickup radius.
+const LOOT_RADIUS: f32 = 10.0;
+const BOLT_GLOW_SCALE: f32 = 3.0;
+
+/// Per-player colour: bolts, hull-bar outline, move marker.
 const PLAYER_COLORS: [Color; 4] = [
     Color::srgb(0.3, 0.8, 1.0),
     Color::srgb(1.0, 0.6, 0.2),
@@ -211,29 +201,6 @@ fn setup_scene(mut commands: Commands) {
         ));
 }
 
-/// Closed regular polygon outline (or circle for 0 sides).
-fn shape(gizmos: &mut Gizmos, c: Vec2, r: f32, sides: usize, angle: f32, color: Color) {
-    if sides == 0 {
-        gizmos.circle_2d(c, r, color);
-        return;
-    }
-    let pts = (0..=sides).map(|i| {
-        let a = angle + i as f32 * std::f32::consts::TAU / sides as f32;
-        c + Vec2::new(a.cos(), a.sin()) * r
-    });
-    gizmos.linestrip_2d(pts, color);
-}
-
-/// Draw content `id` at `c` with radius `r`. `tint` overrides its color.
-fn draw_id(gizmos: &mut Gizmos, id: &str, c: Vec2, r: f32, t: f32, tint: Option<Color>) {
-    let Some(p) = PLACEHOLDERS.iter().find(|p| p.id == id) else {
-        gizmos.circle_2d(c, r, Color::WHITE);
-        return;
-    };
-    let angle = std::f32::consts::FRAC_PI_2 + p.spin * t;
-    shape(gizmos, c, r, p.sides, angle, tint.unwrap_or(p.color));
-}
-
 fn bar(gizmos: &mut Gizmos, c: Vec2, width: f32, frac: f32, color: Color) {
     let left = c - Vec2::new(width / 2.0, 0.0);
     gizmos.line_2d(
@@ -248,31 +215,26 @@ fn bar(gizmos: &mut Gizmos, c: Vec2, width: f32, frac: f32, color: Color) {
     );
 }
 
-fn draw_ship(gizmos: &mut Gizmos, ship: &Ship, me: usize, t: f32) {
+/// Gizmo effects for one ship: shield, shockwave, dash trail, hull bar and
+/// (our own ship) the move marker. The ship itself is a sprite.
+fn draw_ship_fx(gizmos: &mut Gizmos, ship: &Ship, me: usize) {
+    if !ship.alive() {
+        return;
+    }
     let color = PLAYER_COLORS[ship.handle % PLAYER_COLORS.len()];
     let p = to_world(ship.pos);
     let r = ship.stats.radius as f32;
-    if !ship.alive() {
-        let grey = Color::srgb(0.4, 0.4, 0.4);
-        gizmos.line_2d(p - Vec2::splat(r), p + Vec2::splat(r), grey);
-        gizmos.line_2d(p + Vec2::new(-r, r), p + Vec2::new(r, -r), grey);
-        return;
-    }
-    draw_id(gizmos, ship_id(ship.kind), p, r, t, Some(color));
-    draw_id(gizmos, ship_id(ship.kind), p, r - 4.0, t, Some(color));
     if ship.shield > 0 {
-        draw_id(gizmos, ids::FX_SHIELD, p, r + 6.0, t, None);
+        gizmos.circle_2d(p, r + 12.0, Color::srgb(0.5, 0.8, 1.0));
+        gizmos.circle_2d(p, r + 14.0, Color::srgba(0.5, 0.8, 1.0, 0.4));
     }
     if ship.kind == ShipKind::Bulwark && ship.w_cooldown + 12 > SHOCKWAVE_COOLDOWN {
         // Shockwave: a ring that expands over the first 12 ticks.
         let age = (SHOCKWAVE_COOLDOWN - ship.w_cooldown) as f32 / 12.0;
-        draw_id(
-            gizmos,
-            ids::FX_SHOCKWAVE,
+        gizmos.circle_2d(
             p,
             SHOCKWAVE_RADIUS as f32 * age.min(1.0),
-            t,
-            None,
+            Color::srgb(0.6, 0.8, 1.0),
         );
     }
     if ship.dash_ticks > 0 {
@@ -281,7 +243,7 @@ fn draw_ship(gizmos: &mut Gizmos, ship: &Ship, me: usize, t: f32) {
     }
     bar(
         gizmos,
-        p + Vec2::new(0.0, r + 10.0),
+        p + Vec2::new(0.0, r * 2.4 + 4.0),
         2.0 * r + 8.0,
         ship.hull as f32 / ship.stats.max_hull as f32,
         Color::srgb(0.3, 1.0, 0.4),
@@ -294,14 +256,8 @@ fn draw_ship(gizmos: &mut Gizmos, ship: &Ship, me: usize, t: f32) {
     }
 }
 
-fn draw_world(
-    mut gizmos: Gizmos,
-    world: Option<Res<SimWorld>>,
-    local: Option<Res<LocalPlayers>>,
-    time: Res<Time>,
-) {
+fn draw_world(mut gizmos: Gizmos, world: Option<Res<SimWorld>>, local: Option<Res<LocalPlayers>>) {
     let Some(world) = world else { return };
-    let t = time.elapsed_secs(); // visual only
     let (hw, hh) = (ARENA_HALF_W as f32, ARENA_HALF_H as f32);
     gizmos.linestrip_2d(
         [
@@ -313,47 +269,209 @@ fn draw_world(
         ],
         ARENA_EDGE,
     );
-    for p in &world.pickups {
-        draw_id(&mut gizmos, loot_id(p.kind), to_world(p.pos), 5.0, t, None);
-    }
     for e in &world.enemies {
-        let c = to_world(e.pos);
-        let r = e.kind.radius() as f32;
-        draw_id(&mut gizmos, enemy_id(e.kind), c, r, t, None);
         if e.hp < e.kind.hp() {
+            let c = to_world(e.pos);
+            let r = e.kind.radius() as f32;
             bar(
                 &mut gizmos,
-                c + Vec2::new(0.0, r + 5.0),
+                c + Vec2::new(0.0, r * 2.6 + 4.0),
                 2.0 * r,
                 e.hp as f32 / e.kind.hp() as f32,
                 Color::srgb(1.0, 0.4, 0.4),
             );
         }
     }
-    for p in &world.projectiles {
-        let tint = PLAYER_COLORS[p.owner % PLAYER_COLORS.len()];
-        draw_id(
-            &mut gizmos,
-            ids::FX_BOLT,
-            to_world(p.pos),
-            p.radius as f32,
-            t,
-            Some(tint),
-        );
-    }
-    for p in &world.enemy_projectiles {
-        draw_id(
-            &mut gizmos,
-            ids::FX_SPIT,
-            to_world(p.pos),
-            p.radius as f32,
-            t,
-            None,
-        );
-    }
     let me = local_handle(local.as_deref());
     for ship in &world.ships {
-        draw_ship(&mut gizmos, ship, me, t);
+        draw_ship_fx(&mut gizmos, ship, me);
+    }
+}
+
+/// One sprite to draw this frame.
+struct Draw {
+    image: Handle<Image>,
+    pos: Vec2,
+    /// Longest side in px.
+    size: f32,
+    angle: f32,
+    color: Color,
+    z: f32,
+}
+
+/// Reused sprite entities (hidden when unused) plus per-ship facing, which
+/// is purely visual and so lives here rather than in the sim.
+#[derive(Resource, Default)]
+struct BattleSprites {
+    pool: Vec<Entity>,
+    glow: Option<Handle<Image>>,
+    facing: Vec<f32>,
+}
+
+#[derive(Component)]
+struct BattleSprite;
+
+/// Soft round glow for player bolts (white, tinted per player).
+fn glow_image() -> Image {
+    const N: u32 = 32;
+    let mut data = Vec::with_capacity((N * N * 4) as usize);
+    for y in 0..N {
+        for x in 0..N {
+            let d = Vec2::new(x as f32 + 0.5, y as f32 + 0.5).distance(Vec2::splat(N as f32 / 2.0))
+                / (N as f32 / 2.0);
+            let a = (1.0 - d).clamp(0.0, 1.0).powf(1.5);
+            data.extend_from_slice(&[255, 255, 255, (a * 255.0) as u8]);
+        }
+    }
+    Image::new(
+        bevy::render::render_resource::Extent3d {
+            width: N,
+            height: N,
+            depth_or_array_layers: 1,
+        },
+        bevy::render::render_resource::TextureDimension::D2,
+        data,
+        bevy::render::render_resource::TextureFormat::Rgba8UnormSrgb,
+        bevy::asset::RenderAssetUsages::default(),
+    )
+}
+
+/// Direction `v` as a sprite rotation, for art drawn pointing up.
+fn heading(v: Vec2) -> f32 {
+    v.y.atan2(v.x) - std::f32::consts::FRAC_PI_2
+}
+
+#[allow(clippy::too_many_arguments)]
+fn draw_sprites(
+    mut commands: Commands,
+    world: Option<Res<SimWorld>>,
+    time: Res<Time>,
+    mut art: ResMut<ContentImages>,
+    mut images: ResMut<Assets<Image>>,
+    mut state: ResMut<BattleSprites>,
+    mut sprites: Query<(&mut Sprite, &mut Transform, &mut Visibility), With<BattleSprite>>,
+) {
+    let mut draws = Vec::new();
+    if let Some(world) = world.as_deref() {
+        let t = time.elapsed_secs(); // visual only
+        let mut push = |id: &str, pos: Vec2, radius: f32, angle: f32, color: Color, z: f32| {
+            let Some(spec) = SPRITES.iter().find(|s| s.id == id) else {
+                return;
+            };
+            if let Some(image) = art.get(&mut images, id) {
+                draws.push(Draw {
+                    image,
+                    pos,
+                    size: 2.0 * radius * spec.scale,
+                    angle: angle + spec.spin * t,
+                    color,
+                    z,
+                });
+            }
+        };
+        for p in &world.pickups {
+            push(
+                loot_id(p.kind),
+                to_world(p.pos),
+                LOOT_RADIUS * 0.5,
+                0.0,
+                Color::WHITE,
+                0.1,
+            );
+        }
+        for e in &world.enemies {
+            push(
+                enemy_id(e.kind),
+                to_world(e.pos),
+                e.kind.radius() as f32,
+                0.0,
+                Color::WHITE,
+                0.2,
+            );
+        }
+        for p in &world.enemy_projectiles {
+            let v = to_world(p.vel);
+            push(
+                ids::FX_SPIT,
+                to_world(p.pos),
+                p.radius as f32,
+                v.y.atan2(v.x),
+                Color::WHITE,
+                0.3,
+            );
+        }
+        state.facing.resize(world.ships.len(), 0.0);
+        for (i, ship) in world.ships.iter().enumerate() {
+            let p = to_world(ship.pos);
+            let moving = if ship.dash_ticks > 0 {
+                to_world(ship.dash_vel)
+            } else {
+                to_world(ship.target) - p
+            };
+            if moving.length_squared() > 1.0 {
+                state.facing[i] = heading(moving);
+            }
+            let color = if ship.alive() {
+                Color::WHITE
+            } else {
+                Color::srgba(0.35, 0.35, 0.35, 0.6)
+            };
+            push(
+                ship_id(ship.kind),
+                p,
+                ship.stats.radius as f32,
+                state.facing[i],
+                color,
+                0.4,
+            );
+        }
+        let glow = state
+            .glow
+            .get_or_insert_with(|| images.add(glow_image()))
+            .clone();
+        for p in &world.projectiles {
+            draws.push(Draw {
+                image: glow.clone(),
+                pos: to_world(p.pos),
+                size: 2.0 * p.radius as f32 * BOLT_GLOW_SCALE,
+                angle: 0.0,
+                color: PLAYER_COLORS[p.owner % PLAYER_COLORS.len()],
+                z: 0.5,
+            });
+        }
+    }
+
+    for (i, d) in draws.iter().enumerate() {
+        let px = ContentImages::size(&images, &d.image);
+        let size = px * (d.size / px.max_element());
+        let tf = Transform::from_translation(d.pos.extend(d.z))
+            .with_rotation(Quat::from_rotation_z(d.angle));
+        let sprite = Sprite {
+            image: d.image.clone(),
+            color: d.color,
+            custom_size: Some(size),
+            ..default()
+        };
+        match state.pool.get(i).copied() {
+            Some(entity) => {
+                if let Ok((mut s, mut t, mut v)) = sprites.get_mut(entity) {
+                    *s = sprite;
+                    *t = tf;
+                    *v = Visibility::Visible;
+                }
+            }
+            None => {
+                let entity = commands.spawn((BattleSprite, sprite, tf)).id();
+                state.pool.push(entity);
+            }
+        }
+    }
+    for entity in state.pool.iter().skip(draws.len()) {
+        if let Ok((_, _, mut v)) = sprites.get_mut(*entity) {
+            if *v != Visibility::Hidden {
+                *v = Visibility::Hidden;
+            }
+        }
     }
 }
 
@@ -482,7 +600,7 @@ mod tests {
     use sim::{Loadout, ShipKind};
 
     #[test]
-    fn every_battle_visual_has_a_placeholder() {
+    fn every_battle_visual_has_sprite_art() {
         for id in [
             ship_id(ShipKind::Kite),
             ship_id(ShipKind::Bulwark),
@@ -490,13 +608,16 @@ mod tests {
             enemy_id(EnemyKind::Spitter),
             loot_id(LootKind::Credits),
             loot_id(LootKind::VoidCrystal),
-            ids::FX_BOLT,
             ids::FX_SPIT,
-            ids::FX_SHIELD,
-            ids::FX_SHOCKWAVE,
         ] {
-            assert!(PLACEHOLDERS.iter().any(|p| p.id == id), "{id}");
+            assert!(SPRITES.iter().any(|p| p.id == id), "{id}");
         }
+    }
+
+    #[test]
+    fn heading_points_art_along_movement() {
+        assert!(heading(Vec2::Y).abs() < 1e-6);
+        assert!((heading(Vec2::X) + std::f32::consts::FRAC_PI_2).abs() < 1e-6);
     }
 
     #[test]
