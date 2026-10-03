@@ -8,11 +8,14 @@
 //! Gameplay is a placeholder that exercises the foundation (see `sim`):
 //! click-to-move battleships, a Q shot, and waves of chasing enemies.
 
+mod flow;
 mod input;
+mod mission;
 mod net;
 mod pacing;
 mod render;
 mod rollback;
+mod save;
 mod stats;
 
 use std::time::Duration;
@@ -32,10 +35,11 @@ use sim::{SimParams, SimState, MAX_PLAYERS};
 use input::{BotBrains, KeyboardPlayer};
 use net::{EmulatedGgrsSocket, NetEmuConfig};
 use rollback::{GameConfig, InjectDesync, RollbackPlugin, SimWorld};
-use stats::{RunLimit, StatsPlugin};
+use stats::{RunLimit, Stats, StatsPlugin};
 
 const USAGE: &str = "\
 usage:
+  oni-spacewar
   oni-spacewar synctest [--minutes M] [--check-distance D] [--headless] [--bot]
   oni-spacewar p2p [--room ws://127.0.0.1:3536/oni?next=2]
                    [--delay-ms 50] [--jitter-ms 0] [--loss 0.0] [--input-delay 2]
@@ -74,7 +78,7 @@ fn usage_exit(msg: &str) -> ! {
 
 fn parse_args() -> Args {
     let mut it = std::env::args().skip(1);
-    let mode = it.next().unwrap_or_else(|| usage_exit(""));
+    let mode = it.next().unwrap_or_else(|| "demo".to_string());
     let mut a = Args {
         mode,
         headless: false,
@@ -195,6 +199,24 @@ fn main() {
     } else {
         0
     };
+    if args.mode == "demo" {
+        if args.headless {
+            usage_exit("demo mode requires a window\n");
+        }
+        app.insert_resource(SimWorld(SimState::new(SimParams {
+            num_players: 1,
+            seed: args.seed,
+        })))
+        .insert_resource(NetStatus("demo flow".into()))
+        .insert_resource(ContentStatus(content_status))
+        .init_resource::<Stats>()
+        .add_plugins(flow::FlowPlugin);
+        if app.run().is_error() {
+            std::process::exit(1);
+        }
+        return;
+    }
+
     app.add_plugins(GgrsPlugin::<GameConfig>::default())
         .insert_resource(RollbackFrameRate(60))
         .insert_resource(SimWorld(SimState::new(SimParams {

@@ -35,6 +35,9 @@ crates/
     src/bin/content_manifest_diff.rs   compare manifests and list packs/assets a patch needs
   client/             package `oni-client`, bin `oni-spacewar` — everything else
     src/main.rs         CLI (synctest / p2p modes), app + GGRS session setup, ICE (STUN/TURN) config
+    src/flow.rs         first-playable scene state machine and placeholder UI: Title → Carrier → Battle → Result
+    src/save.rs         versioned JSON save data in the OS data directory (override: ONI_SAVE_DIR)
+    src/mission.rs      typed client mission config/result handoff into `sim::SimState`
     src/rollback.rs     SimWorld resource, rollback/checksum registration, GgrsSchedule
     src/input.rs        mouse + keyboard / bot → NetInput (ReadInputs)
     src/net.rs          matchbox ↔ ggrs socket adapter + latency/loss emulator (from the spike)
@@ -200,6 +203,15 @@ detected pose count differs from the provided expression count.
   read `SimWorld`.
 - Multiplayer is the default shape: `SimState::ships` holds one ship per player
   handle (1..=4, `MAX_PLAYERS`); single-player is `num_players = 1`.
+- The first-playable single-player flow launches missions through
+  `client::mission::MissionConfig`, which carries a list of ship loadouts even
+  when that list currently has one entry. The demo battle path steps the same
+  `SimWorld` resource at a fixed rate without opening a network session; the
+  `synctest` and `p2p` modes still use `RollbackPlugin` and GGRS.
+- Save data is client-only JSON with an explicit schema version. It stores
+  credits, resources, purchased upgrades, selected battleship, tutorial flags
+  and mission count, and is never read by `sim`; the client converts it into a
+  deterministic mission config before launch.
 
 ### Simulation structure
 
