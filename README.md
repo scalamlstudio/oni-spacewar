@@ -11,14 +11,14 @@ under [`crates/`](crates/), separate from the design docs — see
 
 ### Run
 
- - `cargo run --release` — the demo (Title screen → New Game / Continue)
+ - `cargo run --release --bin oni-spacewar` — the demo (Title screen → New Game / Continue)
    - Carrier: A / D walk, E talk / use (Bridge briefing, Dock, Workshop)
    - Battle: left-click to move, auto-fire, Q / W skills, Esc pause;
      destroy 20 enemies and fly over loot to collect it
    - Save: `~/Library/Application Support/oni-spacewar/save.json` (macOS),
      `%APPDATA%\oni-spacewar\save.json` (Windows); `ONI_SAVE_DIR` overrides
- - `cargo run --release -- --autoplay --missions 2` — scripted demo run (QA)
- - `cargo run --release -- synctest --players 1` — rollback sandbox
+ - `cargo run --release --bin oni-spacewar -- --autoplay --missions 2` — scripted demo run (QA)
+ - `cargo run --release --bin oni-spacewar -- synctest --players 1` — rollback sandbox
  - `cargo test` — tests
 
 ### Design
