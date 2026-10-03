@@ -15,17 +15,11 @@ and names the Multica board issue that tracks it:_
 
 ## Decide next
 
-The blocking questions, in the order that lets each answer constrain the next.
-Confirming design/READINESS.md § First Playable Scope (TAKOAI-1) comes first,
-since it decides what "partial" means below.
-
-1. Enemies/opposition
-2. Level design within missions
-3. Carrier control outside missions
-4. Resource categories + Machines/rooms progression
-5. Research/training as an action
-
-Steps 1-2 (combat) and step 3 (carrier) are independent and can run in parallel.
+Nothing blocks the first playable. Wei confirmed the First Playable Demo scope
+on 2026-10-03 (design/READINESS.md § First Playable Scope, TAKOAI-36). The
+demo answered the questions that used to block it (carrier control, enemies,
+level design), and the rest left scope with manufacturing and the research loop
+(resources, machines, research action). Each is re-tagged below.
 
 ## Mechanics (design/DESIGN.md)
 
@@ -41,52 +35,53 @@ Steps 1-2 (combat) and step 3 (carrier) are independent and can run in parallel.
 - **Extraordinary sample variety:** what different kinds of samples exist, and
   how do their Research point payouts differ? _(§ Crew Skill Trees, § Ship
   Modules)_
-  `Deferred` · TAKOAI-4 — one sample kind (or none, if tech documents are the
-  chosen Research source) is enough for the first playable.
+  `Deferred` · TAKOAI-4 — the First Playable Demo has no samples.
 - **Research/training as an action:** how does "researching" a sample or
   "studying" a tech document actually play out mechanically — likely happens in
   the Lab Module (unconfirmed), but is it a timed task assignment, passive over
   time, something else? _(§ Crew Skill Trees, § Ship Modules)_
-  `Blocks (partial)` · TAKOAI-8 — needed now: one Research source, enough to
-  close the loop from loot to skill points.
-- **Carrier control outside missions:** how does the player actually
-  control/manage the carrier itself (building placement, task assignment,
-  whether/how it "moves") when not on a mission with the battleship? What does
-  the main character do aboard the carrier between missions? _(§ Player,
-  § Crew / Companions)_
-  `Blocks first playable` · TAKOAI-2
+  `Deferred` · TAKOAI-8 — the First Playable Demo has no research loop; loot
+  is spent at the Workshop instead.
+- **Carrier building placement & crew task assignment:** the main character
+  walks around the carrier between missions (decided 2026-10-03). Still open:
+  how the player places buildings, how they assign companions their jobs, and
+  whether/how the carrier itself "moves". _(§ Player, § Crew / Companions)_
+  `Deferred` · TAKOAI-2 — the First Playable Demo has neither manufacturing
+  nor companion jobs.
 - **Key-resource trading target:** does trading for key resources unlock ship
   *modules*, or feed the *recipes* crew leveling unlocks, or both?
   _(§ Ship Modules)_
   `Deferred` · TAKOAI-4 — trading is out of first-playable scope.
 - **Module roster:** what modules exist besides Docking, Manufacturing, and Lab,
   and what area/mechanic does each introduce? _(§ Ship Modules)_
-  `Deferred` · TAKOAI-4 — the first playable uses only Docking + Manufacturing.
+  `Deferred` · TAKOAI-4 — the First Playable Demo uses only the Dock and the
+  Workshop.
 - **Ship size extension:** mechanically, how does adding a module grow the
   carrier's buildable space — new rooms/tiles attached to the existing layout, a
   pre-designed set of expansion shapes, something else? _(§ Ship Modules)_
   `Deferred` · TAKOAI-4 — the carrier is fixed-size in the first playable.
 - **Resource categories:** raw/refined/key-trade breakdown feeding ship
   progression. _(§ Ship Modules)_
-  `Blocks (partial)` · TAKOAI-8 — needed now: the handful of resources in the
-  one production chain.
+  `Deferred` · TAKOAI-8 — the First Playable Demo has only Credits and Void
+  Crystal, and no production chain.
 - **Machines/rooms progression:** which ones exist early vs. late game.
   _(§ Ship Modules)_
-  `Blocks (partial)` · TAKOAI-8 — needed now: the 2-3 starting buildings plus
-  one unlockable.
+  `Deferred` · TAKOAI-8 — the First Playable Demo has no manufacturing.
 - **Failure reward exceptions:** the mechanism is decided (per-reward-type
   configurable "survives failure" flag), but which specific rewards get flagged
   that way is still open — deliberately left pending for later tuning.
   _(§ Missions)_
+  `Deferred` · TAKOAI-5 — the First Playable Demo flags none.
+- **Enemies/opposition beyond the demo:** the 2 void-monster types are
+  decided (Void Swarmer, Void Spitter). Still open: the wider enemy roster, and
+  whether there is also Oni opposition (rival Oni groups). _(§ Enemies /
+  Opposition)_
   `Deferred` · TAKOAI-5
-- **Enemies/opposition:** likely narrative source is the void monsters (see
-  Story § Setting below), but enemy types/behaviors and whether there's also
-  Oni opposition (rival Oni groups) are undefined. _(§ Enemies / Opposition)_
-  `Blocks (partial)` · TAKOAI-5 — needed now: 2 void-monster types.
-- **Level design within missions:** procedural vs. hand-designed, mission
-  objective types/variety. _(implied by § Missions, not yet written up)_
-  `Blocks (partial)` · TAKOAI-5 — needed now: one objective type, and
-  hand-built vs. procedural for the first segment.
+- **Level design within missions:** the demo has one hand-built arena and one
+  objective type, Elimination (§ Missions). Still open: procedural vs.
+  hand-designed long term, and which other objective types exist.
+  _(§ Missions)_
+  `Deferred` · TAKOAI-5
 
 ## Story (design/STORY.md)
 
