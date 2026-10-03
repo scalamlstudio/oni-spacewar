@@ -11,6 +11,7 @@
 
 mod carrier;
 mod flow;
+mod hints;
 mod input;
 mod mission;
 mod net;
@@ -19,6 +20,7 @@ mod render;
 mod rollback;
 mod save;
 mod stats;
+mod workshop;
 
 use std::time::Duration;
 
@@ -41,7 +43,8 @@ use stats::{RunLimit, Stats, StatsPlugin};
 
 const USAGE: &str = "\
 usage:
-  oni-spacewar [--autoplay [--ship kite|bulwark] [--shots DIR]]
+  oni-spacewar [--autoplay [--ship kite|bulwark] [--missions N] [--continue] [--abandon]
+                [--shots DIR]]
   oni-spacewar synctest [--minutes M] [--check-distance D] [--headless] [--bot]
   oni-spacewar p2p [--room ws://127.0.0.1:3536/oni?next=2]
                    [--delay-ms 50] [--jitter-ms 0] [--loss 0.0] [--input-delay 2]
@@ -71,9 +74,14 @@ struct Args {
     emu: NetEmuConfig,
     /// `--ice` URLs; empty = matchbox's default STUN servers.
     ice: Vec<String>,
-    /// Demo QA: fly one battle with a scripted pilot, then quit.
+    /// Demo QA: fly `missions` battles with a scripted pilot, then quit.
     autoplay: bool,
     ship: String,
+    missions: u32,
+    /// `--continue`: autoplay starts from the saved game instead of New Game.
+    resume: bool,
+    /// `--abandon`: autoplay quits its last mission (counts as Failed).
+    abandon: bool,
     shots: Option<std::path::PathBuf>,
 }
 
@@ -108,6 +116,9 @@ fn parse_args() -> Args {
         ice: Vec::new(),
         autoplay: false,
         ship: mission::KITE_ID.to_string(),
+        missions: 1,
+        resume: false,
+        abandon: false,
         shots: None,
     };
 
@@ -140,6 +151,9 @@ fn parse_args() -> Args {
             "--ice" => a.ice.push(val(&flag, it)),
             "--autoplay" => a.autoplay = true,
             "--ship" => a.ship = val(&flag, it),
+            "--missions" => a.missions = val(&flag, it),
+            "--continue" => a.resume = true,
+            "--abandon" => a.abandon = true,
             "--shots" => a.shots = Some(val(&flag, it)),
             _ => usage_exit(&format!("unknown flag {flag}\n")),
         }
@@ -228,7 +242,7 @@ fn main() {
         app.insert_resource(NetStatus("demo flow".into()))
             .insert_resource(ContentStatus(content_status))
             .init_resource::<Stats>()
-            .add_plugins((flow::FlowPlugin, carrier::CarrierPlugin));
+            .add_plugins((flow::FlowPlugin, carrier::CarrierPlugin, hints::HintsPlugin));
         if args.autoplay {
             if let Some(dir) = &args.shots {
                 std::fs::create_dir_all(dir).expect("create --shots dir");
@@ -236,6 +250,10 @@ fn main() {
             app.insert_resource(flow::Autoplay {
                 ship: args.ship.clone(),
                 shots: args.shots.clone(),
+                missions: args.missions,
+                resume: args.resume,
+                abandon: args.abandon,
+                flown: 0,
             });
         }
         if app.run().is_error() {

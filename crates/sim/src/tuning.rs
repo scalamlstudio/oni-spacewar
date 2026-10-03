@@ -148,8 +148,13 @@ pub const SWARMER_CREDITS: u32 = 5;
 pub const SWARMER_CRYSTAL_PCT: i32 = 15;
 pub const SPITTER_CREDITS: u32 = 15;
 pub const SPITTER_CRYSTAL_PCT: i32 = 60;
-pub const SUCCESS_BONUS_CREDITS: u32 = 50;
-pub const SUCCESS_BONUS_CRYSTAL: u32 = 2;
+/// Mission success bonus. Tuned up from the spec's 50 cr + 2 VC (TAKOAI-42):
+/// played runs kill mostly Swarmers and lose a few expired drops, so they
+/// collected ~70-100 cr and 1-5 VC and the spec's 50 + 2 bonus left a win
+/// short of the first upgrade (150 cr + 4 VC). With 100 + 3 a win pays
+/// ~170-200 cr and 4-8 VC, the spec's expected ~180 cr / ~6 VC haul.
+pub const SUCCESS_BONUS_CREDITS: u32 = 100;
+pub const SUCCESS_BONUS_CRYSTAL: u32 = 3;
 pub const PICKUP_COLLECT_RANGE: i32 = 32;
 pub const PICKUP_DRIFT_RANGE: i32 = 80;
 /// Drift speed toward a nearby ship (engine default).
