@@ -5002,6 +5002,7 @@ dependencies = [
  "oni-content",
  "oni-sim",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

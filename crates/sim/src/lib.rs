@@ -31,4 +31,4 @@ pub use entity::{Enemy, Projectile, Ship};
 pub use fixed::{FxVec2, SUB};
 pub use input::NetInput;
 pub use rng::SimRng;
-pub use state::{SimParams, SimState, MAX_PLAYERS};
+pub use state::{MissionStatus, SimParams, SimState, MAX_PLAYERS};

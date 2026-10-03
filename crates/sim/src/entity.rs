@@ -12,6 +12,8 @@ use crate::fixed::FxVec2;
 pub struct Ship {
     pub handle: usize,
     pub pos: FxVec2,
+    /// Placeholder hull points. Reaching 0 loses the mission for that player.
+    pub hp: i32,
     /// Click-to-move destination; the ship stops when it gets there.
     pub target: FxVec2,
     /// Ticks until the Q skill can fire again.

@@ -8,11 +8,13 @@
 //! Gameplay is a placeholder that exercises the foundation (see `sim`):
 //! click-to-move battleships, a Q shot, and waves of chasing enemies.
 
+mod flow;
 mod input;
 mod net;
 mod pacing;
 mod render;
 mod rollback;
+mod save;
 mod stats;
 
 use std::time::Duration;
@@ -32,6 +34,7 @@ use sim::{SimParams, SimState, MAX_PLAYERS};
 use input::{BotBrains, KeyboardPlayer};
 use net::{EmulatedGgrsSocket, NetEmuConfig};
 use rollback::{GameConfig, InjectDesync, RollbackPlugin, SimWorld};
+use save::SaveData;
 use stats::{RunLimit, StatsPlugin};
 
 const USAGE: &str = "\
@@ -149,7 +152,39 @@ struct MatchboxSocket(WebRtcSocket);
 struct AppArgs(Args);
 
 fn main() {
+    if std::env::args_os().len() == 1 {
+        run_demo_app();
+        return;
+    }
     let args = parse_args();
+    run_network_app(args);
+}
+
+fn run_demo_app() {
+    let mut app = App::new();
+    app.add_plugins(DefaultPlugins.set(WindowPlugin {
+        primary_window: Some(Window {
+            title: "Oni Spacewar".into(),
+            resolution: WindowResolution::new(1000, 580),
+            present_mode: PresentMode::AutoVsync,
+            ..default()
+        }),
+        ..default()
+    }))
+    .insert_resource(WinitSettings::continuous())
+    .insert_resource(SaveData::default())
+    .init_state::<flow::GameState>()
+    .init_resource::<NetStatus>()
+    .insert_resource(ContentStatus(load_content_status()))
+    .init_resource::<stats::Stats>()
+    .add_plugins((render::RenderPlugin, flow::DemoFlowPlugin));
+
+    if app.run().is_error() {
+        std::process::exit(1);
+    }
+}
+
+fn run_network_app(args: Args) {
     let mut app = App::new();
     let content_status = load_content_status();
 

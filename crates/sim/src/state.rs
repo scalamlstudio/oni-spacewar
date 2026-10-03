@@ -46,6 +46,18 @@ pub struct SimState {
     pub projectiles: Vec<Projectile>,
     /// Number of enemy waves spawned so far.
     pub wave: u32,
+    /// Total enemies killed by all ships.
+    pub kills: u32,
+    /// Ticks until enemies can deal contact damage again.
+    pub contact_cooldown: u32,
+    pub outcome: MissionStatus,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
+pub enum MissionStatus {
+    Running,
+    Won,
+    Lost,
 }
 
 const fn px(v: i32) -> i32 {
@@ -70,6 +82,7 @@ impl SimState {
                 Ship {
                     handle,
                     pos,
+                    hp: SHIP_HP,
                     target: pos,
                     cooldown: 0,
                 }
@@ -83,12 +96,19 @@ impl SimState {
             enemies: Vec::new(),
             projectiles: Vec::new(),
             wave: 0,
+            kills: 0,
+            contact_cooldown: 0,
+            outcome: MissionStatus::Running,
         }
     }
 
     /// Advance one fixed tick. `inputs[h]` is player `h`'s input.
     pub fn step(&mut self, inputs: &[NetInput]) {
         assert_eq!(inputs.len(), self.ships.len(), "one input per player");
+        if self.outcome != MissionStatus::Running {
+            self.frame += 1;
+            return;
+        }
         self.spawn_wave_if_clear();
         self.apply_inputs(inputs);
         self.move_ships();
@@ -97,6 +117,7 @@ impl SimState {
         self.projectile_hits();
         self.separate_ships_and_enemies();
         self.remove_dead();
+        self.update_outcome();
         self.frame += 1;
     }
 
@@ -198,6 +219,8 @@ impl SimState {
     /// Ships and enemies push apart, split by mass (the lighter one moves more).
     /// Ships never collide with each other.
     fn separate_ships_and_enemies(&mut self) {
+        self.contact_cooldown = self.contact_cooldown.saturating_sub(1);
+        let mut touched = vec![false; self.ships.len()];
         let total = SHIP_MASS + ENEMY_MASS;
         for ship in &mut self.ships {
             for e in &mut self.enemies {
@@ -205,17 +228,36 @@ impl SimState {
                 else {
                     continue;
                 };
+                touched[ship.handle] = true;
                 let ship_share =
                     FxVec2::new(push.x * ENEMY_MASS / total, push.y * ENEMY_MASS / total);
                 ship.pos = ship.pos + ship_share;
                 e.pos = e.pos - (push - ship_share);
             }
         }
+        if self.contact_cooldown == 0 {
+            for ship in &mut self.ships {
+                if touched.get(ship.handle).copied().unwrap_or(false) {
+                    ship.hp = (ship.hp - ENEMY_CONTACT_DAMAGE).max(0);
+                }
+            }
+            self.contact_cooldown = ENEMY_CONTACT_COOLDOWN;
+        }
     }
 
     fn remove_dead(&mut self) {
+        let before = self.enemies.len();
         self.enemies.retain(|e| e.hp > 0);
+        self.kills += (before - self.enemies.len()) as u32;
         self.projectiles.retain(|p| p.ttl > 0);
+    }
+
+    fn update_outcome(&mut self) {
+        if self.ships.first().is_some_and(|ship| ship.hp <= 0) {
+            self.outcome = MissionStatus::Lost;
+        } else if self.kills >= KILL_TARGET {
+            self.outcome = MissionStatus::Won;
+        }
     }
 
     /// Platform- and toolchain-independent checksum (FNV-1a over `Hash`), for
@@ -341,7 +383,8 @@ mod tests {
     fn scripted_run_exercises_gameplay() {
         // Guard against the tests above passing on a sim that does nothing.
         let s = run(params(2), 3600);
-        assert!(s.wave > 1, "waves cleared: {}", s.wave);
+        assert!(s.wave > 0, "waves spawned: {}", s.wave);
+        assert_ne!(s.outcome, MissionStatus::Running);
         assert_ne!(s.ships[0].pos, ship_spawn(0, 2));
     }
 
@@ -352,6 +395,7 @@ mod tests {
         assert_eq!(handles, vec![0, 1, 2]);
         assert_ne!(s.ships[0].pos, s.ships[1].pos);
         assert_eq!(SimState::new(params(1)).ships[0].pos, FxVec2::ZERO);
+        assert_eq!(s.ships[0].hp, SHIP_HP);
     }
 
     #[test]
@@ -449,6 +493,44 @@ mod tests {
         s.enemies.clear();
         s.step(&idle(1));
         assert_eq!(s.wave, 2);
+    }
+
+    #[test]
+    fn mission_wins_at_kill_target() {
+        let mut s = quiet(1);
+        s.enemies.clear();
+        s.kills = KILL_TARGET - 1;
+        s.enemies.push(Enemy {
+            pos: FxVec2::from_px(10, 0),
+            hp: 1,
+        });
+        s.step(&[input(INPUT_SKILL_Q, 10, 0)]);
+        assert_eq!(s.kills, KILL_TARGET);
+        assert_eq!(s.outcome, MissionStatus::Won);
+    }
+
+    #[test]
+    fn mission_loses_when_player_ship_reaches_zero_hp() {
+        let mut s = quiet(1);
+        s.enemies.clear();
+        s.ships[0].hp = 1;
+        s.enemies.push(Enemy {
+            pos: s.ships[0].pos,
+            hp: ENEMY_HP,
+        });
+        s.step(&idle(1));
+        assert_eq!(s.ships[0].hp, 0);
+        assert_eq!(s.outcome, MissionStatus::Lost);
+    }
+
+    #[test]
+    fn terminal_mission_still_advances_frame_count() {
+        let mut s = quiet(1);
+        s.outcome = MissionStatus::Won;
+        s.step(&idle(1));
+        assert_eq!(s.frame, 1);
+        assert_eq!(s.kills, 0);
+        assert_eq!(s.outcome, MissionStatus::Won);
     }
 
     #[test]

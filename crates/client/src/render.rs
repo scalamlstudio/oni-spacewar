@@ -139,7 +139,7 @@ fn follow_camera(
 fn update_hud(
     mut hud: Query<&mut Text, With<Hud>>,
     diagnostics: Res<DiagnosticsStore>,
-    stats: Res<Stats>,
+    stats: Option<Res<Stats>>,
     status: Res<NetStatus>,
     content: Res<ContentStatus>,
     world: Option<Res<SimWorld>>,
@@ -157,11 +157,11 @@ fn update_hud(
         status.0,
         content.0,
         fps,
-        stats.max_frame,
-        stats.rollbacks,
-        stats.max_rollback,
-        stats.desyncs,
-        stats.synctest_mismatches,
+        stats.as_deref().map_or(0, |s| s.max_frame),
+        stats.as_deref().map_or(0, |s| s.rollbacks),
+        stats.as_deref().map_or(0, |s| s.max_rollback),
+        stats.as_deref().map_or(0, |s| s.desyncs),
+        stats.as_deref().map_or(0, |s| s.synctest_mismatches),
     );
     if let Some(world) = world {
         let me = local_handle(local.as_deref());

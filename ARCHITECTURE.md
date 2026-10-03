@@ -34,7 +34,9 @@ crates/
     src/bin/content_pipeline.rs        source -> processed asset + zstd bundle + manifest
     src/bin/content_manifest_diff.rs   compare manifests and list packs/assets a patch needs
   client/             package `oni-client`, bin `oni-spacewar` — everything else
-    src/main.rs         CLI (synctest / p2p modes), app + GGRS session setup, ICE (STUN/TURN) config
+    src/main.rs         demo/no-arg startup, CLI (synctest / p2p modes), app + GGRS session setup, ICE config
+    src/flow.rs         Bevy States scene shell: Title, Carrier, Battle, Result, pause overlay
+    src/save.rs         versioned JSON SaveData in the OS user data directory
     src/rollback.rs     SimWorld resource, rollback/checksum registration, GgrsSchedule
     src/input.rs        mouse + keyboard / bot → NetInput (ReadInputs)
     src/net.rs          matchbox ↔ ggrs socket adapter + latency/loss emulator (from the spike)
@@ -200,6 +202,40 @@ detected pose count differs from the provided expression count.
   read `SimWorld`.
 - Multiplayer is the default shape: `SimState::ships` holds one ship per player
   handle (1..=4, `MAX_PLAYERS`); single-player is `num_players = 1`.
+
+### First playable scene shell
+
+Running `oni-spacewar` with no CLI arguments starts the local first-playable
+shell instead of a network test mode. It uses Bevy `States` for the scene graph:
+
+```
+GameState::Title -> GameState::Carrier -> GameState::Battle
+                 -> GameState::Result -> GameState::Carrier
+```
+
+`PauseState` is a separate Bevy state with `Running` and `Paused`; Esc toggles
+it in Carrier and Battle, and the pause overlay can resume, return to title or
+quit. Returning to title during Battle records a failed `MissionOutcome`.
+
+Each scene lives in its own plugin in `crates/client/src/flow.rs` and creates
+only placeholder UI entities tagged for teardown on state exit. The Battle
+scene owns a `MissionRequest { ship_id, mission_id }`, creates a single-player
+`SimWorld(SimState)`, and advances it on a local 60 Hz accumulator from client
+input. That no-arg path does not use GGRS, but it still runs the same
+deterministic `sim` crate. The `synctest` and `p2p` CLI modes keep using
+`RollbackPlugin`, `GgrsSchedule`, and the existing input/session wiring.
+
+`SimState` carries deterministic mission outcome fields: player ship HP,
+contact-damage cooldown, total kills, and `MissionStatus`. The placeholder
+elimination mission is won at `tuning::KILL_TARGET` kills and lost when player
+0's ship HP reaches 0. These values are temporary first-playable defaults and
+live in `crates/sim/src/tuning.rs` with the rest of the placeholder numbers.
+
+`SaveData` is client-only and stored as pretty JSON in the OS user data
+directory (`Oni Spacewar/save.json`). It includes a schema version, credits,
+resources, upgrade levels, unlocked ships and tutorial flags. The Result scene
+applies `MissionOutcome` rewards and writes the save before returning to the
+Carrier; AppExit also writes the current save.
 
 ### Simulation structure
 

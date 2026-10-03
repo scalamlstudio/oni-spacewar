@@ -22,6 +22,7 @@ pub const fn ticks(num: i32, den: i32) -> u32 {
 pub const SHIP_RADIUS: i32 = 16;
 pub const SHIP_SPEED: i32 = 200;
 pub const SHIP_MASS: i32 = 5;
+pub const SHIP_HP: i32 = 10;
 /// Horizontal gap between battleship spawn points.
 pub const SHIP_SPAWN_GAP: i32 = 60;
 
@@ -37,7 +38,12 @@ pub const ENEMY_RADIUS: i32 = 10;
 pub const ENEMY_SPEED: i32 = 80;
 pub const ENEMY_HP: i32 = 3;
 pub const ENEMY_MASS: i32 = 1;
+pub const ENEMY_CONTACT_DAMAGE: i32 = 1;
+pub const ENEMY_CONTACT_COOLDOWN: u32 = ticks(1, 2);
 
 /// When no enemies are left, a new wave spawns on a ring around the ships.
 pub const WAVE_SIZE: usize = 8;
 pub const WAVE_RING_RADIUS: i32 = 400;
+
+/// Placeholder elimination objective for the first playable flow.
+pub const KILL_TARGET: u32 = 8;
