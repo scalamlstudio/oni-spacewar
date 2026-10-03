@@ -13,9 +13,17 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use content::ContentManifest;
 
+use sim::tuning::{
+    AFTERBURN_DISTANCE, BASTION_DURATION, BASTION_SHIELD, SCATTER_BOLTS, SHOCKWAVE_PUSH,
+    SHOCKWAVE_RADIUS, TICKS_PER_SEC,
+};
+use sim::{Loadout, ShipKind, ShipSheet, Upgrades};
+
 use crate::flow::{self, GameScreen, PauseMenu, SaveSlot, ScreenEntity};
+use crate::hints::{Hint, Hints};
 use crate::mission::MissionRequest;
 use crate::save::LastResult;
+use crate::workshop::{self, BuyError, Upgrade, UPGRADES};
 
 /// Width of one room; the deck is four rooms long.
 pub const ROOM_W: f32 = 320.0;
@@ -232,18 +240,14 @@ pub fn crew_lines(crew: Crew, last: LastResult) -> Vec<Line> {
     lines
 }
 
-/// Battleship stats shown in the Dock (design/READINESS.md § Demo Spec ›
-/// Battleships). Display only: the battle reads its own numbers from `sim`.
+/// A battleship in the Dock. Its numbers are read from `sim::ShipSheet`
+/// with the current Workshop upgrades, so the Dock shows what the battle
+/// will use.
 pub struct ShipInfo {
     pub id: &'static str,
     pub name: &'static str,
     pub role: &'static str,
-    pub hull: u32,
-    pub speed: u32,
-    pub radius: u32,
-    pub basic: &'static str,
-    pub q: &'static str,
-    pub w: &'static str,
+    pub kind: ShipKind,
 }
 
 pub const SHIPS: [ShipInfo; 2] = [
@@ -251,25 +255,116 @@ pub const SHIPS: [ShipInfo; 2] = [
         id: "kite",
         name: "Kite",
         role: "fast, fragile, short cooldowns",
-        hull: 60,
-        speed: 220,
-        radius: 14,
-        basic: "4 dmg every 0.35 s, range 220 px",
-        q: "Afterburn: dash 160 px toward the cursor. CD 4 s",
-        w: "Scatter: 5 bolts in a 40 deg cone, 6 dmg each. CD 6 s",
+        kind: ShipKind::Kite,
     },
     ShipInfo {
         id: "bulwark",
         name: "Bulwark",
         role: "slow, tanky, stronger basic attack",
-        hull: 140,
-        speed: 140,
-        radius: 20,
-        basic: "8 dmg every 0.6 s, range 240 px",
-        q: "Bastion: shield absorbs the next 40 dmg for 5 s. CD 12 s",
-        w: "Shockwave: 15 dmg within 150 px, pushes 100 px. CD 9 s",
+        kind: ShipKind::Bulwark,
     },
 ];
+
+fn sheet(kind: ShipKind, upgrades: Upgrades) -> ShipSheet {
+    ShipSheet::new(Loadout {
+        ship: kind,
+        upgrades,
+    })
+}
+
+/// `value`, plus how much upgrades added to it.
+fn with_bonus(value: i32, base: i32) -> String {
+    if value > base {
+        format!("{value} (+{})", value - base)
+    } else {
+        value.to_string()
+    }
+}
+
+fn secs(ticks: u32) -> String {
+    let s = format!("{:.2}", ticks as f32 / TICKS_PER_SEC as f32);
+    s.trim_end_matches('0').trim_end_matches('.').to_string()
+}
+
+/// The Dock's stat card for a battleship with Workshop `upgrades` applied.
+pub fn ship_card(ship: &ShipInfo, upgrades: Upgrades) -> String {
+    let s = sheet(ship.kind, upgrades);
+    let b = sheet(ship.kind, Upgrades::default());
+    let (q, w) = match ship.kind {
+        ShipKind::Kite => (
+            format!(
+                "Afterburn: dash {AFTERBURN_DISTANCE} px toward the cursor. CD {} s",
+                secs(s.q_cooldown)
+            ),
+            format!(
+                "Scatter: {SCATTER_BOLTS} bolts in a 40 deg cone, {} dmg each. CD {} s",
+                with_bonus(s.w_damage, b.w_damage),
+                secs(s.w_cooldown)
+            ),
+        ),
+        ShipKind::Bulwark => (
+            format!(
+                "Bastion: shield absorbs the next {BASTION_SHIELD} dmg for {} s. CD {} s",
+                secs(BASTION_DURATION),
+                secs(s.q_cooldown)
+            ),
+            format!(
+                "Shockwave: {} dmg within {SHOCKWAVE_RADIUS} px, pushes {SHOCKWAVE_PUSH} px. CD {} s",
+                with_bonus(s.w_damage, b.w_damage),
+                secs(s.w_cooldown)
+            ),
+        ),
+    };
+    format!(
+        "{}\nHull {}    Speed {} px/s    Radius {} px\nBasic: {} dmg every {} s, range {} px\nQ {q}\nW {w}",
+        ship.role,
+        with_bonus(s.hull, b.hull),
+        with_bonus(s.speed, b.speed),
+        s.radius,
+        with_bonus(s.basic_damage, b.basic_damage),
+        secs(s.basic_interval),
+        s.basic_range,
+    )
+}
+
+/// What buying the next level of `upgrade` changes, one line per battleship.
+pub fn upgrade_preview(upgrade: Upgrade, current: Upgrades) -> Vec<String> {
+    let mut next = current;
+    let slot = match upgrade {
+        Upgrade::HullPlating => &mut next.hull,
+        Upgrade::WeaponTuning => &mut next.weapon,
+        Upgrade::ThrusterTuning => &mut next.thruster,
+    };
+    if *slot >= sim::tuning::MAX_UPGRADE_LEVEL {
+        return vec!["Fully upgraded.".to_string()];
+    }
+    *slot += 1;
+    SHIPS
+        .iter()
+        .map(|ship| {
+            let (a, b) = (sheet(ship.kind, current), sheet(ship.kind, next));
+            let change = match upgrade {
+                Upgrade::HullPlating => format!("hull {} -> {}", a.hull, b.hull),
+                Upgrade::ThrusterTuning => {
+                    format!("speed {} -> {} px/s", a.speed, b.speed)
+                }
+                Upgrade::WeaponTuning => format!(
+                    "basic {} -> {} dmg, {} {} -> {} dmg",
+                    a.basic_damage,
+                    b.basic_damage,
+                    if ship.kind == ShipKind::Kite {
+                        "Scatter"
+                    } else {
+                        "Shockwave"
+                    },
+                    a.w_damage,
+                    b.w_damage
+                ),
+            };
+            format!("{:<8} {change}", ship.name)
+        })
+        .collect()
+}
 
 /// Index into [`SHIPS`] for a saved battleship id; unknown ids fall back to
 /// the first ship.
@@ -293,13 +388,15 @@ impl Hotspot {
     }
 }
 
+pub const LAUNCH_CONSOLE_X: f32 = 1010.0;
+
 /// Interactable things on the deck and their x position.
 pub const HOTSPOTS: [(Hotspot, f32); 5] = [
     (Hotspot::Crew(Crew::Gunner), 210.0),
     (Hotspot::Crew(Crew::Researcher), 500.0),
     (Hotspot::Crew(Crew::Engineer), 700.0),
     (Hotspot::UpgradeBench, 840.0),
-    (Hotspot::LaunchConsole, 1010.0),
+    (Hotspot::LaunchConsole, LAUNCH_CONSOLE_X),
 ];
 
 /// The hotspot E would use from `x`: the closest one within reach.
@@ -332,7 +429,11 @@ pub enum Overlay {
     ShipSelect {
         index: usize,
     },
-    Workshop,
+    /// The upgrade shop: the selected row and the last purchase's feedback.
+    Workshop {
+        index: usize,
+        message: String,
+    },
 }
 
 /// Set by the flow when the Carrier is entered straight from a mission, so the
@@ -351,7 +452,7 @@ pub struct CarrierArrival {
 pub struct ContentId(pub &'static str);
 
 #[derive(Component)]
-struct Pilot;
+pub(crate) struct Pilot;
 
 #[derive(Component)]
 struct Prompt;
@@ -428,6 +529,7 @@ impl Plugin for CarrierPlugin {
                     follow_pilot,
                     update_prompt,
                     update_hud,
+                    carrier_hints,
                     sync_overlay,
                 )
                     .chain()
@@ -543,7 +645,7 @@ fn spawn_carrier(
         "core.carrier.prop.launch_console",
         Color::srgb(0.25, 0.6, 0.5),
         Vec2::new(26.0, 50.0),
-        Vec3::new(1010.0, 25.0, 0.2),
+        Vec3::new(LAUNCH_CONSOLE_X, 25.0, 0.2),
     ));
     for (x, ship, size) in [
         (1120.0, &SHIPS[0], Vec2::new(70.0, 28.0)),
@@ -655,7 +757,7 @@ fn carrier_input(
     keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
     pause: Res<PauseMenu>,
-    save: Res<SaveSlot>,
+    mut save: ResMut<SaveSlot>,
     mut overlay: ResMut<Overlay>,
     mut pilot: Query<&mut Transform, With<Pilot>>,
     mut launch: MessageWriter<MissionRequest>,
@@ -702,7 +804,10 @@ fn carrier_input(
                     index: 0,
                     briefing: true,
                 },
-                Some((Hotspot::UpgradeBench, _)) => Overlay::Workshop,
+                Some((Hotspot::UpgradeBench, _)) => Overlay::Workshop {
+                    index: 0,
+                    message: String::new(),
+                },
                 None => return,
             };
         }
@@ -741,11 +846,61 @@ fn carrier_input(
                 });
             }
         }
-        Overlay::Workshop => {
-            if back || confirm {
+        Overlay::Workshop { index, message } => {
+            let up = keys.any_just_pressed([KeyCode::KeyW, KeyCode::ArrowUp]);
+            let down = keys.any_just_pressed([KeyCode::KeyS, KeyCode::ArrowDown]);
+            let digit = [KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3]
+                .iter()
+                .position(|k| keys.just_pressed(*k));
+            if back {
                 *overlay = Overlay::None;
+            } else if let Some(i) = digit {
+                *index = i;
+            } else if up {
+                *index = (*index + UPGRADES.len() - 1) % UPGRADES.len();
+            } else if down {
+                *index = (*index + 1) % UPGRADES.len();
+            } else if confirm {
+                let upgrade = UPGRADES[*index];
+                let Some(game) = &mut save.game else {
+                    return;
+                };
+                *message = match workshop::buy(game, upgrade) {
+                    Ok(level) => format!("Installed {} {level}.", upgrade.name()),
+                    Err(BuyError::Maxed) => format!("{} is fully upgraded.", upgrade.name()),
+                    Err(BuyError::TooExpensive(c)) => format!(
+                        "Not enough: {} needs {} credits and {} Void Crystal.",
+                        upgrade.name(),
+                        c.credits,
+                        c.void_crystal
+                    ),
+                };
+                // Spec § Save file: saved on every Workshop purchase.
+                save.store();
             }
         }
+    }
+}
+
+/// Carrier tutorial hint triggers (`hints`).
+fn carrier_hints(
+    overlay: Res<Overlay>,
+    pilot: Query<&Transform, With<Pilot>>,
+    mut hints: ResMut<Hints>,
+    mut save: ResMut<SaveSlot>,
+) {
+    let Ok(pilot) = pilot.single() else {
+        return;
+    };
+    let x = pilot.translation.x;
+    if nearest_hotspot(x).is_some() {
+        hints.trigger(&mut save, Hint::CarrierInteract);
+    }
+    if room_at(x) == Room::Dock {
+        hints.trigger(&mut save, Hint::Dock);
+    }
+    if matches!(*overlay, Overlay::Workshop { .. }) {
+        hints.trigger(&mut save, Hint::Workshop);
     }
 }
 
@@ -825,6 +980,7 @@ fn sync_overlay(
     overlay: Res<Overlay>,
     mut portraits: ResMut<Portraits>,
     mut images: ResMut<Assets<Image>>,
+    save: Res<SaveSlot>,
     existing: Query<Entity, With<OverlayUi>>,
 ) {
     if !overlay.is_changed() {
@@ -844,6 +1000,8 @@ fn sync_overlay(
             TextColor(color),
         )
     };
+    let game = save.game.clone().unwrap_or_default();
+    let levels = workshop::levels(&game);
     match &*overlay {
         Overlay::None => {}
         Overlay::Dialogue {
@@ -940,7 +1098,10 @@ fn sync_overlay(
                     },
                 ))
                 .with_children(|p| {
-                    p.spawn((Text::new("Dock - pick a battleship"), font(22.0, Color::WHITE)));
+                    p.spawn((
+                        Text::new("Dock - pick a battleship"),
+                        font(22.0, Color::WHITE),
+                    ));
                     p.spawn(Node {
                         column_gap: px(14),
                         ..default()
@@ -975,10 +1136,7 @@ fn sync_overlay(
                                     font(20.0, Color::WHITE),
                                 ));
                                 card.spawn((
-                                    Text::new(format!(
-                                        "{}\nHull {}    Speed {} px/s    Radius {} px\nBasic: {}\nQ {}\nW {}",
-                                        ship.role, ship.hull, ship.speed, ship.radius, ship.basic, ship.q, ship.w
-                                    )),
+                                    Text::new(ship_card(ship, levels)),
                                     font(14.0, Color::srgb(0.82, 0.86, 0.9)),
                                 ));
                             });
@@ -990,29 +1148,107 @@ fn sync_overlay(
                     ));
                 });
         }
-        Overlay::Workshop => {
-            commands.spawn((
-                ScreenEntity,
-                OverlayUi,
-                panel_bg,
-                border,
-                Text::new(
-                    "Workshop - upgrade bench\n\n\
-                     Hull Plating      +25% hull\n\
-                     Weapon Tuning     +25% damage\n\
-                     Thruster Tuning   +15% move speed\n\n\
-                     The upgrade shop opens in a later build.\n\n[E] Close",
-                ),
-                font(18.0, Color::WHITE),
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: px(260),
-                    top: px(90),
-                    padding: UiRect::all(px(18)),
-                    border: UiRect::all(px(1)),
-                    ..default()
-                },
-            ));
+        Overlay::Workshop { index, message } => {
+            commands
+                .spawn((
+                    ScreenEntity,
+                    OverlayUi,
+                    panel_bg,
+                    border,
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: px(60),
+                        right: px(60),
+                        top: px(96),
+                        flex_direction: FlexDirection::Column,
+                        padding: UiRect::all(px(14)),
+                        row_gap: px(8),
+                        border: UiRect::all(px(1)),
+                        ..default()
+                    },
+                ))
+                .with_children(|p| {
+                    p.spawn((
+                        Text::new(format!(
+                            "Workshop - upgrades apply to every battleship\nCredits {}    Void Crystal {}",
+                            game.credits,
+                            workshop::void_crystal(&game)
+                        )),
+                        font(20.0, Color::WHITE),
+                    ));
+                    for (i, upgrade) in UPGRADES.iter().enumerate() {
+                        let level = upgrade.level_in(levels);
+                        let (price, affordable) = match workshop::next_level(&game, *upgrade) {
+                            Some((next, cost)) => (
+                                format!(
+                                    "Lv {next}: {} cr + {} VC",
+                                    cost.credits, cost.void_crystal
+                                ),
+                                workshop::can_afford(&game, cost),
+                            ),
+                            None => ("maxed".to_string(), false),
+                        };
+                        let selected = i == *index;
+                        let color = if affordable {
+                            Color::srgb(0.75, 1.0, 0.75)
+                        } else {
+                            Color::srgb(0.7, 0.72, 0.75)
+                        };
+                        p.spawn((
+                            BackgroundColor(if selected {
+                                Color::srgb(0.10, 0.22, 0.28)
+                            } else {
+                                Color::srgb(0.07, 0.08, 0.10)
+                            }),
+                            BorderColor::all(if selected {
+                                Color::srgb(0.5, 0.9, 1.0)
+                            } else {
+                                Color::srgb(0.25, 0.3, 0.34)
+                            }),
+                            Node {
+                                padding: UiRect::axes(px(10), px(5)),
+                                border: UiRect::all(px(1)),
+                                column_gap: px(12),
+                                ..default()
+                            },
+                        ))
+                        .with_children(|row| {
+                            let cells = [
+                                (format!("{} {}", i + 1, upgrade.name()), 180.0),
+                                (
+                                    format!("Lv {level}/{}", sim::tuning::MAX_UPGRADE_LEVEL),
+                                    60.0,
+                                ),
+                                (upgrade.effect().to_string(), 350.0),
+                                (price, 190.0),
+                            ];
+                            for (text, width) in cells {
+                                row.spawn(Node {
+                                    width: px(width),
+                                    flex_shrink: 0.0,
+                                    ..default()
+                                })
+                                .with_child((Text::new(text), font(16.0, color)));
+                            }
+                        });
+                    }
+                    let upgrade = UPGRADES[*index];
+                    p.spawn((
+                        Text::new(format!(
+                            "{} next level:\n  {}",
+                            upgrade.name(),
+                            upgrade_preview(upgrade, levels).join("\n  ")
+                        )),
+                        font(15.0, Color::srgb(0.82, 0.86, 0.9)),
+                    ));
+                    if !message.is_empty() {
+                        p.spawn((Text::new(message.clone()), font(16.0, Color::srgb(1.0, 0.85, 0.4))));
+                    }
+                    p.spawn((
+                        Text::new("[W]/[S] or [1]-[3] Choose    [E] Buy    [X] Close"),
+                        font(15.0, Color::srgb(0.6, 0.7, 0.75)),
+                    ));
+                });
         }
     }
 }
@@ -1091,6 +1327,42 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn dock_card_reads_sim_stats_with_upgrades() {
+        let base = ship_card(&SHIPS[0], Upgrades::default());
+        assert!(base.contains("Hull 60 "), "{base}");
+        assert!(base.contains("Speed 220 px/s"), "{base}");
+        assert!(
+            base.contains("Basic: 4 dmg every 0.35 s, range 220 px"),
+            "{base}"
+        );
+        let up = Upgrades {
+            hull: 1,
+            weapon: 1,
+            thruster: 2,
+        };
+        let kite = ship_card(&SHIPS[0], up);
+        assert!(kite.contains("Hull 75 (+15)"), "{kite}");
+        assert!(kite.contains("Speed 286 (+66) px/s"), "{kite}");
+        assert!(kite.contains("Basic: 5 (+1) dmg"), "{kite}");
+        let bulwark = ship_card(&SHIPS[1], up);
+        assert!(bulwark.contains("Hull 175 (+35)"), "{bulwark}");
+        assert!(bulwark.contains("Shockwave: 18 (+3) dmg"), "{bulwark}");
+    }
+
+    #[test]
+    fn upgrade_preview_shows_both_ships() {
+        let p = upgrade_preview(Upgrade::WeaponTuning, Upgrades::default());
+        assert_eq!(p.len(), 2);
+        assert!(p[0].contains("basic 4 -> 5"), "{p:?}");
+        assert!(p[1].contains("basic 8 -> 10"), "{p:?}");
+        let maxed = Upgrades {
+            hull: 2,
+            ..Default::default()
+        };
+        assert_eq!(upgrade_preview(Upgrade::HullPlating, maxed).len(), 1);
     }
 
     #[test]

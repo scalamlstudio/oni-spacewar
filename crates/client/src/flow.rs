@@ -9,10 +9,11 @@ use sim::input::{INPUT_MOVE, INPUT_SKILL_Q, INPUT_SKILL_W};
 use sim::tuning::KILL_TARGET;
 use sim::{FxVec2, NetInput, SimState, SUB};
 
-use crate::carrier::CarrierArrival;
+use crate::carrier::{CarrierArrival, Overlay, Pilot};
+use crate::hints::{Hint, Hints};
 use crate::mission::{self, MissionOutcome, MissionRequest, MissionResult};
 use crate::rollback::SimWorld;
-use crate::save::{self, LastResult, SaveError, SaveGame};
+use crate::save::{self, SaveError, SaveGame};
 
 #[derive(States, Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub enum GameScreen {
@@ -88,21 +89,48 @@ impl Plugin for FlowPlugin {
             // The demo battle steps the sim at the rollback rate, 60 Hz.
             .insert_resource(Time::<Fixed>::from_hz(60.0))
             .add_systems(FixedUpdate, step_demo_battle)
-            .add_systems(
-                Update,
-                (autoplay_flow, autoplay_screenshots).run_if(resource_exists::<Autoplay>),
-            );
+            .add_systems(Update, autoplay_flow.run_if(resource_exists::<Autoplay>));
     }
 }
 
-/// `--autoplay`: QA mode. Starts a new game with `ship`, flies one battle
-/// with a scripted pilot, optionally saves window screenshots to `shots`
-/// every 2 s, and quits a few seconds into the Result scene.
+/// `--autoplay`: QA mode for the demo loop. Starts a new game (or, with
+/// `resume`, Continues the saved one), flies `missions` battles with `ship`
+/// and a scripted pilot, buys the first affordable Workshop upgrade between
+/// them, returns to the Carrier after the last one and quits (saving, like
+/// the pause menu's Quit). With `shots`, saves a window screenshot of every
+/// scene to that directory. With `abandon`, the last mission is quit from
+/// the pause menu 20 s in (Failed, loot lost). Prints `autoplay:` lines.
 #[derive(Resource, Clone, Default)]
 pub struct Autoplay {
     pub ship: String,
     pub shots: Option<PathBuf>,
+    pub missions: u32,
+    pub resume: bool,
+    pub abandon: bool,
+    /// Missions flown so far in this run.
+    pub flown: u32,
 }
+
+impl Autoplay {
+    fn shoot(&self, commands: &mut Commands, name: &str) {
+        let Some(dir) = &self.shots else {
+            return;
+        };
+        let path = dir.join(format!("{name}.png"));
+        println!("autoplay: screenshot {}", path.display());
+        commands
+            .spawn(Screenshot::primary_window())
+            .observe(save_to_disk(path));
+    }
+}
+
+/// Upgrade preference for the autoplay pilot: the spec's most visible first
+/// buy first.
+const AUTOPLAY_UPGRADES: [crate::workshop::Upgrade; 3] = [
+    crate::workshop::Upgrade::WeaponTuning,
+    crate::workshop::Upgrade::HullPlating,
+    crate::workshop::Upgrade::ThrusterTuning,
+];
 
 #[derive(Resource)]
 pub(crate) struct SaveSlot {
@@ -133,12 +161,26 @@ impl SaveSlot {
         }
     }
 
-    fn store(&mut self) {
+    pub(crate) fn store(&mut self) {
         if let Some(game) = &self.game {
             match save::store(&self.path, game) {
                 Ok(()) => self.status = "Saved".to_string(),
                 Err(e) => self.status = format!("Save failed: {e}"),
             }
+        }
+    }
+}
+
+#[cfg(test)]
+impl SaveSlot {
+    /// A slot holding `game`, stored to a scratch file.
+    pub(crate) fn scratch(name: &str, game: SaveGame) -> Self {
+        Self {
+            path: std::env::temp_dir()
+                .join(format!("oni-spacewar-{name}-{}", std::process::id()))
+                .join("save.json"),
+            game: Some(game),
+            status: String::new(),
         }
     }
 }
@@ -237,7 +279,7 @@ fn enter_title(mut commands: Commands, save: Res<SaveSlot>) {
         &mut commands,
         "Oni Spacewar",
         format!(
-            "First playable flow skeleton\n{}\n\nN New Game    C Continue    Q Quit",
+            "First Playable Demo\n{}\n\nN New Game    C Continue    Q Quit",
             save.status
         ),
     );
@@ -258,19 +300,20 @@ pub(crate) fn enter_carrier(
     mut save: ResMut<SaveSlot>,
     mut pending_result: ResMut<LastMissionResult>,
     mut arrival: ResMut<CarrierArrival>,
+    mut hints: ResMut<Hints>,
 ) {
+    save.game.get_or_insert_with(SaveGame::default);
+    hints.trigger(&mut save, Hint::CarrierWalk);
     if let Some(result) = pending_result.0.take() {
         arrival.from_mission = true;
+        if result.credits > 0 || !result.resources.is_empty() {
+            hints.trigger(&mut save, Hint::ReturnWithLoot);
+        }
         if let Some(game) = &mut save.game {
-            game.record_mission_return(result.credits, &result.resources);
-            game.last_result = match result.outcome {
-                MissionOutcome::Victory => LastResult::Success,
-                MissionOutcome::Defeat | MissionOutcome::Abandoned => LastResult::Failed,
-            };
+            game.record_mission_return(result.outcome.success(), result.credits, &result.resources);
             save.store();
         }
     }
-    save.game.get_or_insert_with(SaveGame::default);
 }
 
 /// Launch from the Dock: remember the picked battleship and enter Battle.
@@ -300,7 +343,7 @@ fn enter_battle(mut commands: Commands, save: Res<SaveSlot>) {
     commands.insert_resource(SimWorld(mission::launch_sim(&config)));
     commands.spawn((
         ScreenEntity,
-        Text::new("Click to move. Your guns fire on their own.    Q / W skills    Esc pause"),
+        Text::new("Left click move    Q / W skills    Esc pause"),
         text_style(16.0, Color::srgb(0.7, 0.75, 0.8)),
         Node {
             position_type: PositionType::Absolute,
@@ -311,39 +354,110 @@ fn enter_battle(mut commands: Commands, save: Res<SaveSlot>) {
     ));
 }
 
-fn enter_result(mut commands: Commands, result: Res<LastMissionResult>) {
-    let text = match &result.0 {
+/// `m:ss` from sim ticks (60 per second).
+pub fn mission_time(ticks: u32) -> String {
+    let secs = ticks / sim::tuning::TICKS_PER_SEC as u32;
+    format!("{}:{:02}", secs / 60, secs % 60)
+}
+
+/// The Result scene's body text (below the banner).
+pub fn result_text(r: &MissionResult, wallet: (u32, u32)) -> String {
+    let crystal = r
+        .resources
+        .get(mission::VOID_CRYSTAL_ID)
+        .copied()
+        .unwrap_or(0);
+    let mut lines = vec![
+        format!(
+            "Kills {}/{KILL_TARGET}    Time {}    Wave reached {}",
+            r.kills,
+            mission_time(r.ticks),
+            r.wave
+        ),
+        format!(
+            "Collected     {} credits    {} Void Crystal",
+            r.collected.credits, r.collected.void_crystal
+        ),
+    ];
+    if r.outcome.success() {
+        lines.push(format!(
+            "Success bonus {} credits    {} Void Crystal",
+            r.bonus.credits, r.bonus.void_crystal
+        ));
+    }
+    lines.push(format!(
+        "Kept          {} credits    {crystal} Void Crystal",
+        r.credits
+    ));
+    if r.lost != sim::Loot::default() {
+        lines.push(format!(
+            "Lost          {} credits    {} Void Crystal  (rewards don't survive failure)",
+            r.lost.credits, r.lost.void_crystal
+        ));
+    }
+    lines.push(String::new());
+    lines.push(format!(
+        "Credits {} -> {}    Void Crystal {} -> {}",
+        wallet.0,
+        wallet.0 + r.credits,
+        wallet.1,
+        wallet.1 + crystal
+    ));
+    lines.join("\n")
+}
+
+fn enter_result(mut commands: Commands, result: Res<LastMissionResult>, save: Res<SaveSlot>) {
+    let wallet = save
+        .game
+        .as_ref()
+        .map(|g| (g.credits, crate::workshop::void_crystal(g)))
+        .unwrap_or_default();
+    let (banner, color, body) = match &result.0 {
         Some(r) => {
-            let (title, kept) = if r.outcome.success() {
-                ("Success", "Loot kept")
-            } else {
-                ("Failed", "Loot lost")
+            let (banner, color) = match r.outcome {
+                MissionOutcome::Victory => ("MISSION SUCCESS", Color::srgb(0.45, 0.95, 0.55)),
+                MissionOutcome::Defeat => ("MISSION FAILED", Color::srgb(1.0, 0.4, 0.35)),
+                MissionOutcome::Abandoned => {
+                    ("MISSION FAILED - abandoned", Color::srgb(1.0, 0.4, 0.35))
+                }
             };
-            let quit = if r.outcome == MissionOutcome::Abandoned {
-                " (mission abandoned)"
-            } else {
-                ""
-            };
-            format!(
-                "{title}{quit}\nKills: {}/{KILL_TARGET}    Wave reached: {}\nCollected: {} credits, {} Void Crystal\nSuccess bonus: {} credits, {} Void Crystal\n{kept}: {} credits, {} Void Crystal\n\nEnter Return",
-                r.kills,
-                r.wave,
-                r.collected.credits,
-                r.collected.void_crystal,
-                r.bonus.credits,
-                r.bonus.void_crystal,
-                r.credits,
-                r.resources.get(mission::VOID_CRYSTAL_ID).copied().unwrap_or(0),
-            )
+            (banner, color, result_text(r, wallet))
         }
-        None => "No result recorded\n\nEnter Return".to_string(),
+        None => ("No result", Color::WHITE, String::new()),
     };
-    panel(&mut commands, "Result", text);
+    commands
+        .spawn((
+            ScreenEntity,
+            BackgroundColor(Color::srgba(0.03, 0.05, 0.08, 0.94)),
+            BorderColor::all(color),
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(60),
+                right: px(60),
+                top: px(40),
+                flex_direction: FlexDirection::Column,
+                padding: UiRect::all(px(20)),
+                row_gap: px(14),
+                border: UiRect::all(px(2)),
+                ..default()
+            },
+        ))
+        .with_children(|p| {
+            p.spawn((Text::new(banner), text_style(40.0, color)));
+            p.spawn((
+                Text::new(body),
+                text_style(20.0, Color::srgb(0.88, 0.9, 0.94)),
+            ));
+            p.spawn((
+                Text::new("[Enter] Continue - rewards are saved and you return to the Carrier"),
+                text_style(15.0, Color::srgb(0.6, 0.7, 0.75)),
+            ));
+        });
     button(
         &mut commands,
         DemoButton::ReturnCarrier,
-        "Return to Carrier",
-        290.0,
+        "Continue",
+        470.0,
         true,
     );
 }
@@ -673,7 +787,25 @@ fn step_demo_battle(
     world.step(&[input]);
     if let Some(outcome) = mission::sim_outcome(&world) {
         if world.frame >= world.mission.end_frame + RESULT_DELAY {
-            pending_result.0 = Some(mission::result_from_sim(&world, outcome));
+            let result = mission::result_from_sim(&world, outcome);
+            if autoplay.is_some() {
+                let ship = &world.ships[0];
+                println!(
+                    "autoplay: mission {:?} kills {} time {} hull {}/{} kept {} cr {} VC",
+                    result.outcome,
+                    result.kills,
+                    mission_time(result.ticks),
+                    ship.hull.max(0),
+                    ship.stats.max_hull,
+                    result.credits,
+                    result
+                        .resources
+                        .get(mission::VOID_CRYSTAL_ID)
+                        .copied()
+                        .unwrap_or(0),
+                );
+            }
+            pending_result.0 = Some(result);
             next.set(transition(
                 GameScreen::Battle,
                 FlowEvent::FinishMission,
@@ -729,14 +861,22 @@ fn autopilot(world: &SimState) -> NetInput {
     input
 }
 
+/// Scripted scene steps for `--autoplay`. Each step fires once, when the
+/// scene has been up for its time in seconds.
 #[allow(clippy::too_many_arguments)]
 fn autoplay_flow(
+    mut commands: Commands,
     state: Res<State<GameScreen>>,
-    autoplay: Res<Autoplay>,
+    mut autoplay: ResMut<Autoplay>,
     time: Res<Time>,
     mut save: ResMut<SaveSlot>,
     mut next: ResMut<NextState<GameScreen>>,
+    mut overlay: ResMut<Overlay>,
+    mut pilot: Query<&mut Transform, With<Pilot>>,
+    mut launch: MessageWriter<MissionRequest>,
     mut exit: MessageWriter<AppExit>,
+    world: Option<Res<SimWorld>>,
+    mut pending_result: ResMut<LastMissionResult>,
     mut since: Local<f32>,
     mut last: Local<Option<GameScreen>>,
 ) {
@@ -744,53 +884,168 @@ fn autoplay_flow(
         *last = Some(*state.get());
         *since = 0.0;
     }
+    let before = *since;
     *since += time.delta_secs();
+    let at = |t: f32| before < t && *since >= t;
+    let n = autoplay.flown;
     match state.get() {
         GameScreen::Title => {
-            save.game = Some(SaveGame {
-                selected_battleship: autoplay.ship.clone(),
-                ..SaveGame::default()
-            });
-            next.set(transition(GameScreen::Title, FlowEvent::NewGame, true));
+            if at(1.0) {
+                autoplay.shoot(
+                    &mut commands,
+                    if autoplay.resume {
+                        "01-title-continue"
+                    } else {
+                        "01-title"
+                    },
+                );
+            }
+            if at(1.5) {
+                if autoplay.resume {
+                    println!("autoplay: continue ({})", save.status);
+                    next.set(transition(
+                        GameScreen::Title,
+                        FlowEvent::Continue,
+                        save.game.is_some(),
+                    ));
+                } else {
+                    save.game = Some(SaveGame {
+                        selected_battleship: autoplay.ship.clone(),
+                        ..SaveGame::default()
+                    });
+                    save.store();
+                    println!("autoplay: new game");
+                    next.set(transition(GameScreen::Title, FlowEvent::NewGame, true));
+                }
+            }
         }
-        GameScreen::Carrier if *since > 0.5 => {
-            next.set(transition(
-                GameScreen::Carrier,
-                FlowEvent::LaunchMission,
-                true,
-            ));
+        GameScreen::Carrier => {
+            let tag = if autoplay.resume { "continue" } else { "run" };
+            if at(1.0) {
+                autoplay.shoot(
+                    &mut commands,
+                    &format!("{:02}-carrier-{tag}-after-{n}", 10 + n * 10),
+                );
+                if let Some(g) = &save.game {
+                    println!(
+                        "autoplay: carrier credits {} VC {} upgrades {:?} missions {} won {} last {:?} hints {}",
+                        g.credits,
+                        crate::workshop::void_crystal(g),
+                        g.purchased_upgrades,
+                        g.mission_count,
+                        g.missions_won,
+                        g.last_result,
+                        g.tutorial_seen.len()
+                    );
+                }
+            }
+            if n >= autoplay.missions {
+                if at(2.0) {
+                    save.store();
+                    println!("autoplay: quit");
+                    exit.write(AppExit::Success);
+                }
+                return;
+            }
+            if n > 0 && at(1.5) {
+                *overlay = Overlay::Workshop {
+                    index: 0,
+                    message: String::new(),
+                };
+            }
+            if n > 0 && at(2.5) {
+                if let Some(game) = &mut save.game {
+                    let bought = AUTOPLAY_UPGRADES
+                        .iter()
+                        .find_map(|&u| crate::workshop::buy(game, u).ok().map(|l| (u, l)));
+                    let message = match bought {
+                        Some((u, level)) => format!("Bought {} {level}.", u.name()),
+                        None => "Nothing affordable.".to_string(),
+                    };
+                    println!(
+                        "autoplay: workshop: {message} credits {} VC {}",
+                        game.credits,
+                        crate::workshop::void_crystal(game)
+                    );
+                    let index = bought
+                        .and_then(|(u, _)| crate::workshop::UPGRADES.iter().position(|&x| x == u))
+                        .unwrap_or(0);
+                    *overlay = Overlay::Workshop { index, message };
+                }
+                save.store();
+            }
+            if n > 0 && at(3.5) {
+                autoplay.shoot(&mut commands, &format!("{:02}-workshop", 12 + n * 10));
+            }
+            if at(4.0) {
+                // Walk-free: put the Pilot at the launch console.
+                if let Ok(mut tf) = pilot.single_mut() {
+                    tf.translation.x = crate::carrier::LAUNCH_CONSOLE_X;
+                }
+                *overlay = Overlay::None;
+            }
+            if at(5.0) {
+                autoplay.shoot(&mut commands, &format!("{:02}-dock-console", 13 + n * 10));
+            }
+            if at(5.5) {
+                *overlay = Overlay::ShipSelect {
+                    index: crate::carrier::ship_index(&autoplay.ship),
+                };
+            }
+            if at(6.0) {
+                autoplay.shoot(
+                    &mut commands,
+                    &format!("{:02}-dock-ship-select", 14 + n * 10),
+                );
+            }
+            if at(6.5) {
+                launch.write(MissionRequest {
+                    battleship_id: autoplay.ship.clone(),
+                });
+            }
         }
-        GameScreen::Result if *since > 3.0 => {
-            exit.write(AppExit::Success);
+        GameScreen::Battle => {
+            for (i, t) in [6.0, 20.0, 35.0].into_iter().enumerate() {
+                if at(t) {
+                    autoplay.shoot(
+                        &mut commands,
+                        &format!("{:02}-battle-{}-{i}", 15 + n * 10, n + 1),
+                    );
+                }
+            }
+            if autoplay.abandon && n + 1 == autoplay.missions && at(20.5) {
+                if let Some(world) = world {
+                    let r = mission::result_from_sim(&world, MissionOutcome::Abandoned);
+                    println!(
+                        "autoplay: quit mission (abandoned) kills {} lost {} cr {} VC",
+                        r.kills, r.lost.credits, r.lost.void_crystal
+                    );
+                    pending_result.0 = Some(r);
+                }
+                next.set(transition(
+                    GameScreen::Battle,
+                    FlowEvent::FinishMission,
+                    true,
+                ));
+            }
         }
-        _ => {}
+        GameScreen::Result => {
+            if at(1.5) {
+                autoplay.shoot(
+                    &mut commands,
+                    &format!("{:02}-result-{}", 19 + n * 10, n + 1),
+                );
+            }
+            if at(3.0) {
+                autoplay.flown += 1;
+                next.set(transition(
+                    GameScreen::Result,
+                    FlowEvent::ReturnToCarrier,
+                    true,
+                ));
+            }
+        }
     }
-}
-
-fn autoplay_screenshots(
-    mut commands: Commands,
-    state: Res<State<GameScreen>>,
-    autoplay: Res<Autoplay>,
-    time: Res<Time>,
-    mut timer: Local<f32>,
-    mut seq: Local<u32>,
-) {
-    let Some(dir) = &autoplay.shots else {
-        return;
-    };
-    if !matches!(state.get(), GameScreen::Battle | GameScreen::Result) {
-        return;
-    }
-    *timer += time.delta_secs();
-    if *timer < 2.0 {
-        return;
-    }
-    *timer = 0.0;
-    *seq += 1;
-    let path = dir.join(format!("{:03}-{:?}.png", *seq, state.get()).to_lowercase());
-    commands
-        .spawn(Screenshot::primary_window())
-        .observe(save_to_disk(path));
 }
 
 #[cfg(test)]
@@ -810,6 +1065,51 @@ mod tests {
         assert_eq!(state, GameScreen::Carrier);
         state = transition(state, FlowEvent::QuitToTitle, true);
         assert_eq!(state, GameScreen::Title);
+    }
+
+    /// Flies one mission with the `--autoplay` pilot, headless.
+    fn autoplayed(ship: &str, upgrades: &[&str], seed: u64) -> (MissionResult, i32) {
+        let config = mission::MissionConfig {
+            mission_type: mission::MissionType::Elimination,
+            ship_loadouts: vec![mission::ShipLoadout {
+                player_handle: 0,
+                battleship_id: ship.to_string(),
+                upgrade_ids: upgrades.iter().map(|s| s.to_string()).collect(),
+            }],
+            seed,
+        };
+        let mut world = mission::launch_sim(&config);
+        for _ in 0..60 * 60 * 5 {
+            let input = autopilot(&world);
+            world.step(&[input]);
+            if let Some(outcome) = mission::sim_outcome(&world) {
+                return (
+                    mission::result_from_sim(&world, outcome),
+                    world.ships[0].hull,
+                );
+            }
+        }
+        panic!("mission did not end");
+    }
+
+    /// Demo Spec § Workshop upgrades: one successful mission buys about one
+    /// upgrade. Checked on the autoplay pilot's runs with both battleships.
+    #[test]
+    fn one_successful_mission_buys_an_upgrade() {
+        for ship in [mission::KITE_ID, mission::BULWARK_ID] {
+            for seed in 10_000..10_008 {
+                let (r, _) = autoplayed(ship, &[], seed);
+                assert!(r.outcome.success(), "{ship} {seed} lost");
+                let mut save = SaveGame::default();
+                save.record_mission_return(true, r.credits, &r.resources);
+                assert!(
+                    crate::workshop::can_afford(&save, crate::workshop::COSTS[0]),
+                    "{ship} {seed}: {} cr {:?}",
+                    r.credits,
+                    r.resources
+                );
+            }
+        }
     }
 
     #[test]

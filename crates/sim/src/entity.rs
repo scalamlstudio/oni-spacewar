@@ -32,6 +32,68 @@ pub struct Loadout {
     pub upgrades: Upgrades,
 }
 
+/// A ship's numbers after upgrades in human units (px, px/s, ticks), the
+/// single source for both [`ShipStats`] and UIs such as the Dock's stat
+/// preview, so what the player reads is what the battle uses.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
+pub struct ShipSheet {
+    pub hull: i32,
+    /// px/s.
+    pub speed: i32,
+    pub radius: i32,
+    pub basic_damage: i32,
+    /// Ticks between basic attacks.
+    pub basic_interval: u32,
+    pub basic_range: i32,
+    /// W damage after Weapon Tuning: Kite Scatter per bolt, Bulwark
+    /// Shockwave. (Neither Q deals damage.)
+    pub w_damage: i32,
+    pub q_cooldown: u32,
+    pub w_cooldown: u32,
+}
+
+impl ShipSheet {
+    pub fn new(loadout: Loadout) -> Self {
+        let up = loadout.upgrades;
+        let weapon = |base| upgraded(base, WEAPON_PCT_PER_LEVEL, up.weapon);
+        let (hull, speed, radius, dmg, interval, range, w_dmg, q_cd, w_cd) = match loadout.ship {
+            ShipKind::Kite => (
+                KITE_HULL,
+                KITE_SPEED,
+                KITE_RADIUS,
+                KITE_BASIC_DAMAGE,
+                KITE_BASIC_INTERVAL,
+                KITE_BASIC_RANGE,
+                SCATTER_DAMAGE,
+                AFTERBURN_COOLDOWN,
+                SCATTER_COOLDOWN,
+            ),
+            ShipKind::Bulwark => (
+                BULWARK_HULL,
+                BULWARK_SPEED,
+                BULWARK_RADIUS,
+                BULWARK_BASIC_DAMAGE,
+                BULWARK_BASIC_INTERVAL,
+                BULWARK_BASIC_RANGE,
+                SHOCKWAVE_DAMAGE,
+                BASTION_COOLDOWN,
+                SHOCKWAVE_COOLDOWN,
+            ),
+        };
+        Self {
+            hull: upgraded(hull, HULL_PCT_PER_LEVEL, up.hull),
+            speed: upgraded(speed, THRUSTER_PCT_PER_LEVEL, up.thruster),
+            radius,
+            basic_damage: weapon(dmg),
+            basic_interval: interval,
+            basic_range: range,
+            w_damage: weapon(w_dmg),
+            q_cooldown: q_cd,
+            w_cooldown: w_cd,
+        }
+    }
+}
+
 /// A ship's numbers after upgrades, in sim units.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub struct ShipStats {
@@ -50,33 +112,15 @@ pub struct ShipStats {
 
 impl ShipStats {
     pub fn new(loadout: Loadout) -> Self {
-        let up = loadout.upgrades;
-        let (hull, speed, radius, dmg, interval, range) = match loadout.ship {
-            ShipKind::Kite => (
-                KITE_HULL,
-                KITE_SPEED,
-                KITE_RADIUS,
-                KITE_BASIC_DAMAGE,
-                KITE_BASIC_INTERVAL,
-                KITE_BASIC_RANGE,
-            ),
-            ShipKind::Bulwark => (
-                BULWARK_HULL,
-                BULWARK_SPEED,
-                BULWARK_RADIUS,
-                BULWARK_BASIC_DAMAGE,
-                BULWARK_BASIC_INTERVAL,
-                BULWARK_BASIC_RANGE,
-            ),
-        };
+        let sheet = ShipSheet::new(loadout);
         Self {
-            max_hull: upgraded(hull, HULL_PCT_PER_LEVEL, up.hull),
-            speed: px_per_tick(upgraded(speed, THRUSTER_PCT_PER_LEVEL, up.thruster)),
-            radius,
-            basic_damage: upgraded(dmg, WEAPON_PCT_PER_LEVEL, up.weapon),
-            basic_interval: interval,
-            basic_range: range,
-            weapon_level: up.weapon,
+            max_hull: sheet.hull,
+            speed: px_per_tick(sheet.speed),
+            radius: sheet.radius,
+            basic_damage: sheet.basic_damage,
+            basic_interval: sheet.basic_interval,
+            basic_range: sheet.basic_range,
+            weapon_level: loadout.upgrades.weapon,
         }
     }
 
@@ -259,5 +303,67 @@ impl Loot {
             LootKind::Credits => self.credits += amount,
             LootKind::VoidCrystal => self.void_crystal += amount,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sheet(ship: ShipKind, hull: u8, weapon: u8, thruster: u8) -> ShipSheet {
+        ShipSheet::new(Loadout {
+            ship,
+            upgrades: Upgrades {
+                hull,
+                weapon,
+                thruster,
+            },
+        })
+    }
+
+    #[test]
+    fn sheet_follows_the_upgrade_table() {
+        // Demo Spec § Workshop upgrades, both levels of every upgrade.
+        let hull: Vec<_> = (0..=2)
+            .map(|l| sheet(ShipKind::Kite, l, 0, 0).hull)
+            .collect();
+        assert_eq!(hull, [60, 75, 90]);
+        let hull: Vec<_> = (0..=2)
+            .map(|l| sheet(ShipKind::Bulwark, l, 0, 0).hull)
+            .collect();
+        assert_eq!(hull, [140, 175, 210]);
+        let dmg: Vec<_> = (0..=2)
+            .map(|l| sheet(ShipKind::Kite, 0, l, 0).basic_damage)
+            .collect();
+        assert_eq!(dmg, [4, 5, 6]);
+        let dmg: Vec<_> = (0..=2)
+            .map(|l| sheet(ShipKind::Bulwark, 0, l, 0).basic_damage)
+            .collect();
+        assert_eq!(dmg, [8, 10, 12]);
+        let speed: Vec<_> = (0..=2)
+            .map(|l| sheet(ShipKind::Kite, 0, 0, l).speed)
+            .collect();
+        assert_eq!(speed, [220, 253, 286]);
+        let speed: Vec<_> = (0..=2)
+            .map(|l| sheet(ShipKind::Bulwark, 0, 0, l).speed)
+            .collect();
+        assert_eq!(speed, [140, 161, 182]);
+    }
+
+    #[test]
+    fn stats_are_the_sheet_in_sim_units() {
+        let loadout = Loadout {
+            ship: ShipKind::Bulwark,
+            upgrades: Upgrades {
+                hull: 1,
+                weapon: 2,
+                thruster: 1,
+            },
+        };
+        let (sheet, stats) = (ShipSheet::new(loadout), ShipStats::new(loadout));
+        assert_eq!(stats.max_hull, sheet.hull);
+        assert_eq!(stats.speed, px_per_tick(sheet.speed));
+        assert_eq!(stats.basic_damage, sheet.basic_damage);
+        assert_eq!(stats.skill_damage(SHOCKWAVE_DAMAGE), sheet.w_damage);
     }
 }

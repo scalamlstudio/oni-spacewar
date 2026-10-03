@@ -71,6 +71,8 @@ pub struct MissionResult {
     pub outcome: MissionOutcome,
     pub kills: u32,
     pub wave: u32,
+    /// Mission length in sim ticks (60 per second), to the end or the quit.
+    pub ticks: u32,
     /// Loot picked up during the mission.
     pub collected: Loot,
     /// Success bonus (zero unless Victory).
@@ -78,6 +80,9 @@ pub struct MissionResult {
     /// What the player keeps: credits and resources by ID.
     pub credits: u32,
     pub resources: BTreeMap<String, u32>,
+    /// Collected loot the player does not keep (its reward doesn't survive
+    /// failure).
+    pub lost: Loot,
 }
 
 pub fn ship_kind(battleship_id: &str) -> ShipKind {
@@ -171,14 +176,24 @@ pub fn result_from_sim(sim: &SimState, outcome: MissionOutcome) -> MissionResult
     if crystal > 0 {
         resources.insert(VOID_CRYSTAL_ID.to_string(), crystal);
     }
+    let ticks = if m.status == sim::MissionStatus::InProgress {
+        sim.frame
+    } else {
+        m.end_frame
+    };
     MissionResult {
         outcome,
         kills: m.kills,
         wave: m.wave,
+        ticks,
         collected: m.collected,
         bonus,
         credits,
         resources,
+        lost: Loot {
+            credits: (m.collected.credits + bonus.credits).saturating_sub(credits),
+            void_crystal: (m.collected.void_crystal + bonus.void_crystal).saturating_sub(crystal),
+        },
     }
 }
 
@@ -250,9 +265,13 @@ mod tests {
         let outcome = sim_outcome(&sim).unwrap();
         assert_eq!(outcome, MissionOutcome::Victory);
         let r = result_from_sim(&sim, outcome);
-        assert_eq!(r.credits, 170);
-        assert_eq!(r.resources.get(VOID_CRYSTAL_ID), Some(&5));
+        assert_eq!(r.credits, 120 + sim::tuning::SUCCESS_BONUS_CREDITS);
+        assert_eq!(
+            r.resources.get(VOID_CRYSTAL_ID),
+            Some(&(3 + sim::tuning::SUCCESS_BONUS_CRYSTAL))
+        );
         assert_eq!(r.kills, 20);
+        assert_eq!(r.lost, Loot::default());
     }
 
     #[test]
@@ -265,6 +284,13 @@ mod tests {
         let r = result_from_sim(&sim, MissionOutcome::Abandoned);
         assert_eq!((r.credits, r.resources.len()), (0, 0));
         assert_eq!(r.collected.credits, 60);
+        assert_eq!(
+            r.lost,
+            Loot {
+                credits: 60,
+                void_crystal: 2
+            }
+        );
         sim.mission.status = MissionStatus::Failed;
         let r = result_from_sim(&sim, sim_outcome(&sim).unwrap());
         assert_eq!(r.outcome, MissionOutcome::Defeat);

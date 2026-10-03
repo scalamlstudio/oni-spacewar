@@ -22,7 +22,7 @@ crates/
   sim/                package `oni-sim`, lib `sim` — deterministic mission simulation, NO Bevy
     src/lib.rs          crate docs + determinism rules
     src/state.rs        SimState (all rolled-back state), step() and its phases
-    src/entity.rs       plain-data entities: Ship (+ ShipKind, Loadout, ShipStats), Enemy, Projectile, Pickup
+    src/entity.rs       plain-data entities: Ship (+ ShipKind, Loadout, ShipSheet, ShipStats), Enemy, Projectile, Pickup
     src/mission.rs      Elimination bookkeeping: wave schedule, kills, loot totals, MissionStatus/MissionOutcome
     src/tuning.rs       Demo Spec numbers (design/READINESS.md) + unit conversion (px/s -> sub-px/tick)
     src/collision.rs    integer circle overlap + separation
@@ -36,9 +36,11 @@ crates/
     src/bin/content_manifest_diff.rs   compare manifests and list packs/assets a patch needs
   client/             package `oni-client`, bin `oni-spacewar` — everything else
     src/main.rs         CLI (synctest / p2p modes), app + GGRS session setup, ICE (STUN/TURN) config
-    src/flow.rs         first-playable scene state machine and placeholder UI: Title → Carrier → Battle → Result
-    src/carrier.rs      Carrier scene: walkable one-deck cross-section, crew dialogue, Dock briefing + ship select
-    src/save.rs         versioned JSON save data in the OS data directory (override: ONI_SAVE_DIR)
+    src/flow.rs         first-playable scene state machine, Title / Result UI, --autoplay QA driver: Title → Carrier → Battle → Result
+    src/carrier.rs      Carrier scene: walkable one-deck cross-section, crew dialogue, Dock briefing + ship select, Workshop shop panel
+    src/workshop.rs     Workshop upgrade rules: costs, levels, buy() writing the purchase IDs the battle reads
+    src/hints.rs        one-time tutorial hints: triggers, display queue, seen IDs in the save
+    src/save.rs         versioned JSON save data in the OS data directory (override: ONI_SAVE_DIR) + migration
     src/mission.rs      typed client mission config/result handoff into `sim::SimState`; reward rules (survives_failure)
     src/rollback.rs     SimWorld resource, rollback/checksum registration, GgrsSchedule
     src/input.rs        mouse + keyboard / bot → NetInput (ReadInputs)
@@ -216,24 +218,55 @@ detected pose count differs from the provided expression count.
   (`core.carrier.*`, `core.ships.*.berth`) so the art import swaps sprites
   without changing layout. Portraits are decoded from the manifest's processed
   files by stable ID (`core.portraits.<crew>.<expression>`). Pure helpers
-  (`walk`, `nearest_hotspot`, `crew_lines`) hold the rules and are unit
-  tested. The Dock's Launch writes a `mission::MissionRequest` message; the
-  flow stores the picked battleship in the save and enters Battle, where
-  `config_from_save` builds the `MissionConfig`.
+  (`walk`, `nearest_hotspot`, `crew_lines`, `ship_card`, `upgrade_preview`)
+  hold the rules and are unit tested. The Dock's Launch writes a
+  `mission::MissionRequest` message; the flow stores the picked battleship in
+  the save and enters Battle, where `config_from_save` builds the
+  `MissionConfig`.
+- **Ship numbers have one source.** `sim::ShipSheet::new(loadout)` gives a
+  battleship's stats after upgrades in human units; `ShipStats` (what the
+  battle uses) is derived from it, and the Dock card and Workshop preview
+  read the same sheet with the save's upgrade levels, so what the player
+  reads is what the battle does.
+- **Workshop** (`workshop.rs` rules, `carrier.rs` panel): buying spends the
+  cost, inserts `<upgrade>_<level>` into `SaveGame::purchased_upgrades` and
+  saves. That ID list is the only thing the battle sees: `config_from_save`
+  copies it into the `MissionConfig`, `mission::upgrade_levels` maps it to
+  `sim::Upgrades` in the `Loadout`, so upgrades change the sim only through
+  its deterministic launch input (identical on every peer).
+- **Result scene** (`flow.rs`): banner, kills, mission time (sim ticks),
+  collected / bonus / kept / lost loot and the wallet before → after.
+  Continue goes to the Carrier, whose `enter_carrier` books the result into
+  the save (`record_mission_return`) and stores it.
+- **Tutorial hints** (`hints.rs`): `Hints::trigger(save, hint)` queues a hint
+  the first time and writes its stable ID into `SaveGame::tutorial_seen`
+  (saved immediately). Carrier triggers live in `carrier.rs`, battle triggers
+  read `SimWorld` in `Update` (never in the rollback schedule). One box shows
+  one hint for 6 s; queued hints from a scene the player has left are
+  dropped.
 - Battle visuals are drawn through stable content IDs
   (`core.battle.ship.kite`, `core.battle.enemy.void_swarmer`,
   `core.battle.loot.void_crystal`, `core.battle.fx.bolt`, ... in
   `render::ids`). Each maps to a placeholder gizmo shape today; the art
   import ships assets under the same IDs and swaps the shape for a sprite.
-- `oni-spacewar --autoplay [--ship kite|bulwark] [--shots DIR]` is a QA mode
-  for the demo flow: it starts a new game, flies one battle with a scripted
-  pilot (input only, like a player), optionally saves window screenshots
-  every 2 s, and quits a few seconds into the Result scene. Use a scratch
-  `ONI_SAVE_DIR`.
-- Save data is client-only JSON with an explicit schema version. It stores
-  credits, resources, purchased upgrades, selected battleship, tutorial flags
-  and mission count, and is never read by `sim`; the client converts it into a
-  deterministic mission config before launch.
+- `oni-spacewar --autoplay [--ship kite|bulwark] [--missions N] [--continue]
+  [--abandon] [--shots DIR]` is a QA mode for the whole demo loop: New Game
+  (or Continue the existing save), fly N battles (default 1) with a scripted
+  pilot (input only, like a player), buy the first affordable Workshop
+  upgrade between them, return to the Carrier after the last one and quit
+  (saving). `--abandon` quits the last mission from the pause menu 20 s in;
+  `--shots` saves a screenshot of every scene. Use a scratch `ONI_SAVE_DIR`.
+  The acceptance loop is `--missions 2` followed by `--continue --missions 0`.
+  On macOS, wrap it in `caffeinate -d`: if the display sleeps the window stops
+  presenting and screenshots come out black.
+- Save data is client-only JSON with an explicit schema version (now 2). It
+  stores credits, resources, purchased upgrades, selected battleship, tutorial
+  hints seen, missions played and won, and the last result, and is never read
+  by `sim`; the client converts it into a deterministic mission config before
+  launch. Older versions load through `save::migrate` (every field added since
+  v1 has a serde default); newer versions are refused. Saved on New Game,
+  every return to the Carrier, every Workshop purchase, Launch, the first
+  showing of each hint, and Quit.
 
 ### Simulation structure
 
@@ -264,7 +297,9 @@ follow:
 - **Numbers live in `tuning.rs`** in human units (px, px/s, seconds) and are
   converted at use (`px_per_tick`, `ticks`). They come from the Demo Spec;
   values the spec doesn't give (bolt speed, dash duration, pickup drift
-  speed, ...) are marked "engine default" there.
+  speed, ...) are marked "engine default" there. Deliberate departures from
+  the spec are commented where they're set (the mission success bonus is
+  100 cr + 3 VC instead of 50 + 2 so one win buys an upgrade; TAKOAI-42).
 - **Input** (`NetInput`) is a button bitmask (move, Q/W/E/R) plus the cursor in
   world pixels: click-to-move sets the ship's target, skills aim at the cursor.
   The basic attack needs no input.
