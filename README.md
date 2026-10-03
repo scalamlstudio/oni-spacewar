@@ -4,15 +4,22 @@ A Rust/Bevy game: manage a modular carrier ship and its Oni crew
 (Oxygen Not Included-style base building), then take a battleship out on
 Warframe-style missions with League of Legends-style click-to-move combat.
 
-In the design phase — the code is a deterministic rollback foundation with
-placeholder gameplay. It is a Cargo workspace under [`crates/`](crates/),
-separate from the design docs — see [`ARCHITECTURE.md`](ARCHITECTURE.md).
+The First Playable Demo is in: Title → Carrier → Dock → Battle (Elimination)
+→ Result → Carrier → Workshop upgrades → go again. It is a Cargo workspace
+under [`crates/`](crates/), separate from the design docs — see
+[`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ### Run
 
- - `cargo run --release -- synctest --players 1` — placeholder gameplay on the
-   foundation: left-click to move (hold to steer), Q to fire toward the cursor
- - `cargo test` — simulation tests
+ - `cargo run --release` — the demo (Title screen → New Game / Continue)
+   - Carrier: A / D walk, E talk / use (Bridge briefing, Dock, Workshop)
+   - Battle: left-click to move, auto-fire, Q / W skills, Esc pause;
+     destroy 20 enemies and fly over loot to collect it
+   - Save: `~/Library/Application Support/oni-spacewar/save.json` (macOS),
+     `%APPDATA%\oni-spacewar\save.json` (Windows); `ONI_SAVE_DIR` overrides
+ - `cargo run --release -- --autoplay --missions 2` — scripted demo run (QA)
+ - `cargo run --release -- synctest --players 1` — rollback sandbox
+ - `cargo test` — tests
 
 ### Design
 
