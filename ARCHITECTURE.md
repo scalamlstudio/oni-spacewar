@@ -36,6 +36,7 @@ crates/
   client/             package `oni-client`, bin `oni-spacewar` — everything else
     src/main.rs         CLI (synctest / p2p modes), app + GGRS session setup, ICE (STUN/TURN) config
     src/flow.rs         first-playable scene state machine and placeholder UI: Title → Carrier → Battle → Result
+    src/carrier.rs      Carrier scene: walkable one-deck cross-section, crew dialogue, Dock briefing + ship select
     src/save.rs         versioned JSON save data in the OS data directory (override: ONI_SAVE_DIR)
     src/mission.rs      typed client mission config/result handoff into `sim::SimState`
     src/rollback.rs     SimWorld resource, rollback/checksum registration, GgrsSchedule
@@ -208,6 +209,16 @@ detected pose count differs from the provided expression count.
   when that list currently has one entry. The demo battle path steps the same
   `SimWorld` resource at a fixed rate without opening a network session; the
   `synctest` and `p2p` modes still use `RollbackPlugin` and GGRS.
+- The Carrier (`carrier.rs`) is plain Bevy in `Update`, gated on
+  `GameScreen::Carrier`; it owns no sim state. Rooms, crew, props and the
+  Pilot are placeholder sprites, each tagged with a stable `ContentId`
+  (`core.carrier.*`, `core.ships.*.berth`) so the art import swaps sprites
+  without changing layout. Portraits are decoded from the manifest's processed
+  files by stable ID (`core.portraits.<crew>.<expression>`). Pure helpers
+  (`walk`, `nearest_hotspot`, `crew_lines`) hold the rules and are unit
+  tested. The Dock's Launch writes a `mission::MissionRequest` message; the
+  flow stores the picked battleship in the save and enters Battle, where
+  `config_from_save` builds the `MissionConfig`.
 - Save data is client-only JSON with an explicit schema version. It stores
   credits, resources, purchased upgrades, selected battleship, tutorial flags
   and mission count, and is never read by `sim`; the client converts it into a
@@ -321,7 +332,8 @@ every peer catches it. It takes real time, so CI doesn't run it.
 
 ### Frame pacing
 
-Windowed runs append a frame-pacing section to the run report (`pacing.rs`).
+Windowed synctest/p2p runs append a frame-pacing section to the run report
+(`pacing.rs`; the demo flow has no run report and skips it).
 Bevy renders pipelined (the main app updates frame N while the render thread
 draws N-1), so each frame over 20 ms is attributed to the main update, render
 prepare, swapchain acquire (`get_current_texture`, which blocks on vsync and

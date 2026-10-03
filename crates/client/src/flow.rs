@@ -5,9 +5,10 @@ use bevy::window::PrimaryWindow;
 use sim::input::{INPUT_MOVE, INPUT_SKILL_Q};
 use sim::NetInput;
 
-use crate::mission::{self, MissionOutcome, MissionResult};
+use crate::carrier::CarrierArrival;
+use crate::mission::{self, MissionOutcome, MissionRequest, MissionResult};
 use crate::rollback::SimWorld;
-use crate::save::{self, SaveError, SaveGame};
+use crate::save::{self, LastResult, SaveError, SaveGame};
 
 #[derive(States, Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub enum GameScreen {
@@ -48,6 +49,7 @@ impl Plugin for FlowPlugin {
             .insert_resource(SaveSlot::load())
             .init_resource::<PauseMenu>()
             .init_resource::<LastMissionResult>()
+            .add_message::<MissionRequest>()
             .add_systems(OnEnter(GameScreen::Title), enter_title)
             .add_systems(OnEnter(GameScreen::Carrier), enter_carrier)
             .add_systems(OnEnter(GameScreen::Battle), enter_battle)
@@ -76,6 +78,7 @@ impl Plugin for FlowPlugin {
                     toggle_pause_menu,
                     apply_pause_actions,
                     sync_pause_menu,
+                    apply_mission_request,
                 ),
             )
             .add_systems(FixedUpdate, step_demo_battle);
@@ -83,9 +86,9 @@ impl Plugin for FlowPlugin {
 }
 
 #[derive(Resource)]
-struct SaveSlot {
+pub(crate) struct SaveSlot {
     path: std::path::PathBuf,
-    game: Option<SaveGame>,
+    pub(crate) game: Option<SaveGame>,
     status: String,
 }
 
@@ -122,16 +125,16 @@ impl SaveSlot {
 }
 
 #[derive(Resource, Default)]
-struct PauseMenu {
-    open: bool,
+pub(crate) struct PauseMenu {
+    pub(crate) open: bool,
     dirty: bool,
 }
 
 #[derive(Resource, Default)]
-struct LastMissionResult(Option<MissionResult>);
+pub(crate) struct LastMissionResult(Option<MissionResult>);
 
 #[derive(Component)]
-struct ScreenEntity;
+pub(crate) struct ScreenEntity;
 
 #[derive(Component)]
 struct PauseEntity;
@@ -141,9 +144,6 @@ enum DemoButton {
     NewGame,
     Continue,
     QuitGame,
-    LaunchMission,
-    BuyUpgrade,
-    Save,
     Victory,
     Defeat,
     ReturnCarrier,
@@ -234,44 +234,46 @@ fn enter_title(mut commands: Commands, save: Res<SaveSlot>) {
     button(&mut commands, DemoButton::QuitGame, "Quit", 274.0, true);
 }
 
-fn enter_carrier(
-    mut commands: Commands,
+/// Books the returning mission into the save. The deck itself is spawned by
+/// `carrier::CarrierPlugin` after this runs.
+pub(crate) fn enter_carrier(
     mut save: ResMut<SaveSlot>,
     mut pending_result: ResMut<LastMissionResult>,
+    mut arrival: ResMut<CarrierArrival>,
 ) {
     if let Some(result) = pending_result.0.take() {
+        arrival.from_mission = true;
         if let Some(game) = &mut save.game {
             game.record_mission_return(result.credits, &result.resources);
+            game.last_result = match result.outcome {
+                MissionOutcome::Victory => LastResult::Success,
+                MissionOutcome::Defeat | MissionOutcome::Abandoned => LastResult::Failed,
+            };
             save.store();
         }
     }
-    let status = save.status.clone();
-    let game = save.game.get_or_insert_with(SaveGame::default);
-    let body = format!(
-        "Carrier placeholder\nCredits: {}\nSalvage: {}\nShip: {}\nMissions completed: {}\nUpgrades: {}\n{}\n\nL Launch    U Buy upgrade    S Save    Esc Pause",
-        game.credits,
-        game.resources.get("salvage").copied().unwrap_or(0),
-        game.selected_battleship,
-        game.mission_count,
-        game.purchased_upgrades.len(),
-        status,
-    );
-    panel(&mut commands, "Carrier", body);
-    button(
-        &mut commands,
-        DemoButton::LaunchMission,
-        "Launch Mission",
-        260.0,
-        true,
-    );
-    button(
-        &mut commands,
-        DemoButton::BuyUpgrade,
-        "Buy Upgrade",
-        312.0,
-        true,
-    );
-    button(&mut commands, DemoButton::Save, "Save", 364.0, true);
+    save.game.get_or_insert_with(SaveGame::default);
+}
+
+/// Launch from the Dock: remember the picked battleship and enter Battle.
+fn apply_mission_request(
+    mut requests: MessageReader<MissionRequest>,
+    state: Res<State<GameScreen>>,
+    mut save: ResMut<SaveSlot>,
+    mut next: ResMut<NextState<GameScreen>>,
+) {
+    let Some(request) = requests.read().last() else {
+        return;
+    };
+    if let Some(game) = &mut save.game {
+        game.selected_battleship = request.battleship_id.clone();
+    }
+    save.store();
+    next.set(transition(
+        *state.get(),
+        FlowEvent::LaunchMission,
+        save.game.is_some(),
+    ));
 }
 
 fn enter_battle(mut commands: Commands, save: Res<SaveSlot>) {
@@ -343,23 +345,10 @@ fn button_actions(
             continue;
         }
         match action {
-            DemoButton::Save => {
-                save.store();
-                next.set(GameScreen::Carrier);
-                continue;
-            }
             DemoButton::NewGame => {
                 save.game = Some(SaveGame::default());
                 save.store();
                 next.set(transition(*state.get(), FlowEvent::NewGame, true));
-                continue;
-            }
-            DemoButton::BuyUpgrade => {
-                if let Some(game) = &mut save.game {
-                    game.buy_placeholder_upgrade();
-                    save.store();
-                }
-                next.set(GameScreen::Carrier);
                 continue;
             }
             DemoButton::QuitGame
@@ -398,31 +387,15 @@ fn keyboard_actions(
         GameScreen::Title if keys.just_pressed(KeyCode::KeyN) => Some(DemoButton::NewGame),
         GameScreen::Title if keys.just_pressed(KeyCode::KeyC) => Some(DemoButton::Continue),
         GameScreen::Title if keys.just_pressed(KeyCode::KeyQ) => Some(DemoButton::QuitGame),
-        GameScreen::Carrier if keys.just_pressed(KeyCode::KeyL) => Some(DemoButton::LaunchMission),
-        GameScreen::Carrier if keys.just_pressed(KeyCode::KeyU) => Some(DemoButton::BuyUpgrade),
-        GameScreen::Carrier if keys.just_pressed(KeyCode::KeyS) => Some(DemoButton::Save),
         GameScreen::Battle if keys.just_pressed(KeyCode::KeyV) => Some(DemoButton::Victory),
         GameScreen::Battle if keys.just_pressed(KeyCode::KeyF) => Some(DemoButton::Defeat),
         GameScreen::Result if keys.just_pressed(KeyCode::Enter) => Some(DemoButton::ReturnCarrier),
         _ => None,
     };
-    if matches!(action, Some(DemoButton::Save)) {
-        save.store();
-        next.set(GameScreen::Carrier);
-        return;
-    }
     if matches!(action, Some(DemoButton::NewGame)) {
         save.game = Some(SaveGame::default());
         save.store();
         next.set(transition(*state.get(), FlowEvent::NewGame, true));
-        return;
-    }
-    if matches!(action, Some(DemoButton::BuyUpgrade)) {
-        if let Some(game) = &mut save.game {
-            game.buy_placeholder_upgrade();
-            save.store();
-        }
-        next.set(GameScreen::Carrier);
         return;
     }
     if let Some(action) = action {
@@ -458,9 +431,6 @@ fn handle_action(
         DemoButton::QuitGame => {
             exit.write(AppExit::Success);
         }
-        DemoButton::LaunchMission => {
-            next.set(transition(*state, FlowEvent::LaunchMission, has_save));
-        }
         DemoButton::Victory | DemoButton::Defeat => {
             if let Some(world) = world {
                 let outcome = if matches!(action, DemoButton::Victory) {
@@ -484,7 +454,7 @@ fn handle_action(
             pause.dirty = true;
             next.set(transition(*state, FlowEvent::QuitToTitle, has_save));
         }
-        DemoButton::Continue | DemoButton::BuyUpgrade | DemoButton::Save => {}
+        DemoButton::Continue => {}
     }
 }
 

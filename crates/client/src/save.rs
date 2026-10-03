@@ -21,6 +21,18 @@ pub struct SaveGame {
     pub selected_battleship: String,
     pub tutorial_seen: BTreeSet<String>,
     pub mission_count: u32,
+    /// Outcome of the most recent mission; drives the crew's reaction lines.
+    /// Added after v1 shipped, so older v1 saves load it as `None`.
+    #[serde(default)]
+    pub last_result: LastResult,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LastResult {
+    #[default]
+    None,
+    Success,
+    Failed,
 }
 
 impl Default for SaveGame {
@@ -32,9 +44,10 @@ impl Default for SaveGame {
             credits: 100,
             resources,
             purchased_upgrades: BTreeSet::new(),
-            selected_battleship: "starter-frigate".to_string(),
+            selected_battleship: "kite".to_string(),
             tutorial_seen: BTreeSet::new(),
             mission_count: 0,
+            last_result: LastResult::None,
         }
     }
 }
@@ -51,17 +64,6 @@ impl SaveGame {
                 .saturating_add(*amount);
         }
         self.mission_count = self.mission_count.saturating_add(1);
-    }
-
-    pub fn buy_placeholder_upgrade(&mut self) -> bool {
-        const COST: u32 = 50;
-        if self.credits < COST || self.purchased_upgrades.contains("demo-hull-plating") {
-            return false;
-        }
-        self.credits -= COST;
-        self.purchased_upgrades
-            .insert("demo-hull-plating".to_string());
-        true
     }
 }
 
@@ -173,6 +175,7 @@ mod tests {
         let path = temp_file("round-trip");
         let mut save = SaveGame {
             credits: 275,
+            last_result: LastResult::Failed,
             ..Default::default()
         };
         save.resources.insert("alloy".to_string(), 4);
@@ -180,6 +183,14 @@ mod tests {
         store(&path, &save).unwrap();
         assert_eq!(load(&path).unwrap(), save);
         let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn v1_save_without_last_result_loads() {
+        let mut json = serde_json::to_value(SaveGame::default()).unwrap();
+        json.as_object_mut().unwrap().remove("last_result");
+        let save: SaveGame = serde_json::from_value(json).unwrap();
+        assert_eq!(save.last_result, LastResult::None);
     }
 
     #[test]
