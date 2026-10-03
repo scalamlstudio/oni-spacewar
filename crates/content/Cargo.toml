@@ -19,6 +19,10 @@ path = "src/bin/content_manifest_diff.rs"
 name = "sprite-sheet-cutouts"
 path = "src/bin/sprite_sheet_cutouts.rs"
 
+[[bin]]
+name = "demo-art-import"
+path = "src/bin/demo_art_import.rs"
+
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true

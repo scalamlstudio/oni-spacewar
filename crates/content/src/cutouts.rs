@@ -152,6 +152,46 @@ pub fn make_contact_sheet(cutouts: &[(String, RgbaImage)], columns: u32) -> Rgba
     out
 }
 
+/// Cut one sprite out of a flat-background image: key the border-connected
+/// background to alpha, then crop to every foreground region (body plus
+/// detached bits such as sparks or a trail) with `padding` px around it.
+/// Images that already have a transparent background are only cropped.
+pub fn extract_sprite(image: &RgbaImage, padding: u32) -> Result<RgbaImage, String> {
+    let key = AlphaKey {
+        bg: sample_background(image),
+        zero_alpha_distance: 10,
+        full_alpha_distance: 44,
+    };
+    let keyed = key_background(image, key);
+    let mask = foreground_mask(&keyed);
+    let regions = connected_regions(&mask, image.width(), image.height());
+    let bbox = regions
+        .iter()
+        .filter(|region| region.pixels.len() >= 40)
+        .map(|region| region.bbox)
+        .reduce(BBox::union)
+        .ok_or("no foreground found")?;
+    let x0 = bbox.min_x.saturating_sub(padding);
+    let y0 = bbox.min_y.saturating_sub(padding);
+    let x1 = (bbox.max_x + padding).min(image.width() - 1);
+    let y1 = (bbox.max_y + padding).min(image.height() - 1);
+    Ok(image::imageops::crop_imm(&keyed, x0, y0, x1 - x0 + 1, y1 - y0 + 1).to_image())
+}
+
+/// Scale `image` down (never up) so it fits inside `max_w` x `max_h`,
+/// keeping its aspect ratio.
+pub fn fit_within(image: &RgbaImage, max_w: u32, max_h: u32) -> RgbaImage {
+    let scale = (max_w as f32 / image.width() as f32)
+        .min(max_h as f32 / image.height() as f32)
+        .min(1.0);
+    if scale >= 1.0 {
+        return image.clone();
+    }
+    let w = ((image.width() as f32 * scale).round() as u32).max(1);
+    let h = ((image.height() as f32 * scale).round() as u32).max(1);
+    image::imageops::resize(image, w, h, FilterType::Lanczos3)
+}
+
 fn sample_background(image: &RgbaImage) -> [u8; 3] {
     let mut totals = [0u64; 3];
     let mut count = 0u64;
@@ -175,7 +215,29 @@ fn sample_background(image: &RgbaImage) -> [u8; 3] {
     ]
 }
 
+/// Whether the art already ships with a transparent background (almost every
+/// border pixel fully transparent), so colour keying must be skipped.
+fn has_transparent_border(image: &RgbaImage) -> bool {
+    let (w, h) = (image.width(), image.height());
+    let mut total = 0u64;
+    let mut clear = 0u64;
+    for y in 0..h {
+        for x in 0..w {
+            if x == 0 || y == 0 || x + 1 == w || y + 1 == h {
+                total += 1;
+                if image.get_pixel(x, y).0[3] == 0 {
+                    clear += 1;
+                }
+            }
+        }
+    }
+    clear * 10 >= total * 9
+}
+
 fn key_background(image: &RgbaImage, key: AlphaKey) -> RgbaImage {
+    if has_transparent_border(image) {
+        return image.clone();
+    }
     let mut out = image.clone();
     let width = image.width();
     let height = image.height();
@@ -674,6 +736,37 @@ mod tests {
         assert_eq!(cutouts[1].expression, "serious");
         assert!(has_color(&cutouts[0].image, [216, 48, 48]));
         assert!(has_color(&cutouts[1].image, [48, 160, 72]));
+    }
+
+    #[test]
+    fn single_sprite_is_keyed_and_cropped_with_its_detached_bits() {
+        let bg = Rgba([16, 20, 32, 255]);
+        let mut image = RgbaImage::from_pixel(120, 80, bg);
+        rect(&mut image, 40, 20, 70, 50, [230, 140, 40, 255]);
+        rect(&mut image, 80, 30, 86, 36, [200, 60, 220, 255]);
+        let sprite = extract_sprite(&image, 2).unwrap();
+        assert_eq!((sprite.width(), sprite.height()), (51, 35));
+        assert_eq!(sprite.get_pixel(0, 0).0[3], 0);
+        assert!(has_color(&sprite, [200, 60, 220]));
+    }
+
+    #[test]
+    fn transparent_art_keeps_its_alpha() {
+        let mut image = RgbaImage::new(60, 40);
+        rect(&mut image, 10, 10, 30, 30, [255, 255, 255, 255]);
+        rect(&mut image, 14, 14, 16, 16, [0, 0, 0, 0]);
+        let sprite = extract_sprite(&image, 0).unwrap();
+        assert_eq!((sprite.width(), sprite.height()), (21, 21));
+        assert_eq!(sprite.get_pixel(5, 5).0[3], 0);
+        assert_eq!(sprite.get_pixel(0, 0).0, [255, 255, 255, 255]);
+    }
+
+    #[test]
+    fn fit_within_only_shrinks() {
+        let image = RgbaImage::new(400, 200);
+        let small = fit_within(&image, 100, 100);
+        assert_eq!((small.width(), small.height()), (100, 50));
+        assert_eq!(fit_within(&small, 500, 500).dimensions(), (100, 50));
     }
 
     fn rect(image: &mut RgbaImage, x0: u32, y0: u32, x1: u32, y1: u32, color: [u8; 4]) {

@@ -31,7 +31,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         gameplay_affecting: false,
     });
 
-    for portrait in discover_portraits(&assets_root.join("source/core/portraits"))? {
+    for portrait in discover_images(&assets_root.join("source/core"))? {
         let source_path = assets_root.join(&portrait.source);
         let bytes = fs::read(&source_path)?;
         write_bytes(&assets_root.join(&portrait.processed), &bytes)?;
@@ -56,7 +56,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         sim_version: env!("CARGO_PKG_VERSION").into(),
         packs: vec![ContentPack {
             id: "core".into(),
-            version: "0.1.0".into(),
+            version: "0.2.0".into(),
             gameplay_affecting: false,
             content_hash: pack_hash(&assets),
             assets,
@@ -74,41 +74,44 @@ struct SourceAsset {
     compressed: String,
 }
 
-fn discover_portraits(root: &Path) -> io::Result<Vec<SourceAsset>> {
+/// Every PNG under `source/core/`, with its stable ID taken from its path:
+/// `portraits/gunner/happy.png` -> `core.portraits.gunner.happy`.
+fn discover_images(root: &Path) -> io::Result<Vec<SourceAsset>> {
     let mut files = Vec::new();
-    if !root.exists() {
-        return Ok(files);
-    }
-    for character in fs::read_dir(root)? {
-        let character = character?;
-        if !character.file_type()?.is_dir() {
-            continue;
-        }
-        let character_name = character.file_name().to_string_lossy().to_string();
-        for expression in fs::read_dir(character.path())? {
-            let expression = expression?;
-            if !expression.file_type()?.is_file() {
-                continue;
-            }
-            let path = expression.path();
-            if path.extension().and_then(|extension| extension.to_str()) != Some("png") {
-                continue;
-            }
-            let expression_name = path
-                .file_stem()
-                .and_then(|stem| stem.to_str())
-                .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "bad filename"))?;
-            let relative = format!("portraits/{character_name}/{expression_name}.png");
-            files.push(SourceAsset {
-                id: format!("core.portraits.{character_name}.{expression_name}"),
-                source: format!("source/core/{relative}"),
-                processed: format!("packs/core/processed/{relative}"),
-                compressed: format!("packs/core/bundles/{relative}.zst"),
-            });
-        }
-    }
+    collect_pngs(root, root, &mut files)?;
     files.sort_by(|a, b| a.id.cmp(&b.id));
     Ok(files)
+}
+
+fn collect_pngs(root: &Path, dir: &Path, files: &mut Vec<SourceAsset>) -> io::Result<()> {
+    if !dir.exists() {
+        return Ok(());
+    }
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if entry.file_type()?.is_dir() {
+            collect_pngs(root, &path, files)?;
+            continue;
+        }
+        if path.extension().and_then(|extension| extension.to_str()) != Some("png") {
+            continue;
+        }
+        let relative = path
+            .strip_prefix(root)
+            .ok()
+            .and_then(|p| p.to_str())
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "bad filename"))?
+            .replace('\\', "/");
+        let stem = relative.trim_end_matches(".png");
+        files.push(SourceAsset {
+            id: format!("core.{}", stem.replace('/', ".")),
+            source: format!("source/core/{relative}"),
+            processed: format!("packs/core/processed/{relative}"),
+            compressed: format!("packs/core/bundles/{relative}.zst"),
+        });
+    }
+    Ok(())
 }
 
 fn write_bytes(path: &Path, bytes: &[u8]) -> io::Result<()> {

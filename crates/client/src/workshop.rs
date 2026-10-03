@@ -67,6 +67,15 @@ impl Upgrade {
         }
     }
 
+    /// Workshop row icon (`assets/source/core/ui/icon/`).
+    pub fn icon_id(self) -> &'static str {
+        match self {
+            Upgrade::HullPlating => "core.ui.icon.hull_plating",
+            Upgrade::WeaponTuning => "core.ui.icon.weapon_tuning",
+            Upgrade::ThrusterTuning => "core.ui.icon.thruster_tuning",
+        }
+    }
+
     pub fn purchase_id(self, level: u8) -> String {
         format!("{}_{level}", self.id_prefix())
     }

@@ -9,6 +9,7 @@
 //! gameplay is the Elimination mission in `sim`; synctest / p2p runs give the
 //! players alternating Kite / Bulwark loadouts so both ships are exercised.
 
+mod art;
 mod carrier;
 mod flow;
 mod hints;
