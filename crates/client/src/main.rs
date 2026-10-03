@@ -5,8 +5,9 @@
 //!   synctest  GGRS SyncTestSession: every frame is re-simulated and checksummed.
 //!   p2p       Up to 4 peers connected through a matchbox signaling server.
 //!
-//! Gameplay is a placeholder that exercises the foundation (see `sim`):
-//! click-to-move battleships, a Q shot, and waves of chasing enemies.
+//! With no mode, runs the single-player first-playable flow (`flow`). The
+//! gameplay is the Elimination mission in `sim`; synctest / p2p runs give the
+//! players alternating Kite / Bulwark loadouts so both ships are exercised.
 
 mod carrier;
 mod flow;
@@ -31,7 +32,7 @@ use bevy_ggrs::prelude::*;
 use content::ContentManifest;
 use ggrs::DesyncDetection;
 use matchbox_socket::{RtcIceServerConfig, WebRtcSocket};
-use sim::{SimParams, SimState, MAX_PLAYERS};
+use sim::{Loadout, ShipKind, SimState, MAX_PLAYERS};
 
 use input::{BotBrains, KeyboardPlayer};
 use net::{EmulatedGgrsSocket, NetEmuConfig};
@@ -40,7 +41,7 @@ use stats::{RunLimit, Stats, StatsPlugin};
 
 const USAGE: &str = "\
 usage:
-  oni-spacewar
+  oni-spacewar [--autoplay [--ship kite|bulwark] [--shots DIR]]
   oni-spacewar synctest [--minutes M] [--check-distance D] [--headless] [--bot]
   oni-spacewar p2p [--room ws://127.0.0.1:3536/oni?next=2]
                    [--delay-ms 50] [--jitter-ms 0] [--loss 0.0] [--input-delay 2]
@@ -70,6 +71,10 @@ struct Args {
     emu: NetEmuConfig,
     /// `--ice` URLs; empty = matchbox's default STUN servers.
     ice: Vec<String>,
+    /// Demo QA: fly one battle with a scripted pilot, then quit.
+    autoplay: bool,
+    ship: String,
+    shots: Option<std::path::PathBuf>,
 }
 
 fn usage_exit(msg: &str) -> ! {
@@ -78,8 +83,12 @@ fn usage_exit(msg: &str) -> ! {
 }
 
 fn parse_args() -> Args {
-    let mut it = std::env::args().skip(1);
-    let mode = it.next().unwrap_or_else(|| "demo".to_string());
+    let mut it = std::env::args().skip(1).peekable();
+    // No mode (or only flags) = the demo flow.
+    let mode = match it.peek() {
+        Some(m) if !m.starts_with("--") => it.next().unwrap(),
+        _ => "demo".to_string(),
+    };
     let mut a = Args {
         mode,
         headless: false,
@@ -97,7 +106,11 @@ fn parse_args() -> Args {
         inject_desync: false,
         emu: NetEmuConfig::default(),
         ice: Vec::new(),
+        autoplay: false,
+        ship: mission::KITE_ID.to_string(),
+        shots: None,
     };
+
     fn val<T: std::str::FromStr>(name: &str, it: &mut dyn Iterator<Item = String>) -> T {
         let raw = it
             .next()
@@ -125,6 +138,9 @@ fn parse_args() -> Args {
             "--jitter-ms" => a.emu.jitter = Duration::from_millis(val(&flag, it)),
             "--loss" => a.emu.loss = val(&flag, it),
             "--ice" => a.ice.push(val(&flag, it)),
+            "--autoplay" => a.autoplay = true,
+            "--ship" => a.ship = val(&flag, it),
+            "--shots" => a.shots = Some(val(&flag, it)),
             _ => usage_exit(&format!("unknown flag {flag}\n")),
         }
     }
@@ -213,6 +229,15 @@ fn main() {
             .insert_resource(ContentStatus(content_status))
             .init_resource::<Stats>()
             .add_plugins((flow::FlowPlugin, carrier::CarrierPlugin));
+        if args.autoplay {
+            if let Some(dir) = &args.shots {
+                std::fs::create_dir_all(dir).expect("create --shots dir");
+            }
+            app.insert_resource(flow::Autoplay {
+                ship: args.ship.clone(),
+                shots: args.shots.clone(),
+            });
+        }
         if app.run().is_error() {
             std::process::exit(1);
         }
@@ -221,10 +246,10 @@ fn main() {
 
     app.add_plugins(GgrsPlugin::<GameConfig>::default())
         .insert_resource(RollbackFrameRate(60))
-        .insert_resource(SimWorld(SimState::new(SimParams {
-            num_players: args.players,
-            seed: args.seed,
-        })))
+        .insert_resource(SimWorld(SimState::with_loadouts(
+            args.seed,
+            &test_loadouts(args.players),
+        )))
         .insert_resource(RunLimit {
             frames,
             warmup_frames: 180,
@@ -281,6 +306,20 @@ fn main() {
     if app.run().is_error() {
         std::process::exit(1);
     }
+}
+
+/// Synctest / p2p fleet: even handles fly Kite, odd handles Bulwark.
+fn test_loadouts(players: usize) -> Vec<Loadout> {
+    (0..players)
+        .map(|h| Loadout {
+            ship: if h % 2 == 0 {
+                ShipKind::Kite
+            } else {
+                ShipKind::Bulwark
+            },
+            ..Default::default()
+        })
+        .collect()
 }
 
 fn load_content_status() -> String {

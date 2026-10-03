@@ -22,13 +22,18 @@ pub mod collision;
 pub mod entity;
 pub mod fixed;
 pub mod input;
+pub mod mission;
 pub mod rng;
 pub mod state;
 pub mod trig;
 pub mod tuning;
 
-pub use entity::{Enemy, Projectile, Ship};
+pub use entity::{
+    Enemy, EnemyKind, Loadout, Loot, LootKind, Pickup, Projectile, Ship, ShipKind, ShipStats,
+    Upgrades,
+};
 pub use fixed::{FxVec2, SUB};
 pub use input::NetInput;
+pub use mission::{Mission, MissionOutcome, MissionStatus};
 pub use rng::SimRng;
 pub use state::{SimParams, SimState, MAX_PLAYERS};

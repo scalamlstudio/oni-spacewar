@@ -38,13 +38,13 @@ pub enum LastResult {
 impl Default for SaveGame {
     fn default() -> Self {
         let mut resources = BTreeMap::new();
-        resources.insert("salvage".to_string(), 0);
+        resources.insert(crate::mission::VOID_CRYSTAL_ID.to_string(), 0);
         Self {
             version: SAVE_VERSION,
             credits: 100,
             resources,
             purchased_upgrades: BTreeSet::new(),
-            selected_battleship: "kite".to_string(),
+            selected_battleship: crate::mission::KITE_ID.to_string(),
             tutorial_seen: BTreeSet::new(),
             mission_count: 0,
             last_result: LastResult::None,

@@ -1,9 +1,13 @@
 //! First-playable scene flow and placeholder UI.
 
+use std::path::PathBuf;
+
 use bevy::prelude::*;
+use bevy::render::view::screenshot::{save_to_disk, Screenshot};
 use bevy::window::PrimaryWindow;
-use sim::input::{INPUT_MOVE, INPUT_SKILL_Q};
-use sim::NetInput;
+use sim::input::{INPUT_MOVE, INPUT_SKILL_Q, INPUT_SKILL_W};
+use sim::tuning::KILL_TARGET;
+use sim::{FxVec2, NetInput, SimState, SUB};
 
 use crate::carrier::CarrierArrival;
 use crate::mission::{self, MissionOutcome, MissionRequest, MissionResult};
@@ -81,8 +85,23 @@ impl Plugin for FlowPlugin {
                     apply_mission_request,
                 ),
             )
-            .add_systems(FixedUpdate, step_demo_battle);
+            // The demo battle steps the sim at the rollback rate, 60 Hz.
+            .insert_resource(Time::<Fixed>::from_hz(60.0))
+            .add_systems(FixedUpdate, step_demo_battle)
+            .add_systems(
+                Update,
+                (autoplay_flow, autoplay_screenshots).run_if(resource_exists::<Autoplay>),
+            );
     }
+}
+
+/// `--autoplay`: QA mode. Starts a new game with `ship`, flies one battle
+/// with a scripted pilot, optionally saves window screenshots to `shots`
+/// every 2 s, and quits a few seconds into the Result scene.
+#[derive(Resource, Clone, Default)]
+pub struct Autoplay {
+    pub ship: String,
+    pub shots: Option<PathBuf>,
 }
 
 #[derive(Resource)]
@@ -144,8 +163,7 @@ enum DemoButton {
     NewGame,
     Continue,
     QuitGame,
-    Victory,
-    Defeat,
+    QuitMission,
     ReturnCarrier,
     Resume,
     QuitToTitle,
@@ -280,28 +298,44 @@ fn enter_battle(mut commands: Commands, save: Res<SaveSlot>) {
     let game = save.game.clone().unwrap_or_default();
     let config = mission::config_from_save(&game);
     commands.insert_resource(SimWorld(mission::launch_sim(&config)));
-    panel(
-        &mut commands,
-        "Battle",
-        format!(
-            "Elimination placeholder\nLoadouts: {}\nSeed: {}\n\nLeft mouse move, Q fire\nV Victory    F Defeat    Esc Pause",
-            config.ship_loadouts.len(),
-            config.seed
-        ),
-    );
-    button(&mut commands, DemoButton::Victory, "Victory", 230.0, true);
-    button(&mut commands, DemoButton::Defeat, "Defeat", 282.0, true);
+    commands.spawn((
+        ScreenEntity,
+        Text::new("Click to move. Your guns fire on their own.    Q / W skills    Esc pause"),
+        text_style(16.0, Color::srgb(0.7, 0.75, 0.8)),
+        Node {
+            position_type: PositionType::Absolute,
+            left: px(12),
+            bottom: px(10),
+            ..default()
+        },
+    ));
 }
 
 fn enter_result(mut commands: Commands, result: Res<LastMissionResult>) {
     let text = match &result.0 {
-        Some(result) => format!(
-            "Outcome: {:?}\nCredits earned: {}\nSalvage earned: {}\nWaves cleared: {}\n\nEnter Return",
-            result.outcome,
-            result.credits,
-            result.resources.get("salvage").copied().unwrap_or(0),
-            result.waves_cleared
-        ),
+        Some(r) => {
+            let (title, kept) = if r.outcome.success() {
+                ("Success", "Loot kept")
+            } else {
+                ("Failed", "Loot lost")
+            };
+            let quit = if r.outcome == MissionOutcome::Abandoned {
+                " (mission abandoned)"
+            } else {
+                ""
+            };
+            format!(
+                "{title}{quit}\nKills: {}/{KILL_TARGET}    Wave reached: {}\nCollected: {} credits, {} Void Crystal\nSuccess bonus: {} credits, {} Void Crystal\n{kept}: {} credits, {} Void Crystal\n\nEnter Return",
+                r.kills,
+                r.wave,
+                r.collected.credits,
+                r.collected.void_crystal,
+                r.bonus.credits,
+                r.bonus.void_crystal,
+                r.credits,
+                r.resources.get(mission::VOID_CRYSTAL_ID).copied().unwrap_or(0),
+            )
+        }
         None => "No result recorded\n\nEnter Return".to_string(),
     };
     panel(&mut commands, "Result", text);
@@ -309,7 +343,7 @@ fn enter_result(mut commands: Commands, result: Res<LastMissionResult>) {
         &mut commands,
         DemoButton::ReturnCarrier,
         "Return to Carrier",
-        230.0,
+        290.0,
         true,
     );
 }
@@ -387,8 +421,6 @@ fn keyboard_actions(
         GameScreen::Title if keys.just_pressed(KeyCode::KeyN) => Some(DemoButton::NewGame),
         GameScreen::Title if keys.just_pressed(KeyCode::KeyC) => Some(DemoButton::Continue),
         GameScreen::Title if keys.just_pressed(KeyCode::KeyQ) => Some(DemoButton::QuitGame),
-        GameScreen::Battle if keys.just_pressed(KeyCode::KeyV) => Some(DemoButton::Victory),
-        GameScreen::Battle if keys.just_pressed(KeyCode::KeyF) => Some(DemoButton::Defeat),
         GameScreen::Result if keys.just_pressed(KeyCode::Enter) => Some(DemoButton::ReturnCarrier),
         _ => None,
     };
@@ -431,14 +463,12 @@ fn handle_action(
         DemoButton::QuitGame => {
             exit.write(AppExit::Success);
         }
-        DemoButton::Victory | DemoButton::Defeat => {
+        DemoButton::QuitMission => {
+            // Quit Mission counts as Failed (Demo Spec § Elimination mission).
+            pause.open = false;
+            pause.dirty = true;
             if let Some(world) = world {
-                let outcome = if matches!(action, DemoButton::Victory) {
-                    MissionOutcome::Victory
-                } else {
-                    MissionOutcome::Defeat
-                };
-                pending_result.0 = Some(mission::result_from_sim(world, outcome));
+                pending_result.0 = Some(mission::result_from_sim(world, MissionOutcome::Abandoned));
             }
             next.set(transition(*state, FlowEvent::FinishMission, has_save));
         }
@@ -472,18 +502,32 @@ fn toggle_pause_menu(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn apply_pause_actions(
     keys: Res<ButtonInput<KeyCode>>,
     state: Res<State<GameScreen>>,
     mut save: ResMut<SaveSlot>,
     mut pause: ResMut<PauseMenu>,
+    world: Option<Res<SimWorld>>,
+    mut pending_result: ResMut<LastMissionResult>,
     mut next: ResMut<NextState<GameScreen>>,
     mut exit: MessageWriter<AppExit>,
 ) {
     if !pause.open {
         return;
     }
-    if keys.just_pressed(KeyCode::KeyR) {
+    if keys.just_pressed(KeyCode::KeyM) && *state.get() == GameScreen::Battle {
+        handle_action(
+            DemoButton::QuitMission,
+            state.get(),
+            save.game.is_some(),
+            world.as_deref(),
+            &mut pending_result,
+            &mut next,
+            &mut pause,
+            &mut exit,
+        );
+    } else if keys.just_pressed(KeyCode::KeyR) {
         pause.open = false;
         pause.dirty = true;
     } else if keys.just_pressed(KeyCode::KeyT) {
@@ -503,6 +547,7 @@ fn apply_pause_actions(
 
 fn sync_pause_menu(
     mut commands: Commands,
+    state: Res<State<GameScreen>>,
     mut pause: ResMut<PauseMenu>,
     entities: Query<Entity, With<PauseEntity>>,
 ) {
@@ -516,9 +561,14 @@ fn sync_pause_menu(
     if !pause.open {
         return;
     }
+    let in_battle = *state.get() == GameScreen::Battle;
     commands.spawn((
         PauseEntity,
-        Text::new("Paused\n\nR Resume    T Title    Q Quit"),
+        Text::new(if in_battle {
+            "Paused\n\nR Resume    M Quit Mission (counts as Failed)\nT Title    Q Quit"
+        } else {
+            "Paused\n\nR Resume    T Title    Q Quit"
+        }),
         text_style(26.0, Color::WHITE),
         Node {
             position_type: PositionType::Absolute,
@@ -537,6 +587,14 @@ fn sync_pause_menu(
         292.0,
     );
     pause_button(&mut commands, DemoButton::QuitGame, "Quit Game", 344.0);
+    if in_battle {
+        pause_button(
+            &mut commands,
+            DemoButton::QuitMission,
+            "Quit Mission",
+            396.0,
+        );
+    }
 }
 
 fn pause_button(commands: &mut Commands, action: DemoButton, label: &str, top: f32) {
@@ -562,6 +620,9 @@ fn pause_button(commands: &mut Commands, action: DemoButton, label: &str, top: f
         .with_child((Text::new(label), text_style(18.0, Color::WHITE)));
 }
 
+/// Frames the ended battle stays on screen before the Result scene.
+const RESULT_DELAY: u32 = 90;
+
 #[allow(clippy::too_many_arguments)]
 fn step_demo_battle(
     state: Res<State<GameScreen>>,
@@ -571,6 +632,9 @@ fn step_demo_battle(
     windows: Query<&Window, With<PrimaryWindow>>,
     cameras: Query<(&Camera, &GlobalTransform)>,
     mut world: Option<ResMut<SimWorld>>,
+    mut pending_result: ResMut<LastMissionResult>,
+    mut next: ResMut<NextState<GameScreen>>,
+    autoplay: Option<Res<Autoplay>>,
     mut last_cursor: Local<IVec2>,
 ) {
     if *state.get() != GameScreen::Battle || pause.open {
@@ -587,18 +651,146 @@ fn step_demo_battle(
             *last_cursor = p.round().as_ivec2();
         }
     }
-    let mut buttons = 0;
-    if mouse.pressed(MouseButton::Left) {
-        buttons |= INPUT_MOVE;
+    let input = if autoplay.is_some() {
+        autopilot(&world)
+    } else {
+        let mut buttons = 0;
+        if mouse.pressed(MouseButton::Left) {
+            buttons |= INPUT_MOVE;
+        }
+        if keys.pressed(KeyCode::KeyQ) {
+            buttons |= INPUT_SKILL_Q;
+        }
+        if keys.pressed(KeyCode::KeyW) {
+            buttons |= INPUT_SKILL_W;
+        }
+        NetInput {
+            buttons,
+            target_x: last_cursor.x,
+            target_y: last_cursor.y,
+        }
+    };
+    world.step(&[input]);
+    if let Some(outcome) = mission::sim_outcome(&world) {
+        if world.frame >= world.mission.end_frame + RESULT_DELAY {
+            pending_result.0 = Some(mission::result_from_sim(&world, outcome));
+            next.set(transition(
+                GameScreen::Battle,
+                FlowEvent::FinishMission,
+                true,
+            ));
+        }
     }
-    if keys.pressed(KeyCode::KeyQ) {
-        buttons |= INPUT_SKILL_Q;
+}
+
+/// Scripted pilot for `--autoplay`: circles the nearest enemy at range,
+/// uses W when one gets close (Q too on Bulwark), and picks up loot when
+/// the coast is clear. Input-only, like a player.
+fn autopilot(world: &SimState) -> NetInput {
+    let mut input = NetInput::default();
+    let Some(ship) = world.ships.first() else {
+        return input;
+    };
+    let me = ship.pos;
+    let mut aim_at = |p: FxVec2, buttons: u8| {
+        input.buttons |= buttons;
+        input.target_x = p.x / SUB;
+        input.target_y = p.y / SUB;
+    };
+    let nearest = world
+        .enemies
+        .iter()
+        .min_by_key(|e| (e.pos - me).length_squared())
+        .map(|e| e.pos);
+    let dist = nearest.map_or(i64::MAX, |e| (e - me).length() / SUB as i64);
+    if let Some(e) = nearest.filter(|_| dist <= 300) {
+        let away = me - e;
+        let side = FxVec2::new(-away.y, away.x).scale_to(100 * SUB);
+        if dist < 140 && world.frame % 10 == 5 {
+            let q = if ship.kind == sim::ShipKind::Bulwark {
+                INPUT_SKILL_Q
+            } else {
+                0
+            };
+            aim_at(e, INPUT_SKILL_W | q);
+        } else if world.frame.is_multiple_of(10) {
+            let goal = if dist < 150 {
+                me + away.scale_to(120 * SUB) + side
+            } else {
+                me + side
+            };
+            aim_at(goal, INPUT_MOVE);
+        }
+    } else if let Some(p) = world.pickups.first() {
+        aim_at(p.pos, INPUT_MOVE);
+    } else if let Some(e) = nearest {
+        aim_at(e, INPUT_MOVE);
     }
-    world.step(&[NetInput {
-        buttons,
-        target_x: last_cursor.x,
-        target_y: last_cursor.y,
-    }]);
+    input
+}
+
+#[allow(clippy::too_many_arguments)]
+fn autoplay_flow(
+    state: Res<State<GameScreen>>,
+    autoplay: Res<Autoplay>,
+    time: Res<Time>,
+    mut save: ResMut<SaveSlot>,
+    mut next: ResMut<NextState<GameScreen>>,
+    mut exit: MessageWriter<AppExit>,
+    mut since: Local<f32>,
+    mut last: Local<Option<GameScreen>>,
+) {
+    if *last != Some(*state.get()) {
+        *last = Some(*state.get());
+        *since = 0.0;
+    }
+    *since += time.delta_secs();
+    match state.get() {
+        GameScreen::Title => {
+            save.game = Some(SaveGame {
+                selected_battleship: autoplay.ship.clone(),
+                ..SaveGame::default()
+            });
+            next.set(transition(GameScreen::Title, FlowEvent::NewGame, true));
+        }
+        GameScreen::Carrier if *since > 0.5 => {
+            next.set(transition(
+                GameScreen::Carrier,
+                FlowEvent::LaunchMission,
+                true,
+            ));
+        }
+        GameScreen::Result if *since > 3.0 => {
+            exit.write(AppExit::Success);
+        }
+        _ => {}
+    }
+}
+
+fn autoplay_screenshots(
+    mut commands: Commands,
+    state: Res<State<GameScreen>>,
+    autoplay: Res<Autoplay>,
+    time: Res<Time>,
+    mut timer: Local<f32>,
+    mut seq: Local<u32>,
+) {
+    let Some(dir) = &autoplay.shots else {
+        return;
+    };
+    if !matches!(state.get(), GameScreen::Battle | GameScreen::Result) {
+        return;
+    }
+    *timer += time.delta_secs();
+    if *timer < 2.0 {
+        return;
+    }
+    *timer = 0.0;
+    *seq += 1;
+    let path = dir.join(format!("{:03}-{:?}.png", *seq, state.get()).to_lowercase());
+    commands
+        .spawn(Screenshot::primary_window())
+        .observe(save_to_disk(path));
 }
 
 #[cfg(test)]
