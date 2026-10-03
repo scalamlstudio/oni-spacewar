@@ -166,3 +166,35 @@ _Running log of what's decided and what's built. Newest entries on top._
   `generate.py` and `render.sh`) after Wei approved the v3 renders
   (TAKOAI-16). `design/art/` replaces it; the old files remain in git history.
   README now links to `design/art/` (TAKOAI-17).
+
+## 2026-10-03
+
+- **First Playable Demo scope confirmed** by Wei (TAKOAI-36), replacing the
+  2026-09-25 proposal. The demo is one repeatable loop: Title → Carrier → Dock
+  (pick battleship + briefing) → Battle (Elimination) → Result → Carrier →
+  spend rewards at the Workshop → go again. It is single-player and offline,
+  with battle logic kept in the deterministic `sim` crate so multiplayer stays
+  possible. Rewrote design/READINESS.md § First Playable Scope.
+- Moved out of first-playable scope (deferred, not rejected): the Manufacturing
+  Module and production chain, companion task assignment, and the research
+  loop (Research points, samples, tech documents, skill-tree stubs).
+- Carrier control decided (TAKOAI-2): the main character (the Pilot) walks
+  around the carrier interior in a side-view, ONI-style cross-section, talks
+  to crew and uses modules (A / D to walk, E to interact). Building placement
+  and task assignment are deferred with manufacturing. Updated DESIGN.md
+  § Player and § Crew / Companions.
+- Enemies and levels decided for the demo (TAKOAI-5, in part): 2 void-monster
+  types (Void Swarmer, Void Spitter) in DESIGN.md § Enemies / Opposition. New
+  mission type **Elimination** (kill N enemies across waves, one hand-built
+  arena) in DESIGN.md § Missions. No reward survives failure in the demo.
+- New demo-only module, the **Workshop**: Credits and Void Crystal from
+  mission loot buy 3 upgrades (Hull Plating, Weapon Tuning, Thruster Tuning;
+  2 levels each) that apply to every battleship. Two battleships, **Kite**
+  and **Bulwark**, each with 2 skills.
+- Added design/READINESS.md § Demo Spec: carrier layout, ship and enemy stats,
+  wave plan, kill target (20), loot rates, upgrade costs, crew dialogue lines,
+  tutorial hints and save contents. Mika wrote these numbers as defaults for
+  Wei to tune (TAKOAI-37).
+- design/OPEN_QUESTIONS.md: no question blocks the first playable any more.
+  Carrier control, enemies and level design are answered for the demo; the
+  rest are re-tagged `Deferred`.

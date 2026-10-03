@@ -47,21 +47,32 @@ segment (see § Missions, § Ship Modules).
   player-set focus target may be added later.
 - Progression: earn credits via faction missions and resource-gathering, spend on
   growing/upgrading the carrier (see § Hub, § Economy).
-- Open: how the player controls/manages the carrier itself outside of missions
-  (building placement, task assignment) — the click-to-move/ability description
-  above is specifically about piloting the battleship in a mission.
+- **Aboard the carrier (outside missions):** the player walks the main
+  character around the carrier interior — side view, ONI-style cross-section —
+  talks to crew and walks up to a module to use it (A / D to walk, E to
+  interact). Launching a mission is one of those modules: the Dock, i.e. the
+  Docking Module (see § Missions). The click-to-move/ability scheme above is
+  only for piloting the battleship in a mission. How the player places
+  buildings and assigns crew tasks is left for when manufacturing and companion
+  jobs come back into scope (see design/OPEN_QUESTIONS.md); the First Playable
+  Demo has neither.
 
 ## Crew / Companions
 
 - Main character: **the battleship's pilot during missions** — player-controlled
   directly, flying the battleship and manually triggering their own Combat
-  Operation skills (see § Crew Skill Trees). Role while the carrier is docked/
-  being built up (outside of missions) is still open.
+  Operation skills (see § Crew Skill Trees). Outside missions the main
+  character is the player's avatar aboard the carrier: they walk its interior,
+  talk to companions and use modules directly (see § Player). In the concept
+  art the main character is the **Pilot**; the companions are the
+  **Engineer**, **Researcher** and **Gunner**.
 - 2-3 companions: ONI-style task assignment — the player assigns jobs/priorities
   (fix this, mine that, defend here) and companions execute autonomously, rather
   than being directly piloted. They can be trained (skills/roles improve over time,
   ONI-dupe-style), and their combat skills auto-trigger on condition rather than
-  being manually activated (see § Crew Skill Trees).
+  being manually activated (see § Crew Skill Trees). In the First Playable Demo
+  companions only stand in their rooms and talk (short lines with expression
+  portraits); task assignment and coming along on missions are deferred.
 
 ## Crew Skill Trees
 
@@ -142,7 +153,8 @@ segment (see § Missions, § Ship Modules).
   are exceptions (still pay out on failure) is undecided — but each reward type
   should carry its own configurable "survives failure" flag/rule, rather than one
   global rule, so exceptions can be tuned/expanded per reward later without a
-  system rework. Which rewards actually get flagged that way is still open.
+  system rework. Which rewards actually get flagged that way is still open; in
+  the First Playable Demo none are (failure loses all mission loot).
 - **Loot** can include advanced tech documents (see § Hub, § Crew Skill Trees) on
   top of whatever other resources missions grant.
 - **Squads:** a mission can have up to 4 players join, but every mission must be
@@ -152,6 +164,27 @@ segment (see § Missions, § Ship Modules).
   out as a small co-present fleet, not a single shared battleship. (Implication:
   mission-instance combat/space needs to support multiple independently-piloted
   battleships plus their respective companion crews at once.)
+
+### Elimination
+
+The first mission type, and the only one in the First Playable Demo.
+
+- **Objective:** kill N enemies (20 in the demo). The HUD shows "Kills x/N".
+  Kills by any battleship in the instance count toward the shared total.
+- **Waves:** enemies arrive in a fixed sequence of waves. The next wave comes
+  once the current one is cleared or a timeout passes, after a short pause with
+  a "Wave N" banner. More enemies spawn in total than N, so the player never
+  has to hunt down the last one.
+- **Success:** the kill count reaches N. Remaining enemies vanish and any loot
+  still on the field is collected.
+- **Failed:** every battleship in the instance is destroyed (solo: the
+  player's), or the player quits the mission. Mission loot is then lost unless
+  its reward type's "survives failure" flag is on.
+- **Level:** one hand-built, bounded arena. No time limit.
+- **Loot:** enemies drop pickups (Credits, Void Crystal) that a battleship
+  collects by flying over them.
+
+Numbers (wave plan, kill target, drop rates): design/READINESS.md § Demo Spec.
 
 ## Ship Modules
 
@@ -169,7 +202,11 @@ segment (see § Missions, § Ship Modules).
      - **Lab Module** — for research. Likely (not yet confirmed) the place
        where crew carry out the "researching a sample" / "studying a tech
        document" actions that earn Research points (see § Crew Skill Trees).
-     Other modules beyond these three are still open.
+     - **Workshop** — First Playable Demo stand-in for the progression
+       layer: the player spends Credits and Void Crystal on upgrades that
+       apply to every battleship (Hull Plating, Weapon Tuning, Thruster
+       Tuning). See design/READINESS.md § Demo Spec.
+     Other modules beyond these are still open.
   2. **Buildings & recipes within a module** — the actual depth/progression,
      unlocked by leveling up crew members via their skill trees (see § Crew
      Skill Trees). E.g. once Manufacturing is unlocked, further crew leveling is
@@ -196,10 +233,19 @@ segment (see § Missions, § Ship Modules).
 
 ## Enemies / Opposition
 
-- Narrative source is likely the **void monsters** occupying space segments
-  (see design/STORY.md § Setting), but gameplay specifics — enemy types,
-  behaviors, whether all opposition is void monsters or there is also Oni
-  opposition (rival Oni groups) to fight — are still entirely open.
+- Opposition comes from the **void monsters** occupying space segments (see
+  design/STORY.md § Setting). Whether there is also Oni opposition (rival Oni
+  groups) to fight is still open.
+- Enemies target the nearest battleship, so a mission instance with several
+  battleships works without changes.
+- **First Playable Demo enemy types** (stats in design/READINESS.md § Demo
+  Spec):
+  - **Void Swarmer:** weak and fast, comes in groups. Rushes the nearest
+    battleship and deals contact damage. Drops Credits, and sometimes Void
+    Crystal.
+  - **Void Spitter:** fewer of them, and tougher. Keeps its distance from the
+    nearest battleship and fires slow projectiles that can be dodged. Drops
+    more Credits, and Void Crystal more often.
 
 ## World / Levels
 
