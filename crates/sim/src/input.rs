@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 
 /// Primary mouse button held: set the move target to `target`.
 pub const INPUT_MOVE: u8 = 1 << 0;
-/// Skill hotkeys Q/W/E/R (design/DESIGN.md § Player). Only Q does anything
-/// yet: a placeholder shot toward `target`.
+/// Skill hotkeys Q/W/E/R (design/DESIGN.md § Player). Q and W use the
+/// battleship's two skills, aimed at `target`; E and R are unused so far.
 pub const INPUT_SKILL_Q: u8 = 1 << 1;
 pub const INPUT_SKILL_W: u8 = 1 << 2;
 pub const INPUT_SKILL_E: u8 = 1 << 3;

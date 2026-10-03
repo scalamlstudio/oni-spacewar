@@ -3,8 +3,8 @@
 //! simulation.
 //!
 //! Controls (`design/DESIGN.md` § Player): left mouse button = click-to-move
-//! (hold to keep steering), Q/W/E/R = skills (only Q does anything yet: a
-//! placeholder shot toward the cursor).
+//! (hold to keep steering), Q/W = the battleship's two skills aimed at the
+//! cursor (E/R are unused so far); the basic attack fires on its own.
 
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
@@ -20,7 +20,7 @@ use crate::rollback::GameConfig;
 pub struct KeyboardPlayer(pub bool);
 
 /// Scripted local players for unattended runs: every 30..150 frames a bot
-/// clicks a new random destination and toggles firing at it.
+/// clicks a new random destination and toggles using skills toward it.
 #[derive(Resource, Default)]
 pub struct BotBrains(HashMap<usize, Bot>);
 
@@ -53,7 +53,11 @@ fn bot_input(brains: &mut BotBrains, handle: usize) -> NetInput {
     }
     bot.left -= 1;
     if bot.firing {
-        buttons |= INPUT_SKILL_Q;
+        buttons |= if bot.left % 2 == 0 {
+            INPUT_SKILL_Q
+        } else {
+            INPUT_SKILL_W
+        };
     }
     NetInput {
         buttons,

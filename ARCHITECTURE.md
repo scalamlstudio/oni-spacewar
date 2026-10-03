@@ -9,7 +9,7 @@ is commit `b92126c`, its results are recorded on TAKOAI-18).
 
 | path | what | status |
 |---|---|---|
-| `Cargo.toml`, `crates/` | Rust/Bevy workspace | foundation + placeholder gameplay (TAKOAI-26) |
+| `Cargo.toml`, `crates/` | Rust/Bevy workspace | foundation (TAKOAI-26) + Elimination mission (TAKOAI-41) |
 | `assets/` | source and shipped content packs | modular content-patch foundation (TAKOAI-30) |
 | `.github/workflows/`, `ci/` | CI: determinism gate for the sim; local P2P soak script | see § Verifying determinism, § Netcode |
 | `design/` | design docs and concept art | source of truth for gameplay |
@@ -22,8 +22,9 @@ crates/
   sim/                package `oni-sim`, lib `sim` — deterministic mission simulation, NO Bevy
     src/lib.rs          crate docs + determinism rules
     src/state.rs        SimState (all rolled-back state), step() and its phases
-    src/entity.rs       plain-data entities: Ship, Enemy, Projectile
-    src/tuning.rs       placeholder gameplay numbers + unit conversion (px/s -> sub-px/tick)
+    src/entity.rs       plain-data entities: Ship (+ ShipKind, Loadout, ShipStats), Enemy, Projectile, Pickup
+    src/mission.rs      Elimination bookkeeping: wave schedule, kills, loot totals, MissionStatus/MissionOutcome
+    src/tuning.rs       Demo Spec numbers (design/READINESS.md) + unit conversion (px/s -> sub-px/tick)
     src/collision.rs    integer circle overlap + separation
     src/fixed.rs        fixed-point: SUB (1 px = 256), FxVec2 (+ scale_to), mul_q16
     src/trig.rs         integer sin/cos from a committed Q16 table (from the spike)
@@ -38,13 +39,13 @@ crates/
     src/flow.rs         first-playable scene state machine and placeholder UI: Title → Carrier → Battle → Result
     src/carrier.rs      Carrier scene: walkable one-deck cross-section, crew dialogue, Dock briefing + ship select
     src/save.rs         versioned JSON save data in the OS data directory (override: ONI_SAVE_DIR)
-    src/mission.rs      typed client mission config/result handoff into `sim::SimState`
+    src/mission.rs      typed client mission config/result handoff into `sim::SimState`; reward rules (survives_failure)
     src/rollback.rs     SimWorld resource, rollback/checksum registration, GgrsSchedule
     src/input.rs        mouse + keyboard / bot → NetInput (ReadInputs)
     src/net.rs          matchbox ↔ ggrs socket adapter + latency/loss emulator (from the spike)
     src/stats.rs        rollback / frame-time / desync measurement + report (from the spike)
     src/pacing.rs       frame-pacing profiler (windowed): main / render / swapchain-acquire split + OS-stall probe
-    src/render.rs       placeholder shapes, camera follow, HUD (Update, outside rollback)
+    src/render.rs       placeholder shapes keyed by stable content IDs, camera follow, battle HUD + wave banner (Update, outside rollback)
 ```
 
 Dependency direction is one-way for gameplay: `client → sim`, while content
@@ -219,6 +220,16 @@ detected pose count differs from the provided expression count.
   tested. The Dock's Launch writes a `mission::MissionRequest` message; the
   flow stores the picked battleship in the save and enters Battle, where
   `config_from_save` builds the `MissionConfig`.
+- Battle visuals are drawn through stable content IDs
+  (`core.battle.ship.kite`, `core.battle.enemy.void_swarmer`,
+  `core.battle.loot.void_crystal`, `core.battle.fx.bolt`, ... in
+  `render::ids`). Each maps to a placeholder gizmo shape today; the art
+  import ships assets under the same IDs and swaps the shape for a sprite.
+- `oni-spacewar --autoplay [--ship kite|bulwark] [--shots DIR]` is a QA mode
+  for the demo flow: it starts a new game, flies one battle with a scripted
+  pilot (input only, like a player), optionally saves window screenshots
+  every 2 s, and quits a few seconds into the Result scene. Use a scratch
+  `ONI_SAVE_DIR`.
 - Save data is client-only JSON with an explicit schema version. It stores
   credits, resources, purchased upgrades, selected battleship, tutorial flags
   and mission count, and is never read by `sim`; the client converts it into a
@@ -226,24 +237,47 @@ detected pose count differs from the provided expression count.
 
 ### Simulation structure
 
-The gameplay in `sim` is a placeholder (click-to-move battleships, a Q shot on
-a cooldown, waves of enemies that chase the nearest ship). It exists to
-exercise the foundation and will be replaced; the structure is what new
-gameplay should follow:
+The gameplay in `sim` is the First Playable's Elimination mission
+(design/READINESS.md § Demo Spec): click-to-move battleships (Kite or
+Bulwark, from a per-player `Loadout` with Workshop upgrade levels) with an
+auto-firing basic attack and Q/W skills, Void Swarmers and Void Spitters in
+three waves inside a 1600 × 1200 arena, loot pickups, and a win (20 kills) /
+lose (every ship destroyed) result. The structure is what new gameplay should
+follow:
 
 - **Entities are plain data** (`entity.rs`), one `Vec` per kind inside
   `SimState`. Removal uses `retain`, so order stays stable. No Bevy entities or
   components in the simulation.
-- **`step()` is a fixed list of phases** (`state.rs`): spawn → apply inputs →
-  move → hits → separation → remove dead. Each phase is a method over whole
-  collections, so the order of effects is explicit and identical on every
-  peer. New mechanics add a phase (or a new module with one) rather than
-  hooking into Bevy schedules.
+- **`step()` is a fixed list of phases** (`state.rs`): waves/spawn → apply
+  inputs (move target, Q/W skills) → move ships → basic attacks → enemy
+  behaviour (chase / keep distance, contact damage, shots) → move projectiles
+  → hits → separation → kills + loot drops → pickups → win/lose check. Each
+  phase is a method over whole collections, so the order of effects is
+  explicit and identical on every peer. New mechanics add a phase (or a new
+  module with one) rather than hooking into Bevy schedules. Once the mission
+  has ended the world is frozen and only `frame` advances.
+- **Never one battleship.** Ships stay in their `Vec` slot when destroyed
+  (`hull <= 0`), enemies target the nearest *living* ship, waves spawn around
+  the living ships' centroid, loot totals are mission-wide, and the mission
+  fails only when every ship is down. Synctest/p2p runs give even handles
+  Kite and odd handles Bulwark so both ships are always exercised.
 - **Numbers live in `tuning.rs`** in human units (px, px/s, seconds) and are
-  converted at use (`px_per_tick`, `ticks`). They are placeholders, not design
-  values.
+  converted at use (`px_per_tick`, `ticks`). They come from the Demo Spec;
+  values the spec doesn't give (bolt speed, dash duration, pickup drift
+  speed, ...) are marked "engine default" there.
 - **Input** (`NetInput`) is a button bitmask (move, Q/W/E/R) plus the cursor in
   world pixels: click-to-move sets the ship's target, skills aim at the cursor.
+  The basic attack needs no input.
+- **Mission result.** `SimState::outcome()` returns a `sim::MissionOutcome`
+  (success, kills, wave, loot collected, success bonus) once the mission
+  ends. Which loot the player keeps is client policy: `client::mission`
+  applies each reward's `survives_failure` flag (all off in the demo) and
+  turns it into the `MissionResult` the Result scene shows and the save
+  records. Quit Mission from the pause menu is `MissionOutcome::Abandoned`
+  and counts as failed. The client maps the save's battleship ID (`kite` /
+  `bulwark`) and purchased upgrade IDs (`hull_plating_<n>`,
+  `weapon_tuning_<n>`, `thruster_tuning_<n>`; highest level wins) into the
+  sim `Loadout`.
 - **Collision** is integer circle overlap; pairs are checked brute-force in
   `Vec` order, which is fine at current entity counts. A deterministic broad
   phase can be added when counts grow.
