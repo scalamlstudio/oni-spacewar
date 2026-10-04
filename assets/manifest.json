@@ -6,7 +6,7 @@
       "id": "core",
       "version": "0.2.0",
       "gameplay_affecting": false,
-      "content_hash": "3f234274534d35d706c59e8976e7f4d17f321d00fb8d48b65c55376de297f0cc",
+      "content_hash": "97fc7f67e6f20f40d77e5cb913fbeb3167e85a403d680d824100dd9947bac0df",
       "assets": [
         {
           "id": "core.battle.enemy.void_spitter",
@@ -32,7 +32,7 @@
           "source": "source/core/battle/env/background_tile.png",
           "processed": "packs/core/processed/battle/env/background_tile.png",
           "compressed": "packs/core/bundles/battle/env/background_tile.png.zst",
-          "hash": "084b087d11b546acea3329ee0fa13ab487d236ec8a3298011e554d2b520625d4",
+          "hash": "0c415616709908bd2579a90c6e79521e5865ab32973f2ce887e3e9cbe61f27ab",
           "gameplay_affecting": false
         },
         {
