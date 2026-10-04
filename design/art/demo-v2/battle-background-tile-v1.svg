@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <rect width="1024" height="1024" fill="#080a18"/>
+  
+  <rect width="1024" height="1024" fill="#080a18"/>
+  <path d="M0 248 C196 188, 318 284, 512 245 C705 206, 817 132, 1024 194 L1024 285 C833 226, 699 292, 512 326 C321 360, 183 277, 0 336 Z" fill="#15172c"/>
+  <path d="M0 708 C183 643, 336 712, 512 678 C704 641, 831 675, 1024 620 L1024 716 C825 780, 697 727, 512 760 C322 794, 182 724, 0 801 Z" fill="#121529"/>
+  <circle cx="88" cy="90" r="3" fill="#313858"/>
+<circle cx="251" cy="196" r="2" fill="#313858"/>
+<circle cx="404" cy="107" r="2" fill="#313858"/>
+<circle cx="641" cy="151" r="3" fill="#313858"/>
+<circle cx="890" cy="101" r="2" fill="#313858"/>
+<circle cx="1008" cy="90" r="3" fill="#313858"/>
+<circle cx="88" cy="1014" r="3" fill="#313858"/>
+<circle cx="251" cy="1120" r="2" fill="#313858"/>
+<circle cx="404" cy="1031" r="2" fill="#313858"/>
+<circle cx="641" cy="1075" r="3" fill="#313858"/>
+<circle cx="890" cy="1025" r="2" fill="#313858"/>
+<circle cx="1008" cy="1014" r="3" fill="#313858"/>
+<circle cx="34" cy="390" r="2" fill="#313858"/>
+<circle cx="217" cy="514" r="3" fill="#313858"/>
+<circle cx="500" cy="442" r="2" fill="#313858"/>
+<circle cx="745" cy="524" r="2" fill="#313858"/>
+<circle cx="978" cy="391" r="3" fill="#313858"/>
+<circle cx="34" cy="-634" r="2" fill="#313858"/>
+<circle cx="217" cy="-510" r="3" fill="#313858"/>
+<circle cx="500" cy="-582" r="2" fill="#313858"/>
+<circle cx="745" cy="-500" r="2" fill="#313858"/>
+<circle cx="978" cy="-633" r="3" fill="#313858"/>
+<circle cx="132" cy="834" r="2" fill="#313858"/>
+<circle cx="365" cy="906" r="3" fill="#313858"/>
+<circle cx="591" cy="843" r="2" fill="#313858"/>
+<circle cx="791" cy="893" r="2" fill="#313858"/>
+<circle cx="1000" cy="812" r="3" fill="#313858"/>
+<circle cx="132" cy="-190" r="2" fill="#313858"/>
+<circle cx="365" cy="-118" r="3" fill="#313858"/>
+<circle cx="591" cy="-181" r="2" fill="#313858"/>
+<circle cx="791" cy="-131" r="2" fill="#313858"/>
+<circle cx="1000" cy="-212" r="3" fill="#313858"/>
+  <circle cx="0" cy="0" r="10" fill="#232946"/>
+<circle cx="1024" cy="0" r="10" fill="#232946"/>
+<circle cx="0" cy="1024" r="10" fill="#232946"/>
+<circle cx="1024" cy="1024" r="10" fill="#232946"/>
+
+</svg>
