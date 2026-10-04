@@ -52,7 +52,8 @@ crates/
     src/net.rs          matchbox ↔ ggrs socket adapter + latency/loss emulator (from the spike)
     src/stats.rs        rollback / frame-time / desync measurement + report (from the spike)
     src/pacing.rs       frame-pacing profiler (windowed): main / render / swapchain-acquire split + OS-stall probe
-    src/render.rs       battle sprites keyed by stable content IDs + gizmo FX, tiled background, fissure pointer, camera follow, battle HUD (Update, outside rollback)
+    src/render.rs       battle sprites keyed by stable content IDs + gizmo FX, fissure pointers, camera follow, battle HUD (Update, outside rollback)
+    src/sky.rs          procedural nebula sky: SkyMaterial (Material2d, `sky.wgsl`) on a quad that follows the camera; battle + Carrier backdrop
 ```
 
 Dependency direction is one-way for gameplay: `client → sim`, while content
@@ -206,8 +207,8 @@ detected pose count differs from the provided expression count.
 
 The First Playable art set (`design/art/demo/*-v1.png`, with the restyled
 battle art from `design/art/demo-v2/` replacing the Swarmer, Spitter, Spitter
-shot and loot icons under the same stable IDs, plus the void fissure and the
-battle background tile) is imported with:
+shot and loot icons under the same stable IDs, plus the void fissure) is
+imported with:
 
 ```sh
 cargo run --release --bin demo-art-import -- .
@@ -341,16 +342,26 @@ means a new table row.
   wallet show icons / ship art.
 - **Fissures and the spawn director** (`state.rs`, numbers in `tuning.rs`):
   `SimState::fissures` is placed once in `with_loadouts` from the seeded RNG
-  (rejection sampling: inside the arena, outside the starting view given by
-  `INITIAL_VIEW_HALF_*`, apart from each other). `direct_spawns` runs first
+  (rejection sampling: on a ring `FISSURE_RING_MIN..=MAX` px around the
+  origin, at a table-trig angle, outside the starting view given by
+  `INITIAL_VIEW_HALF_*`, apart from each other). There is no arena edge
+  (TAKOAI-58): nothing clamps positions; shots end by `ttl`. `direct_spawns` runs first
   each tick: one enemy per `spawn_interval(t)` on a random fissure's ring,
   Spitter with `spitter_pct(t)`, both integer ramps of the mission tick,
   held while `MAX_LIVE_ENEMIES` are alive. Spitters strafe around their
-  target inside their range band (`Enemy::orbit`, flipped at the arena
-  edge). The sim's starting-view size mirrors the client's default window
+  target inside their range band (`Enemy::orbit`, picked at spawn). The sim's starting-view size mirrors the client's default window
   at `BATTLE_ZOOM` (`DEFAULT_WINDOW`); a client test keeps them equal. The
-  off-screen fissure arrow (`render::fissure_pointer`) and the tiled
-  background (`core.battle.env.background_tile`) are client-only.
+  off-screen fissure arrows (`render::fissure_pointers`, one per fissure)
+  and the nebula sky (`sky.rs`) are client-only.
+- **Nebula sky** (`sky.rs` + `sky.wgsl`, TAKOAI-58). One `SkyMaterial`
+  (`Material2d`, shader embedded with `embedded_asset!`) on a unit quad that
+  `follow_view` (PostUpdate) moves and scales to cover the camera's view
+  each frame, passing the camera centre (parallax) and elapsed time
+  (nebula drift, twinkle) as a uniform. Visible while a `SimWorld` exists
+  (battle, synctest / p2p) or on the Carrier, where it replaces the old
+  tiled space behind the hull. Added by `RenderPlugin`, so headless runs
+  never build it. Floats and wall-clock time are fine here: it is purely
+  visual and never reads or writes sim state.
 - `oni-spacewar --autoplay [--ship kite|bulwark] [--missions N] [--continue]
   [--abandon] [--shots DIR]` is a QA mode for the whole demo loop: New Game
   (or Continue the existing save), fly N battles (default 1) with a scripted
@@ -384,7 +395,7 @@ The gameplay in `sim` is the First Playable's Elimination mission
 (design/READINESS.md § Demo Spec): click-to-move battleships (Kite or
 Bulwark, from a per-player `Loadout` with Workshop upgrade levels) with an
 auto-firing basic attack and Q/W skills, Void Swarmers and Void Spitters
-spawned continuously from 1–2 void fissures inside a 2000 × 1160 arena, loot pickups, and a win (20 kills) /
+spawned continuously from 1–2 void fissures in open space (no arena edge), loot pickups, and a win (40 kills) /
 lose (every ship destroyed) result. The structure is what new gameplay should
 follow:
 

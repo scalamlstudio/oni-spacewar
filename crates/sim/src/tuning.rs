@@ -24,12 +24,11 @@ pub const fn upgraded(base: i32, pct_per_level: i32, level: u8) -> i32 {
     base * (100 + pct_per_level * level as i32) / 100
 }
 
-// --- Arena (Demo Spec § Elimination mission) --------------------------------
+// --- Battlefield (Demo Spec § Elimination mission) --------------------------
 
-/// The arena is a rectangle centred on the origin; edges block movement.
-/// 2000 × 1160 px: the starting view covers about 40% of it (TAKOAI-53).
-pub const ARENA_HALF_W: i32 = 1000;
-pub const ARENA_HALF_H: i32 = 580;
+// There is no arena edge (TAKOAI-58): nothing clamps ships, enemies or
+// shots. Shots end by lifetime; fissures are placed on a ring around the
+// ships' start.
 
 /// Half the battle view at the start of a mission, centred on the spawn
 /// point: the client's default window (1000 × 580) at its battle zoom
@@ -119,7 +118,8 @@ pub const fn trained(cooldown: u32, training: u8) -> u32 {
 pub const ENEMY_MASS: i32 = 1;
 
 pub const SWARMER_HP: i32 = 10;
-pub const SWARMER_SPEED: i32 = 110;
+/// +20% over the spec's 110 (TAKOAI-58).
+pub const SWARMER_SPEED: i32 = 132;
 pub const SWARMER_RADIUS: i32 = 10;
 pub const SWARMER_CONTACT_DAMAGE: i32 = 5;
 pub const SWARMER_CONTACT_COOLDOWN: u32 = ticks(1, 1);
@@ -128,7 +128,8 @@ pub const SWARMER_CONTACT_COOLDOWN: u32 = ticks(1, 1);
 pub const CONTACT_REACH: i32 = 2;
 
 pub const SPITTER_HP: i32 = 36;
-pub const SPITTER_SPEED: i32 = 60;
+/// +20% over the spec's 60 (TAKOAI-58).
+pub const SPITTER_SPEED: i32 = 72;
 pub const SPITTER_RADIUS: i32 = 14;
 pub const SPITTER_MIN_RANGE: i32 = 200;
 pub const SPITTER_MAX_RANGE: i32 = 320;
@@ -143,18 +144,24 @@ pub const SPIT_LIFETIME: u32 = ticks(3, 1);
 
 // --- Elimination: void fissures and the spawn director ----------------------
 
-pub const KILL_TARGET: u32 = 20;
+/// Raised from 20 with the 3× spawn rate (TAKOAI-58) so a mission still
+/// lasts about 1-2 minutes.
+pub const KILL_TARGET: u32 = 40;
 
 /// Each mission places `FISSURES_MIN..=FISSURES_MAX` void fissures.
 pub const FISSURES_MIN: i32 = 1;
 pub const FISSURES_MAX: i32 = 2;
 /// Fissure size for drawing (px). Fissures can't be hit or destroyed.
 pub const FISSURE_RADIUS: i32 = 40;
+/// Fissures sit on a ring around the ships' start (the origin), this far
+/// away (px, inclusive), at a seeded angle. The ring's inner edge is past
+/// the starting view everywhere except near its corners; a draw that lands
+/// inside the view (plus `FISSURE_OFFSCREEN_MARGIN`) is rejected.
+pub const FISSURE_RING_MIN: i32 = 900;
+pub const FISSURE_RING_MAX: i32 = 1300;
 /// A fissure's centre stays at least this far outside the starting view
 /// (its radius plus the widest 4-ship spawn spread, 90 px).
 pub const FISSURE_OFFSCREEN_MARGIN: i32 = 130;
-/// ... and this far inside the arena edge.
-pub const FISSURE_EDGE_MARGIN: i32 = 60;
 /// Two fissures are at least this far apart.
 pub const FISSURE_MIN_GAP: i32 = 600;
 /// Enemies appear on a ring this far from a fissure's centre.
@@ -163,16 +170,17 @@ pub const FISSURE_SPAWN_RING: i32 = 60;
 /// First spawn this long after the mission starts.
 pub const SPAWN_FIRST: u32 = ticks(2, 1);
 /// Time between spawns falls linearly from `SPAWN_INTERVAL_START` to
-/// `SPAWN_INTERVAL_END` over `SPAWN_RAMP`, then stays there.
-pub const SPAWN_INTERVAL_START: u32 = ticks(4, 1);
-pub const SPAWN_INTERVAL_END: u32 = ticks(3, 2);
+/// `SPAWN_INTERVAL_END` over `SPAWN_RAMP`, then stays there. 3× the
+/// TAKOAI-53 rate (4 s -> 1.5 s): 1.33 s -> 0.5 s (TAKOAI-58).
+pub const SPAWN_INTERVAL_START: u32 = ticks(4, 3);
+pub const SPAWN_INTERVAL_END: u32 = ticks(1, 2);
 /// The Spitter share of spawns rises from `SPITTER_PCT_START`% to
 /// `SPITTER_PCT_END`% over the same ramp.
 pub const SPITTER_PCT_START: i32 = 10;
 pub const SPITTER_PCT_END: i32 = 40;
 pub const SPAWN_RAMP: u32 = ticks(120, 1);
 /// The director holds off while this many enemies are alive.
-pub const MAX_LIVE_ENEMIES: usize = 12;
+pub const MAX_LIVE_ENEMIES: usize = 36;
 
 /// `start` moved toward `end` by the fraction of the ramp elapsed at tick `t`.
 const fn ramp(start: i64, end: i64, t: u32) -> i64 {

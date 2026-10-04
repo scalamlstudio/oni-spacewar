@@ -21,6 +21,7 @@ mod pacing;
 mod render;
 mod rollback;
 mod save;
+mod sky;
 mod stats;
 mod workshop;
 

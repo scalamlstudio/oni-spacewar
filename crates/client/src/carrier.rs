@@ -64,7 +64,6 @@ const HULL_FLOOR: &str = "core.carrier.hull_floor";
 const BUILD_SLOT: &str = "core.carrier.build_slot";
 /// Draw layers. Floors are flat; characters and docked ships are sorted by
 /// their feet (`depth`).
-const Z_SPACE: f32 = -40.0;
 const Z_HULL: f32 = -30.0;
 const Z_FLOOR: f32 = -20.0;
 const Z_DOOR: f32 = -19.0;
@@ -174,7 +173,7 @@ const BRIEFING: [Line; 3] = [
     line(
         Crew::Pilot,
         "normal",
-        "Twenty kills clears it. They keep pouring out of void fissures.",
+        "Forty kills clears it. They keep pouring out of void fissures.",
     ),
     line(
         Crew::Pilot,
@@ -710,7 +709,6 @@ pub fn image_ids() -> Vec<String> {
     for crew in [Crew::Gunner, Crew::Researcher, Crew::Engineer] {
         ids.push(crew.sprite_id());
     }
-    ids.push(crate::render::ids::BACKGROUND.into());
     ids
 }
 
@@ -883,26 +881,7 @@ fn spawn_carrier(
     // Drawn from the save by `sync_layout`.
     scene.drawn = None;
     *view = CarrierView::default();
-    let hull = Vec2::new(HULL_W as f32, HULL_H as f32) * CELL;
-
-    // Space behind the hull: the battle background, tiled.
-    if let Some(image) = art.get(&mut images, crate::render::ids::BACKGROUND) {
-        commands.spawn((
-            ScreenEntity,
-            Sprite {
-                image,
-                custom_size: Some(hull + Vec2::splat(4000.0)),
-                image_mode: SpriteImageMode::Tiled {
-                    tile_x: true,
-                    tile_y: true,
-                    stretch_value: 1.0,
-                },
-                ..default()
-            },
-            Transform::from_translation(world(hull / 2.0).extend(Z_SPACE)),
-        ));
-    }
-
+    // Space behind the hull is the nebula sky (`crate::sky`).
     commands.spawn((
         label("Selected", 13.0, Color::srgb(0.5, 0.9, 1.0), Vec3::ZERO),
         SelectedTag,

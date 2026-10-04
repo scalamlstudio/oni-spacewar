@@ -250,7 +250,7 @@ pub struct Enemy {
     /// Ticks until it can attack again (contact or shot).
     pub cooldown: u32,
     /// Spitter strafing direction around its target: 1 counter-clockwise,
-    /// -1 clockwise. Flips when it runs into the arena edge.
+    /// -1 clockwise. Picked at spawn.
     pub orbit: i32,
 }
 

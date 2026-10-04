@@ -2,18 +2,16 @@
 //! schedule, and only reads `SimWorld`.
 //!
 //! Ships, enemies, fissures, loot and enemy shots are sprites of the shipped
-//! art, looked up by stable content ID (`ids`) through the manifest, over a
-//! tiled background. Player bolts use a generated glow tinted per player;
-//! shields, the shockwave, hull bars, the move marker and the off-screen
-//! fissure pointer are gizmo effects.
+//! art, looked up by stable content ID (`ids`) through the manifest, over
+//! the procedural nebula sky (`crate::sky`). Player bolts use a generated
+//! glow tinted per player; shields, the shockwave, hull bars, the move
+//! marker and the off-screen fissure pointers are gizmo effects.
 
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy_ggrs::{LocalPlayers, Session};
-use sim::tuning::{
-    ARENA_HALF_H, ARENA_HALF_W, FISSURE_RADIUS, KILL_TARGET, SHOCKWAVE_RADIUS, TICKS_PER_SEC,
-};
+use sim::tuning::{FISSURE_RADIUS, KILL_TARGET, SHOCKWAVE_RADIUS, TICKS_PER_SEC};
 use sim::{EnemyKind, FxVec2, LootKind, MissionStatus, Ship, ShipKind, SimState, SUB};
 
 use crate::art::ContentImages;
@@ -30,14 +28,14 @@ impl Plugin for RenderPlugin {
             .init_resource::<CameraFollow>()
             .init_resource::<ContentImages>()
             .init_resource::<BattleSprites>()
+            .add_plugins(crate::sky::SkyPlugin)
             .add_systems(Startup, setup_scene)
             .add_systems(
                 Update,
                 (
                     draw_world,
                     draw_sprites,
-                    battle_background,
-                    draw_fissure_pointer,
+                    draw_fissure_pointers,
                     battle_zoom,
                     follow_camera,
                     update_hud,
@@ -53,10 +51,6 @@ struct Hud;
 #[derive(Component)]
 struct Banner;
 
-/// The tiled space background behind the battle.
-#[derive(Component)]
-struct Background;
-
 /// Stable content IDs of the battle sprites (`assets/manifest.json`).
 pub mod ids {
     pub const SHIP_KITE: &str = "core.battle.ship.kite";
@@ -67,7 +61,6 @@ pub mod ids {
     pub const LOOT_VOID_CRYSTAL: &str = crate::art::ids::ICON_VOID_CRYSTAL;
     pub const FX_SPIT: &str = "core.battle.fx.spit";
     pub const FISSURE: &str = "core.battle.env.void_fissure";
-    pub const BACKGROUND: &str = "core.battle.env.background_tile";
 }
 
 /// Default sprite size: the longest side is this many times the sim hit
@@ -81,6 +74,8 @@ struct SpriteArt {
     scale: f32,
     /// Visual spin in radians/second.
     spin: f32,
+    /// Visual pulse: the size swings by this fraction, about once per 2.5 s.
+    pulse: f32,
 }
 
 const SPRITES: &[SpriteArt] = &[
@@ -88,53 +83,58 @@ const SPRITES: &[SpriteArt] = &[
         id: ids::SHIP_KITE,
         scale: SPRITE_SCALE,
         spin: 0.0,
+        pulse: 0.0,
     },
     SpriteArt {
         id: ids::SHIP_BULWARK,
         scale: SPRITE_SCALE,
         spin: 0.0,
+        pulse: 0.0,
     },
     SpriteArt {
         id: ids::ENEMY_SWARMER,
         scale: SPRITE_SCALE,
         spin: 1.5,
+        pulse: 0.0,
     },
     SpriteArt {
         id: ids::ENEMY_SPITTER,
         scale: SPRITE_SCALE,
         spin: 0.0,
+        pulse: 0.0,
     },
     SpriteArt {
         id: ids::LOOT_CREDITS,
         scale: SPRITE_SCALE,
         spin: 0.0,
+        pulse: 0.0,
     },
     SpriteArt {
         id: ids::LOOT_VOID_CRYSTAL,
         scale: SPRITE_SCALE,
         spin: 0.0,
+        pulse: 0.0,
     },
     SpriteArt {
         id: ids::FX_SPIT,
         scale: SPRITE_SCALE,
         spin: 0.0,
+        pulse: 0.0,
     },
     // Fissures have no hit circle; drawn at about their spawn ring's size.
+    // Static (no spin, TAKOAI-58), with a gentle pulse.
     SpriteArt {
         id: ids::FISSURE,
         scale: 1.0,
-        spin: 0.2,
+        spin: 0.0,
+        pulse: 0.06,
     },
 ];
 
 /// Every manifest image the battle draws.
 #[cfg(test)]
 pub fn sprite_ids() -> Vec<&'static str> {
-    SPRITES
-        .iter()
-        .map(|s| s.id)
-        .chain([ids::BACKGROUND])
-        .collect()
+    SPRITES.iter().map(|s| s.id).collect()
 }
 
 /// Loot is drawn as if its hit circle had this radius (pickups have none;
@@ -156,12 +156,8 @@ const PLAYER_COLORS: [Color; 4] = [
     Color::srgb(0.5, 1.0, 0.4),
     Color::srgb(1.0, 0.4, 0.9),
 ];
-const ARENA_EDGE: Color = Color::srgb(0.25, 0.3, 0.4);
 /// Off-screen fissure pointer (the fissure art's magenta).
 const POINTER_COLOR: Color = Color::srgb(0.95, 0.24, 0.88);
-/// Background tiles cover the arena plus this much beyond each edge, so the
-/// camera never sees past them.
-const BACKGROUND_MARGIN: f32 = 800.0;
 
 /// Fixed-point sim position -> Bevy world units (1 unit = 1 px). The only
 /// place floats meet sim state, and it is one-way.
@@ -204,12 +200,6 @@ fn skill_names(kind: ShipKind) -> (&'static str, &'static str) {
 
 fn setup_scene(mut commands: Commands) {
     commands.spawn(Camera2d);
-    commands.spawn((
-        Background,
-        Sprite::default(),
-        Transform::from_xyz(0.0, 0.0, -10.0),
-        Visibility::Hidden,
-    ));
     commands.spawn((
         Hud,
         Text::new(""),
@@ -301,17 +291,6 @@ fn draw_ship_fx(gizmos: &mut Gizmos, ship: &Ship, me: usize) {
 
 fn draw_world(mut gizmos: Gizmos, world: Option<Res<SimWorld>>, local: Option<Res<LocalPlayers>>) {
     let Some(world) = world else { return };
-    let (hw, hh) = (ARENA_HALF_W as f32, ARENA_HALF_H as f32);
-    gizmos.linestrip_2d(
-        [
-            Vec2::new(-hw, -hh),
-            Vec2::new(hw, -hh),
-            Vec2::new(hw, hh),
-            Vec2::new(-hw, hh),
-            Vec2::new(-hw, -hh),
-        ],
-        ARENA_EDGE,
-    );
     for e in &world.enemies {
         if e.hp < e.kind.hp() {
             let c = to_world(e.pos);
@@ -402,10 +381,11 @@ fn draw_sprites(
                 return;
             };
             if let Some(image) = art.get(&mut images, id) {
+                let pulse = 1.0 + spec.pulse * (t * 2.5).sin();
                 draws.push(Draw {
                     image,
                     pos,
-                    size: 2.0 * radius * spec.scale,
+                    size: 2.0 * radius * spec.scale * pulse,
                     angle: angle + spec.spin * t,
                     color,
                     z,
@@ -528,79 +508,39 @@ fn draw_sprites(
     }
 }
 
-/// Show the tiled background while a battle world exists.
-fn battle_background(
-    world: Option<Res<SimWorld>>,
-    mut art: ResMut<ContentImages>,
-    mut images: ResMut<Assets<Image>>,
-    mut bg: Query<(&mut Sprite, &mut Visibility), With<Background>>,
-) {
-    let Ok((mut sprite, mut vis)) = bg.single_mut() else {
-        return;
-    };
-    let want = if world.is_some() {
-        Visibility::Visible
-    } else {
-        Visibility::Hidden
-    };
-    if *vis != want {
-        *vis = want;
-    }
-    if world.is_none() || sprite.custom_size.is_some() {
-        return;
-    }
-    let Some(image) = art.get(&mut images, ids::BACKGROUND) else {
-        return;
-    };
-    *sprite = Sprite {
-        image,
-        custom_size: Some(Vec2::new(
-            2.0 * (ARENA_HALF_W as f32 + BACKGROUND_MARGIN),
-            2.0 * (ARENA_HALF_H as f32 + BACKGROUND_MARGIN),
-        )),
-        image_mode: SpriteImageMode::Tiled {
-            tile_x: true,
-            tile_y: true,
-            stretch_value: 1.0,
-        },
-        ..default()
-    };
-}
-
-/// Where the off-screen fissure pointer goes: `None` while any fissure is
-/// (even partly) on screen, else a point just inside the screen edge toward
-/// the nearest fissure and the unit direction to it. `half` is half the
-/// visible world area, `inset` how far inside the edge the point sits.
-pub fn fissure_pointer(
+/// One edge arrow per fissure that is off screen: a point just inside the
+/// screen edge toward that fissure and the unit direction to it, in
+/// fissure order. A fissure (even partly) on screen gets none. `half` is
+/// half the visible world area, `inset` how far inside the edge the point
+/// sits.
+pub fn fissure_pointers(
     centre: Vec2,
     half: Vec2,
     inset: f32,
     fissures: &[Vec2],
-) -> Option<(Vec2, Vec2)> {
+) -> Vec<(Vec2, Vec2)> {
     let r = FISSURE_RADIUS as f32;
-    let on_screen = |f: &Vec2| {
-        let d = (*f - centre).abs();
-        d.x <= half.x + r && d.y <= half.y + r
-    };
-    if fissures.is_empty() || fissures.iter().any(on_screen) {
-        return None;
-    }
-    let nearest = fissures.iter().min_by(|a, b| {
-        a.distance_squared(centre)
-            .total_cmp(&b.distance_squared(centre))
-    })?;
-    let dir = (*nearest - centre).normalize_or_zero();
-    if dir == Vec2::ZERO {
-        return None;
-    }
     let edge = (half - Vec2::splat(inset)).max(Vec2::ONE);
-    let t = (edge.x / dir.x.abs()).min(edge.y / dir.y.abs());
-    Some((centre + dir * t, dir))
+    fissures
+        .iter()
+        .filter_map(|f| {
+            let d = (*f - centre).abs();
+            if d.x <= half.x + r && d.y <= half.y + r {
+                return None;
+            }
+            let dir = (*f - centre).normalize_or_zero();
+            if dir == Vec2::ZERO {
+                return None;
+            }
+            let t = (edge.x / dir.x.abs()).min(edge.y / dir.y.abs());
+            Some((centre + dir * t, dir))
+        })
+        .collect()
 }
 
-/// While no fissure is on screen, an arrow at the screen edge points to the
-/// nearest one. Client-only.
-fn draw_fissure_pointer(
+/// Every off-screen fissure gets an arrow at the screen edge pointing at
+/// it. Client-only.
+fn draw_fissure_pointers(
     mut gizmos: Gizmos,
     world: Option<Res<SimWorld>>,
     windows: Query<&Window, With<PrimaryWindow>>,
@@ -620,21 +560,18 @@ fn draw_fissure_pointer(
     };
     let half = window.size() / 2.0 * scale;
     let fissures: Vec<Vec2> = world.fissures.iter().map(|f| to_world(f.pos)).collect();
-    let Some((tip, dir)) =
-        fissure_pointer(cam.translation.truncate(), half, 24.0 * scale, &fissures)
-    else {
-        return;
-    };
-    // A solid-looking chevron: nested outlines shrinking toward the tip.
-    let side = dir.perp();
-    let size = 22.0 * scale;
-    for k in 0..6 {
-        let s = size * (1.0 - k as f32 * 0.15);
-        let base = tip - dir * s;
-        gizmos.linestrip_2d(
-            [tip, base + side * s * 0.6, base - side * s * 0.6, tip],
-            POINTER_COLOR,
-        );
+    for (tip, dir) in fissure_pointers(cam.translation.truncate(), half, 24.0 * scale, &fissures) {
+        // A solid-looking chevron: nested outlines shrinking toward the tip.
+        let side = dir.perp();
+        let size = 22.0 * scale;
+        for k in 0..6 {
+            let s = size * (1.0 - k as f32 * 0.15);
+            let base = tip - dir * s;
+            gizmos.linestrip_2d(
+                [tip, base + side * s * 0.6, base - side * s * 0.6, tip],
+                POINTER_COLOR,
+            );
+        }
     }
 }
 
@@ -809,34 +746,35 @@ mod tests {
         let half = crate::DEFAULT_WINDOW.as_vec2() * BATTLE_ZOOM / 2.0;
         assert_eq!(half.x.round() as i32, INITIAL_VIEW_HALF_W);
         assert_eq!(half.y.round() as i32, INITIAL_VIEW_HALF_H);
-        // ... and that view is about 40% of the arena.
-        let frac = half.x * half.y / (ARENA_HALF_W * ARENA_HALF_H) as f32;
-        assert!((0.38..=0.42).contains(&frac), "{frac}");
     }
 
     #[test]
-    fn pointer_shows_only_while_every_fissure_is_off_screen() {
+    fn one_pointer_per_off_screen_fissure() {
         let half = Vec2::new(600.0, 350.0);
         let far_right = Vec2::new(900.0, 0.0);
         let far_up_left = Vec2::new(-700.0, 700.0);
         // On screen (even just the edge of its sprite): no pointer.
-        assert_eq!(
-            fissure_pointer(Vec2::ZERO, half, 20.0, &[Vec2::new(620.0, 0.0)]),
-            None
-        );
-        assert_eq!(
-            fissure_pointer(Vec2::ZERO, half, 20.0, &[far_right, Vec2::new(0.0, 300.0)]),
-            None
-        );
-        assert_eq!(fissure_pointer(Vec2::ZERO, half, 20.0, &[]), None);
-        // Off screen: the arrow sits on the edge toward the nearest one.
-        let (tip, dir) =
-            fissure_pointer(Vec2::ZERO, half, 20.0, &[far_up_left, far_right]).unwrap();
-        assert_eq!(dir, Vec2::X);
-        assert_eq!(tip, Vec2::new(580.0, 0.0));
-        let (tip, dir) =
-            fissure_pointer(Vec2::new(-650.0, 0.0), half, 20.0, &[far_up_left]).unwrap();
+        assert!(fissure_pointers(Vec2::ZERO, half, 20.0, &[Vec2::new(620.0, 0.0)]).is_empty());
+        assert!(fissure_pointers(Vec2::ZERO, half, 20.0, &[]).is_empty());
+        // One on screen, one off: only the off-screen one gets an arrow.
+        let p = fissure_pointers(Vec2::ZERO, half, 20.0, &[far_right, Vec2::new(0.0, 300.0)]);
+        assert_eq!(p, vec![(Vec2::new(580.0, 0.0), Vec2::X)]);
+        // Both off screen: one arrow each, in fissure order.
+        let p = fissure_pointers(Vec2::ZERO, half, 20.0, &[far_up_left, far_right]);
+        assert_eq!(p.len(), 2);
+        assert!(p[0].1.x < 0.0 && p[0].1.y > 0.0, "{p:?}");
+        assert!((p[0].0.y - 330.0).abs() < 1e-3, "{p:?}");
+        assert_eq!(p[1], (Vec2::new(580.0, 0.0), Vec2::X));
+        let p = fissure_pointers(Vec2::new(-650.0, 0.0), half, 20.0, &[far_up_left]);
+        let (tip, dir) = p[0];
         assert!(dir.y > 0.99 && (tip.y - 330.0).abs() < 1e-3, "{tip} {dir}");
+    }
+
+    #[test]
+    fn fissures_do_not_spin() {
+        let f = SPRITES.iter().find(|s| s.id == ids::FISSURE).unwrap();
+        assert_eq!(f.spin, 0.0);
+        assert!(f.pulse > 0.0 && f.pulse <= 0.1);
     }
 
     #[test]
@@ -862,7 +800,7 @@ mod tests {
             .push(sim::Enemy::new(EnemyKind::Swarmer, FxVec2::ZERO));
         let hud = battle_hud(&w, 0);
         assert!(hud.contains("140/140"), "{hud}");
-        assert!(hud.contains("Kills 7/20"), "{hud}");
+        assert!(hud.contains("Kills 7/40"), "{hud}");
         assert!(hud.contains("Time 1:15   Enemies 1"), "{hud}");
         assert!(!hud.contains("Wave"), "{hud}");
         assert!(

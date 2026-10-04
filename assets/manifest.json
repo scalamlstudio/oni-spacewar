@@ -6,7 +6,7 @@
       "id": "core",
       "version": "0.2.0",
       "gameplay_affecting": false,
-      "content_hash": "97fc7f67e6f20f40d77e5cb913fbeb3167e85a403d680d824100dd9947bac0df",
+      "content_hash": "a0a37c78d32f4030dacf893f9a8826e9e9394fc9b5485e7c8a9a88e8d33fe393",
       "assets": [
         {
           "id": "core.battle.enemy.void_spitter",
@@ -24,15 +24,6 @@
           "processed": "packs/core/processed/battle/enemy/void_swarmer.png",
           "compressed": "packs/core/bundles/battle/enemy/void_swarmer.png.zst",
           "hash": "4ab1129a7ea256d28c06f97fb57a62bef4a9061736959d987af4dcf00b9d0a98",
-          "gameplay_affecting": false
-        },
-        {
-          "id": "core.battle.env.background_tile",
-          "kind": "image/png",
-          "source": "source/core/battle/env/background_tile.png",
-          "processed": "packs/core/processed/battle/env/background_tile.png",
-          "compressed": "packs/core/bundles/battle/env/background_tile.png.zst",
-          "hash": "0c415616709908bd2579a90c6e79521e5865ab32973f2ce887e3e9cbe61f27ab",
           "gameplay_affecting": false
         },
         {
