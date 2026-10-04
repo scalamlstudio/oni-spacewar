@@ -1,11 +1,14 @@
-//! Carrier scene: a side-view, one-deck cross-section the Pilot walks around
-//! between missions (design/READINESS.md § Demo Spec › Carrier). Client only;
-//! nothing here touches the sim.
+//! Carrier scene: the 2.5D (3/4 top-down) carrier the Pilot walks around
+//! between missions and expands at the Workshop bench (design/READINESS.md
+//! § Demo Spec › Carrier). Client only; nothing here touches the sim.
 //!
-//! Rooms, crew and the Pilot's walk cycle are shipped art (design/art/demo,
-//! imported by `demo-art-import`), loaded by stable content ID through the
-//! manifest (`crate::art`).
+//! The layout rules (grid, rooms, corridors, connectivity, walkable area)
+//! are in `crate::layout`; this module draws a `CarrierLayout` from the
+//! save, walks the Pilot over it, and runs the Workshop panel and Build
+//! mode. Every image is shipped art loaded by stable content ID
+//! (`crate::art`).
 
+use bevy::input::mouse::AccumulatedMouseScroll;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
@@ -18,42 +21,36 @@ use sim::{Loadout, ShipKind, ShipSheet, Upgrades};
 use crate::art::{self, icon_node, ContentImages};
 use crate::flow::{self, GameScreen, PauseMenu, SaveSlot, ScreenEntity};
 use crate::hints::{Hint, Hints};
+use crate::layout::{
+    self, room_px, CarrierLayout, Cell, Piece, PlaceError, PlacedRoom, Rect, RoomId, Side, CELL,
+    HULL_H, HULL_W,
+};
 use crate::mission::MissionRequest;
 use crate::save::{LastResult, SaveGame};
 use crate::workshop::{self, BuyError, Upgrade, UPGRADES};
 
-/// Width of one room. Bridge, Crew Quarters and Workshop are one room wide;
-/// the Dock is one berth per battleship.
-pub const ROOM_W: f32 = 320.0;
-/// Width of one Dock berth.
-pub const BERTH_W: f32 = ROOM_W;
-/// Where the Dock starts: after the three one-room rooms.
-pub const DOCK_X: f32 = ROOM_W * 3.0;
-pub const DECK_LEN: f32 = DOCK_X + BERTH_W * SHIPS.len() as f32;
-/// A / D walking speed, px/s.
-pub const WALK_SPEED: f32 = 120.0;
-/// E reaches the nearest hotspot within this many px.
-pub const INTERACT_RANGE: f32 = 40.0;
-/// A docked battleship is big; E reaches it from this far.
-pub const BERTH_REACH: f32 = 90.0;
-const PILOT_HALF_W: f32 = 10.0;
-const PILOT_SPAWN_NEW_GAME: f32 = 110.0;
-/// Between the two berths, out of reach of both.
-const PILOT_SPAWN_AFTER_MISSION: f32 = DOCK_X + BERTH_W;
-const CAMERA_Y: f32 = 70.0;
-/// Carrier camera zoom (world px per screen px); the deck art reads better
-/// close up than at 1:1.
-const CAMERA_ZOOM: f32 = 0.7;
-/// Room art is fitted to the room width; this much of it hangs below the
-/// walking line (the art's lower frame).
-const ROOM_ART_SINK: f32 = 34.0;
+/// Walking speed, px/s (8 directions, diagonals normalised).
+pub const WALK_SPEED: f32 = 160.0;
+/// E reaches the nearest hotspot within this many px of the Pilot's feet.
+pub const INTERACT_RANGE: f32 = 56.0;
+/// Spawn cells: a new game on the Bridge, after a mission on the Dock
+/// walkway (§ Walking and interaction).
+const SPAWN_NEW_GAME: (i32, i32) = (1, 1);
+const SPAWN_AFTER_MISSION: (i32, i32) = (5, 6);
+/// Zoom levels, screen px per world px: Overview (the whole hull fits
+/// 1280 × 720), Normal, Close. The mouse wheel steps between them.
+pub const ZOOMS: [f32; 3] = [0.65, 1.0, 1.5];
+const OVERVIEW: usize = 0;
+const NORMAL: usize = 1;
+/// Build-mode camera pan, screen px/s.
+const PAN_SPEED: f32 = 600.0;
 /// Height of the Pilot and the crew from head to feet, px. The art has
 /// different amounts of empty canvas, so this is measured on the visible
 /// pixels (`standing`), not the image size.
-const CHARACTER_H: f32 = 48.0;
+const CHARACTER_H: f32 = 70.0;
 /// Berth pad size the docked ships' lengths are given for
-/// (design/READINESS.md § Dock and berths: 256 px pad).
-const BERTH_PAD: f32 = 256.0;
+/// (design/READINESS.md § Dock and berths: a 2 × 2-cell, 256 px pad).
+pub const BERTH_PAD: f32 = 2.0 * CELL;
 /// Pilot walk cycle: a new frame every this many px walked.
 const STRIDE: f32 = 12.0;
 const PILOT_FRAMES: [&str; 4] = [
@@ -63,51 +60,42 @@ const PILOT_FRAMES: [&str; 4] = [
     "core.carrier.pilot.walk_4",
 ];
 const PILOT_IDLE: &str = "core.carrier.pilot.idle";
+const HULL_FLOOR: &str = "core.carrier.hull_floor";
+const BUILD_SLOT: &str = "core.carrier.build_slot";
+/// Draw layers. Floors are flat; characters and docked ships are sorted by
+/// their feet (`depth`).
+const Z_SPACE: f32 = -40.0;
+const Z_HULL: f32 = -30.0;
+const Z_FLOOR: f32 = -20.0;
+const Z_DOOR: f32 = -19.0;
+const Z_SLOT: f32 = -18.0;
+const Z_GHOST: f32 = -17.0;
+const Z_LABEL: f32 = 5.0;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Room {
-    Bridge,
-    CrewQuarters,
-    Workshop,
-    Dock,
+/// World position (Bevy, y up) of grid px (y down).
+pub fn world(p: Vec2) -> Vec2 {
+    Vec2::new(p.x, -p.y)
 }
 
-/// Rooms left to right: room, name, room art (the Dock draws its berths
-/// instead), left edge, width.
-const ROOMS: [(Room, &str, Option<&str>, f32, f32); 4] = [
-    (
-        Room::Bridge,
-        "Bridge",
-        Some("core.carrier.room.bridge"),
-        0.0,
-        ROOM_W,
-    ),
-    (
-        Room::CrewQuarters,
-        "Crew Quarters",
-        Some("core.carrier.room.crew_quarters"),
-        ROOM_W,
-        ROOM_W,
-    ),
-    (
-        Room::Workshop,
-        "Workshop",
-        Some("core.carrier.room.workshop"),
-        ROOM_W * 2.0,
-        ROOM_W,
-    ),
-    (Room::Dock, "Dock", None, DOCK_X, DECK_LEN - DOCK_X),
-];
+/// Grid px of a world position.
+pub fn grid(p: Vec2) -> Vec2 {
+    Vec2::new(p.x, -p.y)
+}
 
-/// An empty ship berth; the docked battleship is drawn on top.
-const BERTH_IMAGE: &str = "core.carrier.dock.berth";
+/// Draw depth for something standing at grid y: further south is in front.
+fn depth(grid_y: f32) -> f32 {
+    1.0 + grid_y / 10_000.0
+}
 
-pub fn room_at(x: f32) -> Room {
-    ROOMS
-        .iter()
-        .rev()
-        .find(|r| x >= r.3)
-        .map_or(Room::Bridge, |r| r.0)
+fn cell_centre((x, y): (i32, i32)) -> Vec2 {
+    Vec2::new((x as f32 + 0.5) * CELL, (y as f32 + 0.5) * CELL)
+}
+
+/// World-space centre and size of a `w × d`-cell piece anchored at (x, y).
+fn piece_rect(x: i32, y: i32, (w, d): (i32, i32)) -> (Vec2, Vec2) {
+    let size = Vec2::new(w as f32, d as f32) * CELL;
+    let centre = Vec2::new(x as f32 * CELL, y as f32 * CELL) + size / 2.0;
+    (world(centre), size)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -420,6 +408,7 @@ pub fn ship_index(id: &str) -> usize {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Hotspot {
     Crew(Crew),
+    /// The Workshop bench: Upgrades and Build.
     UpgradeBench,
     /// The battleship docked in berth `n` (an index into [`SHIPS`]).
     Berth(usize),
@@ -433,44 +422,118 @@ impl Hotspot {
             Hotspot::Berth(i) => format!("Board {}", SHIPS[i].name),
         }
     }
+}
 
-    fn reach(self) -> f32 {
+/// Room-local spot (cell, then px inside it) of a crew member's feet:
+/// design/READINESS.md § Room catalogue.
+const CREW_SPOTS: [(RoomId, Crew, (i32, i32)); 3] = [
+    (RoomId::Bridge, Crew::Gunner, (0, 1)),
+    (RoomId::CrewQuarters, Crew::Researcher, (1, 1)),
+    (RoomId::Workshop, Crew::Engineer, (0, 1)),
+];
+/// Feet inside a crew member's cell, cell-local px.
+const CREW_FEET: (f32, f32) = (64.0, 80.0);
+/// The Workshop bench: cell (2,0), in front of the back wall.
+const BENCH_SPOT: (i32, i32, f32, f32) = (2, 0, 64.0, 72.0);
+
+/// Centre of Dock berth `i`'s pad, room-local px. Pads are 2 × 2 cells on
+/// rows 0–1, left to right.
+fn berth_pad_centre(i: usize) -> (f32, f32) {
+    (BERTH_PAD * (i as f32 + 0.5), BERTH_PAD / 2.0)
+}
+
+/// Every interactable thing on the carrier and where (grid px; for crew,
+/// their feet). Berth hotspots are the middle of the pad's front edge.
+pub fn hotspots(layout: &CarrierLayout) -> Vec<(Hotspot, Vec2)> {
+    let mut out = Vec::new();
+    let at = |room: &PlacedRoom, (cx, cy): (i32, i32), (x, y): (f32, f32)| {
+        Vec2::from(room_px(room, (cx as f32 * CELL + x, cy as f32 * CELL + y)))
+    };
+    for room in &layout.rooms {
+        for (id, crew, cell) in CREW_SPOTS {
+            if room.id == id {
+                out.push((Hotspot::Crew(crew), at(room, cell, CREW_FEET)));
+            }
+        }
+        match room.id {
+            RoomId::Workshop => {
+                let (cx, cy, x, y) = BENCH_SPOT;
+                out.push((Hotspot::UpgradeBench, at(room, (cx, cy), (x, y))));
+            }
+            RoomId::Dock => {
+                for i in 0..SHIPS.len() {
+                    let (x, _) = berth_pad_centre(i);
+                    out.push((Hotspot::Berth(i), Vec2::from(room_px(room, (x, BERTH_PAD)))));
+                }
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+/// The hotspot E would use from grid px `p`: the closest one within reach.
+pub fn nearest_hotspot(hotspots: &[(Hotspot, Vec2)], p: Vec2) -> Option<(Hotspot, Vec2)> {
+    hotspots
+        .iter()
+        .map(|&(h, at)| (h, at, at.distance(p)))
+        .filter(|&(_, _, d)| d <= INTERACT_RANGE)
+        .min_by(|a, b| a.2.total_cmp(&b.2))
+        .map(|(h, at, _)| (h, at))
+}
+
+/// The crew member or bench drawn under grid px `p` (clicked), if any.
+/// Docked ships are hit-tested on their sprites ([`ship_at`]).
+pub fn clicked_hotspot(hotspots: &[(Hotspot, Vec2)], p: Vec2) -> Option<Hotspot> {
+    hotspots
+        .iter()
+        .find(|(h, at)| {
+            !matches!(h, Hotspot::Berth(_))
+                && (p.x - at.x).abs() <= 24.0
+                && p.y <= at.y + 8.0
+                && p.y >= at.y - CHARACTER_H
+        })
+        .map(|(h, _)| *h)
+}
+
+/// The Workshop panel's two tabs.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum WorkshopTab {
+    #[default]
+    Upgrades,
+    Build,
+}
+
+/// What Build mode does on a click.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Tool {
+    Place(Piece),
+    Demolish,
+}
+
+impl Tool {
+    fn label(self) -> String {
         match self {
-            Hotspot::Berth(_) => BERTH_REACH,
-            _ => INTERACT_RANGE,
+            Tool::Place(p) => format!("{} ({})", p.name(), cost_text(p.cost())),
+            Tool::Demolish => "Demolish (full refund)".into(),
         }
     }
 }
 
-/// Centre of Dock berth `i`, where its battleship sits.
-pub const fn berth_x(i: usize) -> f32 {
-    DOCK_X + (i as f32 + 0.5) * BERTH_W
-}
-
-/// Interactable things on the deck and their x position.
-pub const HOTSPOTS: [(Hotspot, f32); 6] = [
-    (Hotspot::Crew(Crew::Gunner), 210.0),
-    (Hotspot::Crew(Crew::Researcher), 500.0),
-    (Hotspot::Crew(Crew::Engineer), 700.0),
-    (Hotspot::UpgradeBench, 840.0),
-    (Hotspot::Berth(0), berth_x(0)),
-    (Hotspot::Berth(1), berth_x(1)),
+/// The Build tab's rows: every piece, then Demolish.
+pub const BUILD_TOOLS: [Tool; 4] = [
+    Tool::Place(Piece::BUILDABLE[0]),
+    Tool::Place(Piece::BUILDABLE[1]),
+    Tool::Place(Piece::BUILDABLE[2]),
+    Tool::Demolish,
 ];
 
-/// The hotspot E would use from `x`: the closest one within reach.
-pub fn nearest_hotspot(x: f32) -> Option<(Hotspot, f32)> {
-    HOTSPOTS
-        .iter()
-        .copied()
-        .map(|(h, hx)| (h, hx, (hx - x).abs()))
-        .filter(|&(h, _, d)| d <= h.reach())
-        .min_by(|a, b| a.2.total_cmp(&b.2))
-        .map(|(h, hx, _)| (h, hx))
-}
-
-/// One frame of A / D walking; the walls at either end of the deck stop it.
-pub fn walk(x: f32, dir: f32, dt: f32) -> f32 {
-    (x + dir * WALK_SPEED * dt).clamp(PILOT_HALF_W, DECK_LEN - PILOT_HALF_W)
+pub fn cost_text(c: workshop::Cost) -> String {
+    if c.void_crystal > 0 {
+        format!("{} cr + {} VC", c.credits, c.void_crystal)
+    } else {
+        format!("{} cr", c.credits)
+    }
 }
 
 /// What the carrier is showing on top of the deck.
@@ -487,8 +550,26 @@ pub enum Overlay {
     },
     /// Confirm and launch the battleship in [`SHIPS`]`[index]`.
     Launch { index: usize },
-    /// The upgrade shop: the selected row and the last purchase's feedback.
-    Workshop { index: usize, message: String },
+    /// The Workshop bench panel: its tab, the selected row and the last
+    /// action's feedback.
+    Workshop {
+        tab: WorkshopTab,
+        index: usize,
+        message: String,
+    },
+    /// Build mode: the ghost follows the mouse, a click places or
+    /// demolishes.
+    Build { tool: Tool, message: String },
+}
+
+impl Overlay {
+    pub fn workshop(tab: WorkshopTab, index: usize, message: String) -> Self {
+        Overlay::Workshop {
+            tab,
+            index,
+            message,
+        }
+    }
 }
 
 /// Set by the flow when the Carrier is entered straight from a mission, so the
@@ -498,20 +579,59 @@ pub struct CarrierArrival {
     pub from_mission: bool,
 }
 
+/// The layout as drawn, and what is derived from it.
+#[derive(Resource, Default)]
+pub struct CarrierScene {
+    drawn: Option<CarrierLayout>,
+    pub walkable: Vec<Rect>,
+    pub hotspots: Vec<(Hotspot, Vec2)>,
+}
+
+/// Camera state: the zoom level (index into [`ZOOMS`]) and, in Build mode,
+/// the panned view centre (world px) and the zoom to go back to.
+#[derive(Resource)]
+pub struct CarrierView {
+    pub zoom: usize,
+    pub pan: Vec2,
+    building: Option<usize>,
+}
+
+impl Default for CarrierView {
+    fn default() -> Self {
+        Self {
+            zoom: NORMAL,
+            pan: Vec2::ZERO,
+            building: None,
+        }
+    }
+}
+
+/// The hull cell under the mouse in Build mode (autoplay sets it directly).
+#[derive(Resource, Default)]
+pub struct BuildCursor(pub Option<(i32, i32)>);
+
 /// The player character. `walked` (px since it last stood still) drives
 /// the walk cycle.
 #[derive(Component, Default)]
 pub(crate) struct Pilot {
     walked: f32,
-    last_x: Option<f32>,
+    last: Option<Vec2>,
 }
 
 #[derive(Component)]
 struct Prompt;
 
-/// A Dock berth: one slot holding one battleship (`ship`, an index into
-/// [`SHIPS`]). Spawned by [`berth`]; the 2.5D carrier reuses it for more
-/// berths.
+/// Everything drawn from the layout; respawned when it changes.
+#[derive(Component)]
+struct LayoutSprite;
+
+/// Build-mode ghost, slots and reason line; respawned as they change.
+#[derive(Component)]
+struct BuildUi;
+
+/// A Dock berth: one pad holding one battleship (`ship`, an index into
+/// [`SHIPS`]). Spawned by [`berth`] for each ship; the pad itself is part of
+/// the Dock room art.
 #[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Berth {
     pub ship: usize,
@@ -552,20 +672,45 @@ fn portrait(
     )
 }
 
+/// The corridor art for an opening mask, e.g. `core.carrier.corridor.nes`.
+fn corridor_id(mask: layout::Mask) -> String {
+    let name = mask.name();
+    let name = if name.is_empty() { "nesw".into() } else { name };
+    format!("core.carrier.corridor.{name}")
+}
+
+fn door_id(side: Side) -> String {
+    format!("core.carrier.door.{}", side.letter())
+}
+
 /// Every manifest image the Carrier draws (besides dialogue portraits).
 #[cfg(test)]
 pub fn image_ids() -> Vec<String> {
-    let mut ids: Vec<String> = ROOMS
-        .iter()
-        .filter_map(|r| r.2.map(str::to_string))
-        .collect();
-    ids.push(BERTH_IMAGE.into());
+    let mut ids: Vec<String> = [
+        RoomId::Bridge,
+        RoomId::CrewQuarters,
+        RoomId::Workshop,
+        RoomId::Dock,
+        RoomId::SalvageBay,
+        RoomId::TrainingRoom,
+    ]
+    .iter()
+    .map(|r| r.content_id())
+    .collect();
+    for mask in [
+        "n", "e", "s", "w", "ns", "ew", "ne", "es", "sw", "nw", "nes", "esw", "nsw", "new", "nesw",
+    ] {
+        ids.push(format!("core.carrier.corridor.{mask}"));
+    }
+    ids.extend(layout::Side::ALL.iter().map(|s| door_id(*s)));
+    ids.extend([HULL_FLOOR.into(), BUILD_SLOT.into()]);
     ids.extend(PILOT_FRAMES.iter().map(|f| f.to_string()));
     ids.push(PILOT_IDLE.into());
     ids.extend(SHIPS.iter().map(|s| s.image_id.to_string()));
     for crew in [Crew::Gunner, Crew::Researcher, Crew::Engineer] {
         ids.push(crew.sprite_id());
     }
+    ids.push(crate::render::ids::BACKGROUND.into());
     ids
 }
 
@@ -575,6 +720,9 @@ impl Plugin for CarrierPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Overlay>()
             .init_resource::<CarrierArrival>()
+            .init_resource::<CarrierScene>()
+            .init_resource::<CarrierView>()
+            .init_resource::<BuildCursor>()
             .add_systems(
                 OnEnter(GameScreen::Carrier),
                 spawn_carrier.after(flow::enter_carrier),
@@ -583,9 +731,15 @@ impl Plugin for CarrierPlugin {
             .add_systems(
                 Update,
                 (
-                    click_ship,
+                    sync_layout,
+                    click_hotspot,
                     carrier_input,
-                    follow_pilot,
+                    build_click,
+                    zoom_wheel,
+                    build_mode_camera,
+                    carrier_camera,
+                    track_build_cursor,
+                    build_preview,
                     animate_pilot,
                     update_prompt,
                     update_hud,
@@ -594,6 +748,8 @@ impl Plugin for CarrierPlugin {
                     sync_overlay,
                 )
                     .chain()
+                    // Esc closes an open panel instead of pausing.
+                    .after(flow::toggle_pause_menu)
                     .run_if(in_state(GameScreen::Carrier)),
             );
     }
@@ -655,35 +811,31 @@ fn standing(
     )
 }
 
-/// A Dock berth at `x0..x0 + BERTH_W` holding `SHIPS[ship]`, drawn with the
-/// same sprite as in battle, nose up, sized for the berth's height the way
-/// the design sizes it on a 256 px pad.
+/// Dock berth: `SHIPS[ship]` on the pad centred at grid px `pad`, drawn
+/// with the same sprite as in battle, nose north, its longest side
+/// `ShipInfo::berth_len` on the 256 px pad (design/READINESS.md § Dock and
+/// berths). The pad itself is part of the Dock room art.
 pub fn berth(
     commands: &mut Commands,
     art: &mut ContentImages,
     images: &mut Assets<Image>,
-    x0: f32,
+    pad: Vec2,
     ship: usize,
 ) {
-    let image = art.get(images, BERTH_IMAGE).unwrap_or_default();
-    let px = ContentImages::size(images, &image);
-    let h = BERTH_W * px.y / px.x;
-    let centre = Vec2::new(x0 + BERTH_W / 2.0, h / 2.0 - ROOM_ART_SINK);
+    let centre = world(pad);
+    let feet = depth(pad.y + BERTH_PAD / 2.0);
     commands.spawn((
         ScreenEntity,
+        LayoutSprite,
         Berth { ship },
-        Sprite {
-            image,
-            custom_size: Some(Vec2::new(BERTH_W, h)),
-            ..default()
-        },
-        Transform::from_translation(centre.extend(-1.0)),
+        Transform::from_translation(centre.extend(Z_FLOOR)),
     ));
     let image = art.get(images, SHIPS[ship].image_id).unwrap_or_default();
     let px = ContentImages::size(images, &image);
-    let size = px * (SHIPS[ship].berth_len / BERTH_PAD) * h / px.max_element();
+    let size = px * (SHIPS[ship].berth_len / px.max_element());
     commands.spawn((
         ScreenEntity,
+        LayoutSprite,
         DockedShip {
             ship,
             half: size / 2.0,
@@ -693,109 +845,89 @@ pub fn berth(
             custom_size: Some(size),
             ..default()
         },
-        Transform::from_translation(centre.extend(0.2)),
+        Transform::from_translation(centre.extend(feet)),
     ));
+}
+
+/// A flat floor piece: `id` stretched over `size` world px centred at
+/// `centre`.
+fn floor(
+    art: &mut ContentImages,
+    images: &mut Assets<Image>,
+    id: &str,
+    centre: Vec2,
+    size: Vec2,
+    z: f32,
+) -> impl Bundle {
+    (
+        ScreenEntity,
+        Sprite {
+            image: art.get(images, id).unwrap_or_default(),
+            custom_size: Some(size),
+            ..default()
+        },
+        Transform::from_translation(centre.extend(z)),
+    )
 }
 
 fn spawn_carrier(
     mut commands: Commands,
     arrival: Res<CarrierArrival>,
     mut overlay: ResMut<Overlay>,
+    mut scene: ResMut<CarrierScene>,
+    mut view: ResMut<CarrierView>,
     mut art: ResMut<ContentImages>,
     mut images: ResMut<Assets<Image>>,
-    mut camera: Query<&mut Projection, With<Camera2d>>,
 ) {
     *overlay = Overlay::None;
-    if let Ok(mut projection) = camera.single_mut() {
-        if let Projection::Orthographic(ortho) = &mut *projection {
-            ortho.scale = CAMERA_ZOOM;
-        }
-    }
-    // Rooms: each room's art fitted to its width, its lower frame below the
-    // walking line (y = 0).
-    for (_, name, id, x0, w) in ROOMS {
-        // Rooms are about this tall; the label sits over the art.
-        let mut h = ROOM_W * 0.57;
-        if let Some(id) = id {
-            let image = art.get(&mut images, id).unwrap_or_default();
-            let px = ContentImages::size(&images, &image);
-            h = w * px.y / px.x;
-            commands.spawn((
-                ScreenEntity,
-                Sprite {
-                    image,
-                    custom_size: Some(Vec2::new(w, h)),
-                    ..default()
+    // Drawn from the save by `sync_layout`.
+    scene.drawn = None;
+    *view = CarrierView::default();
+    let hull = Vec2::new(HULL_W as f32, HULL_H as f32) * CELL;
+
+    // Space behind the hull: the battle background, tiled.
+    if let Some(image) = art.get(&mut images, crate::render::ids::BACKGROUND) {
+        commands.spawn((
+            ScreenEntity,
+            Sprite {
+                image,
+                custom_size: Some(hull + Vec2::splat(4000.0)),
+                image_mode: SpriteImageMode::Tiled {
+                    tile_x: true,
+                    tile_y: true,
+                    stretch_value: 1.0,
                 },
-                Transform::from_xyz(x0 + w / 2.0, h / 2.0 - ROOM_ART_SINK, -1.0),
-            ));
-        }
-        commands.spawn(label(
-            name,
-            16.0,
-            Color::srgb(0.75, 0.82, 0.9),
-            Vec3::new(x0 + w / 2.0, h - ROOM_ART_SINK + 14.0, 1.0),
+                ..default()
+            },
+            Transform::from_translation(world(hull / 2.0).extend(Z_SPACE)),
         ));
     }
-    for (i, _) in SHIPS.iter().enumerate() {
-        berth(
-            &mut commands,
-            &mut art,
-            &mut images,
-            DOCK_X + i as f32 * BERTH_W,
-            i,
-        );
-    }
+
     commands.spawn((
-        label("Selected", 11.0, Color::srgb(0.5, 0.9, 1.0), Vec3::ZERO),
+        label("Selected", 13.0, Color::srgb(0.5, 0.9, 1.0), Vec3::ZERO),
         SelectedTag,
     ));
-    commands.spawn(label(
-        "Next: Elimination",
-        11.0,
-        Color::srgb(0.7, 0.9, 1.0),
-        Vec3::new(90.0, 100.0, 0.3),
-    ));
-
-    // Crew.
-    for (hotspot, x) in HOTSPOTS {
-        let Hotspot::Crew(crew) = hotspot else {
-            continue;
-        };
-        commands.spawn(standing(
-            &mut art,
-            &mut images,
-            &crew.sprite_id(),
-            CHARACTER_H,
-            Vec3::new(x, 0.0, 0.5),
-        ));
-        commands.spawn(label(
-            crew.name(),
-            11.0,
-            crew.color(),
-            Vec3::new(x, CHARACTER_H + 10.0, 0.6),
-        ));
-    }
 
     // The Pilot (player character).
-    let x = if arrival.from_mission {
-        PILOT_SPAWN_AFTER_MISSION
+    let spawn = if arrival.from_mission {
+        SPAWN_AFTER_MISSION
     } else {
-        PILOT_SPAWN_NEW_GAME
+        SPAWN_NEW_GAME
     };
+    let feet = cell_centre(spawn);
     commands.spawn((
         standing(
             &mut art,
             &mut images,
             PILOT_IDLE,
             CHARACTER_H,
-            Vec3::new(x, 0.0, 2.0),
+            world(feet).extend(depth(feet.y)),
         ),
         Pilot::default(),
     ));
 
     commands.spawn((
-        label("", 14.0, Color::WHITE, Vec3::new(0.0, 0.0, 5.0)),
+        label("", 16.0, Color::WHITE, Vec3::new(0.0, 0.0, Z_LABEL + 1.0)),
         Prompt,
     ));
     // Wallet and current room, top right.
@@ -841,13 +973,146 @@ fn spawn_carrier(
         });
 }
 
+/// Draws `layout`: hull floor, rooms, corridors, doors, room labels, crew
+/// and the docked battleships.
+fn spawn_layout(
+    commands: &mut Commands,
+    art: &mut ContentImages,
+    images: &mut Assets<Image>,
+    layout: &CarrierLayout,
+    hotspots: &[(Hotspot, Vec2)],
+) {
+    for y in 0..HULL_H {
+        for x in 0..HULL_W {
+            let (centre, size) = piece_rect(x, y, (1, 1));
+            commands.spawn((
+                floor(art, images, HULL_FLOOR, centre, size, Z_HULL),
+                LayoutSprite,
+            ));
+        }
+    }
+    for room in &layout.rooms {
+        let (centre, size) = piece_rect(room.x, room.y, room.id.footprint());
+        commands.spawn((
+            floor(art, images, &room.id.content_id(), centre, size, Z_FLOOR),
+            LayoutSprite,
+        ));
+        commands.spawn((
+            label(
+                room.id.name(),
+                15.0,
+                Color::srgb(0.8, 0.88, 0.95),
+                Vec3::new(centre.x, centre.y + size.y / 2.0 - 16.0, Z_LABEL),
+            ),
+            LayoutSprite,
+        ));
+        for (x, y, side) in layout.doors(room) {
+            let (cell, _) = piece_rect(x, y, (1, 1));
+            let half = CELL / 2.0;
+            let (offset, size) = match side {
+                Side::N => (Vec2::new(0.0, half - 24.0), Vec2::new(CELL, 48.0)),
+                Side::S => (Vec2::new(0.0, -half + 6.0), Vec2::new(CELL, 12.0)),
+                Side::E => (Vec2::new(half - 6.0, 0.0), Vec2::new(12.0, CELL)),
+                Side::W => (Vec2::new(-half + 6.0, 0.0), Vec2::new(12.0, CELL)),
+            };
+            commands.spawn((
+                floor(art, images, &door_id(side), cell + offset, size, Z_DOOR),
+                LayoutSprite,
+            ));
+        }
+        if room.id == RoomId::Dock {
+            for i in 0..SHIPS.len() {
+                let pad = Vec2::from(room_px(room, berth_pad_centre(i)));
+                berth(commands, art, images, pad, i);
+            }
+            commands.spawn((
+                label(
+                    "Next: Elimination",
+                    13.0,
+                    Color::srgb(0.7, 0.9, 1.0),
+                    Vec3::new(centre.x, centre.y + size.y / 2.0 - 34.0, Z_LABEL),
+                ),
+                LayoutSprite,
+            ));
+        }
+    }
+    for &(x, y) in &layout.corridors {
+        let (centre, size) = piece_rect(x, y, (1, 1));
+        commands.spawn((
+            floor(
+                art,
+                images,
+                &corridor_id(layout.mask(x, y)),
+                centre,
+                size,
+                Z_FLOOR,
+            ),
+            LayoutSprite,
+        ));
+    }
+    for &(hotspot, at) in hotspots {
+        let Hotspot::Crew(crew) = hotspot else {
+            continue;
+        };
+        commands.spawn((
+            standing(
+                art,
+                images,
+                &crew.sprite_id(),
+                CHARACTER_H,
+                world(at).extend(depth(at.y)),
+            ),
+            LayoutSprite,
+        ));
+        commands.spawn((
+            label(
+                crew.name(),
+                13.0,
+                crew.color(),
+                (world(at) + Vec2::Y * (CHARACTER_H + 10.0)).extend(Z_LABEL),
+            ),
+            LayoutSprite,
+        ));
+    }
+}
+
+/// Redraws the carrier whenever the saved layout differs from what is on
+/// screen (entering the scene, building, demolishing).
+fn sync_layout(
+    mut commands: Commands,
+    save: Res<SaveSlot>,
+    mut scene: ResMut<CarrierScene>,
+    mut art: ResMut<ContentImages>,
+    mut images: ResMut<Assets<Image>>,
+    existing: Query<Entity, With<LayoutSprite>>,
+) {
+    let layout = save
+        .game
+        .as_ref()
+        .map(|g| g.carrier.clone())
+        .unwrap_or_default();
+    if scene.drawn.as_ref() == Some(&layout) {
+        return;
+    }
+    for entity in &existing {
+        commands.entity(entity).despawn();
+    }
+    let hotspots = hotspots(&layout);
+    spawn_layout(&mut commands, &mut art, &mut images, &layout, &hotspots);
+    scene.walkable = layout.walkable();
+    scene.hotspots = hotspots;
+    scene.drawn = Some(layout);
+}
+
 fn leave_carrier(
     mut overlay: ResMut<Overlay>,
     mut arrival: ResMut<CarrierArrival>,
+    mut scene: ResMut<CarrierScene>,
     mut camera: Query<(&mut Transform, &mut Projection), With<Camera2d>>,
 ) {
     *overlay = Overlay::None;
     arrival.from_mission = false;
+    scene.drawn = None;
     if let Ok((mut cam, mut projection)) = camera.single_mut() {
         cam.translation.x = 0.0;
         cam.translation.y = 0.0;
@@ -857,11 +1122,36 @@ fn leave_carrier(
     }
 }
 
+/// WASD / arrows as a direction in grid space (y south), normalised.
+fn wasd(keys: &ButtonInput<KeyCode>) -> Vec2 {
+    let mut dir = Vec2::ZERO;
+    if keys.any_pressed([KeyCode::KeyA, KeyCode::ArrowLeft]) {
+        dir.x -= 1.0;
+    }
+    if keys.any_pressed([KeyCode::KeyD, KeyCode::ArrowRight]) {
+        dir.x += 1.0;
+    }
+    if keys.any_pressed([KeyCode::KeyW, KeyCode::ArrowUp]) {
+        dir.y -= 1.0;
+    }
+    if keys.any_pressed([KeyCode::KeyS, KeyCode::ArrowDown]) {
+        dir.y += 1.0;
+    }
+    dir.normalize_or_zero()
+}
+
+/// The Build tab row a tool is on.
+fn tool_row(tool: Tool) -> usize {
+    BUILD_TOOLS.iter().position(|&t| t == tool).unwrap_or(0)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn carrier_input(
     keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
     pause: Res<PauseMenu>,
+    scene: Res<CarrierScene>,
+    mut view: ResMut<CarrierView>,
     mut save: ResMut<SaveSlot>,
     mut overlay: ResMut<Overlay>,
     mut pilot: Query<&mut Transform, With<Pilot>>,
@@ -876,23 +1166,26 @@ fn carrier_input(
     let interact = keys.just_pressed(KeyCode::KeyE);
     let confirm =
         interact || keys.just_pressed(KeyCode::Enter) || keys.just_pressed(KeyCode::Space);
-    let back = keys.just_pressed(KeyCode::KeyX) || keys.just_pressed(KeyCode::Backspace);
+    let esc = keys.just_pressed(KeyCode::Escape);
+    let back = esc || keys.just_pressed(KeyCode::KeyX) || keys.just_pressed(KeyCode::Backspace);
+    let dt = time.delta_secs();
 
-    match &mut *overlay {
+    // Edit a copy so the overlay only reads as changed when it did.
+    let mut current = overlay.clone();
+    let mut next = None;
+    match &mut current {
         Overlay::None => {
-            let mut dir = 0.0;
-            if keys.any_pressed([KeyCode::KeyA, KeyCode::ArrowLeft]) {
-                dir -= 1.0;
-            }
-            if keys.any_pressed([KeyCode::KeyD, KeyCode::ArrowRight]) {
-                dir += 1.0;
-            }
-            tf.translation.x = walk(tf.translation.x, dir, time.delta_secs());
-            if !interact {
-                return;
-            }
-            if let Some((hotspot, _)) = nearest_hotspot(tf.translation.x) {
-                interact_with(hotspot, save.game.as_mut(), &mut overlay);
+            let feet = grid(tf.translation.truncate());
+            let step = wasd(&keys) * WALK_SPEED * dt;
+            let (x, y) = layout::walk(&scene.walkable, (feet.x, feet.y), (step.x, step.y));
+            let feet = Vec2::new(x, y);
+            tf.translation = world(feet).extend(depth(feet.y));
+            if interact {
+                if let Some((hotspot, _)) = nearest_hotspot(&scene.hotspots, feet) {
+                    let mut o = Overlay::None;
+                    interact_with(hotspot, save.game.as_mut(), &mut o);
+                    next = Some(o);
+                }
             }
         }
         Overlay::Dialogue {
@@ -901,60 +1194,202 @@ fn carrier_input(
             launch,
         } => {
             if back {
-                *overlay = Overlay::None;
+                next = Some(Overlay::None);
             } else if confirm {
                 if *index + 1 < lines.len() {
                     *index += 1;
                 } else if let Some(ship) = *launch {
-                    *overlay = Overlay::Launch { index: ship };
+                    next = Some(Overlay::Launch { index: ship });
                 } else {
-                    *overlay = Overlay::None;
+                    next = Some(Overlay::None);
                 }
             }
         }
         Overlay::Launch { index } => {
             if back {
-                *overlay = Overlay::None;
+                next = Some(Overlay::None);
             } else if confirm {
                 launch.write(MissionRequest {
                     battleship_id: SHIPS[*index].id.to_string(),
                 });
             }
         }
-        Overlay::Workshop { index, message } => {
+        Overlay::Workshop {
+            tab,
+            index,
+            message,
+        } => {
+            let rows = match tab {
+                WorkshopTab::Upgrades => UPGRADES.len(),
+                WorkshopTab::Build => BUILD_TOOLS.len(),
+            };
             let up = keys.any_just_pressed([KeyCode::KeyW, KeyCode::ArrowUp]);
             let down = keys.any_just_pressed([KeyCode::KeyS, KeyCode::ArrowDown]);
-            let digit = [KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3]
-                .iter()
-                .position(|k| keys.just_pressed(*k));
-            if back {
-                *overlay = Overlay::None;
+            let digit = [
+                KeyCode::Digit1,
+                KeyCode::Digit2,
+                KeyCode::Digit3,
+                KeyCode::Digit4,
+            ]
+            .iter()
+            .position(|k| keys.just_pressed(*k))
+            .filter(|&i| i < rows);
+            if keys.just_pressed(KeyCode::Tab) {
+                *tab = match tab {
+                    WorkshopTab::Upgrades => WorkshopTab::Build,
+                    WorkshopTab::Build => WorkshopTab::Upgrades,
+                };
+                *index = 0;
+                message.clear();
+            } else if back {
+                next = Some(Overlay::None);
             } else if let Some(i) = digit {
                 *index = i;
             } else if up {
-                *index = (*index + UPGRADES.len() - 1) % UPGRADES.len();
+                *index = (*index + rows - 1) % rows;
             } else if down {
-                *index = (*index + 1) % UPGRADES.len();
+                *index = (*index + 1) % rows;
             } else if confirm {
-                let upgrade = UPGRADES[*index];
                 let Some(game) = &mut save.game else {
                     return;
                 };
-                *message = match workshop::buy(game, upgrade) {
-                    Ok(level) => format!("Installed {} {level}.", upgrade.name()),
-                    Err(BuyError::Maxed) => format!("{} is fully upgraded.", upgrade.name()),
-                    Err(BuyError::TooExpensive(c)) => format!(
-                        "Not enough: {} needs {} credits and {} Void Crystal.",
-                        upgrade.name(),
-                        c.credits,
-                        c.void_crystal
-                    ),
+                match tab {
+                    WorkshopTab::Upgrades => {
+                        let upgrade = UPGRADES[*index];
+                        *message = match workshop::buy(game, upgrade) {
+                            Ok(level) => format!("Installed {} {level}.", upgrade.name()),
+                            Err(BuyError::Maxed) => {
+                                format!("{} is fully upgraded.", upgrade.name())
+                            }
+                            Err(BuyError::TooExpensive(c)) => format!(
+                                "Not enough: {} needs {} credits and {} Void Crystal.",
+                                upgrade.name(),
+                                c.credits,
+                                c.void_crystal
+                            ),
+                        };
+                        // Spec § Save file: saved on every Workshop purchase.
+                        save.store();
+                    }
+                    WorkshopTab::Build => {
+                        let tool = BUILD_TOOLS[*index];
+                        let lock = match tool {
+                            Tool::Place(piece) => workshop::build_lock(game, piece),
+                            Tool::Demolish => None,
+                        };
+                        match lock {
+                            Some(e) => *message = format!("{}: {e}.", tool_name(tool)),
+                            None => {
+                                next = Some(Overlay::Build {
+                                    tool,
+                                    message: String::new(),
+                                })
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Overlay::Build { tool, message } => {
+            // The Pilot waits; WASD pans the view.
+            let zoom = ZOOMS[view.zoom];
+            view.pan += world(wasd(&keys)) * PAN_SPEED * dt / zoom;
+            if keys.just_pressed(KeyCode::KeyX) {
+                *tool = match tool {
+                    Tool::Demolish => Tool::Place(Piece::Corridor),
+                    Tool::Place(_) => Tool::Demolish,
                 };
-                // Spec § Save file: saved on every Workshop purchase.
-                save.store();
+                message.clear();
+            } else if esc {
+                next = Some(Overlay::workshop(
+                    WorkshopTab::Build,
+                    tool_row(*tool),
+                    std::mem::take(message),
+                ));
             }
         }
     }
+    overlay.set_if_neq(next.unwrap_or(current));
+}
+
+fn tool_name(tool: Tool) -> &'static str {
+    match tool {
+        Tool::Place(p) => p.name(),
+        Tool::Demolish => "Demolish",
+    }
+}
+
+/// What a Build-mode click on `cell` does to the save, and the feedback
+/// line. A built room returns to the Build tab; a corridor stays selected.
+pub fn apply_build_click(
+    game: &mut SaveGame,
+    tool: Tool,
+    (x, y): (i32, i32),
+) -> (bool, String, bool) {
+    match tool {
+        Tool::Place(piece) => match workshop::build(game, piece, x, y) {
+            Ok(()) => (
+                true,
+                format!("Built {} for {}.", piece.name(), cost_text(piece.cost())),
+                matches!(piece, Piece::Room(_)),
+            ),
+            Err(e) => (false, e.to_string(), false),
+        },
+        Tool::Demolish => match workshop::demolish(game, x, y) {
+            Ok(piece) => (
+                true,
+                format!(
+                    "Demolished {}: {} refunded.",
+                    piece.name(),
+                    cost_text(piece.cost())
+                ),
+                false,
+            ),
+            Err(e) => (false, e.to_string(), false),
+        },
+    }
+}
+
+/// Build mode's mouse: left click places or demolishes at the cursor cell
+/// (saving on success), right click goes back to the Build tab.
+fn build_click(
+    mouse: Res<ButtonInput<MouseButton>>,
+    pause: Res<PauseMenu>,
+    cursor: Res<BuildCursor>,
+    mut save: ResMut<SaveSlot>,
+    mut overlay: ResMut<Overlay>,
+) {
+    if pause.open {
+        return;
+    }
+    let Overlay::Build { tool, message } = &mut *overlay else {
+        return;
+    };
+    if mouse.just_pressed(MouseButton::Right) {
+        let back = Overlay::workshop(WorkshopTab::Build, tool_row(*tool), std::mem::take(message));
+        *overlay = back;
+        return;
+    }
+    if !mouse.just_pressed(MouseButton::Left) {
+        return;
+    }
+    let (Some(cell), Some(game)) = (cursor.0, save.game.as_mut()) else {
+        return;
+    };
+    let (changed, text, to_tab) = apply_build_click(game, *tool, cell);
+    let tool = *tool;
+    if changed {
+        // Spec § Save file: saved after every build or demolish.
+        save.store();
+    }
+    *overlay = if to_tab {
+        Overlay::workshop(WorkshopTab::Build, tool_row(tool), text)
+    } else {
+        Overlay::Build {
+            tool,
+            message: text,
+        }
+    };
 }
 
 /// Using `hotspot`: talk to crew, open the Workshop, or board a docked
@@ -977,10 +1412,7 @@ pub fn interact_with(hotspot: Hotspot, game: Option<&mut SaveGame>, overlay: &mu
                 launch: Some(ship),
             }
         }
-        Hotspot::UpgradeBench => Overlay::Workshop {
-            index: 0,
-            message: String::new(),
-        },
+        Hotspot::UpgradeBench => Overlay::workshop(WorkshopTab::Upgrades, 0, String::new()),
     };
 }
 
@@ -992,10 +1424,25 @@ pub fn ship_at(p: Vec2, ships: impl IntoIterator<Item = (Vec2, DockedShip)>) -> 
         .map(|(_, s)| s.ship)
 }
 
-/// Clicking a docked battleship boards it, like walking up and pressing E.
-fn click_ship(
+fn cursor_world(
+    windows: &Query<&Window, With<PrimaryWindow>>,
+    camera: &Query<(&Camera, &GlobalTransform), With<Camera2d>>,
+) -> Option<Vec2> {
+    let (Ok(window), Ok((camera, cam_tf))) = (windows.single(), camera.single()) else {
+        return None;
+    };
+    window
+        .cursor_position()
+        .and_then(|c| camera.viewport_to_world_2d(cam_tf, c).ok())
+}
+
+/// Clicking a docked battleship boards it, and clicking a crew member or
+/// the bench uses it, like walking up and pressing E.
+#[allow(clippy::too_many_arguments)]
+fn click_hotspot(
     mouse: Res<ButtonInput<MouseButton>>,
     pause: Res<PauseMenu>,
+    scene: Res<CarrierScene>,
     windows: Query<&Window, With<PrimaryWindow>>,
     camera: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
     ships: Query<(&GlobalTransform, &DockedShip)>,
@@ -1005,21 +1452,277 @@ fn click_ship(
     if pause.open || *overlay != Overlay::None || !mouse.just_pressed(MouseButton::Left) {
         return;
     }
-    let (Ok(window), Ok((camera, cam_tf))) = (windows.single(), camera.single()) else {
-        return;
-    };
-    let Some(p) = window
-        .cursor_position()
-        .and_then(|c| camera.viewport_to_world_2d(cam_tf, c).ok())
-    else {
+    let Some(p) = cursor_world(&windows, &camera) else {
         return;
     };
     let docked = ships
         .iter()
         .map(|(tf, s)| (tf.translation().truncate(), *s));
-    if let Some(ship) = ship_at(p, docked) {
-        interact_with(Hotspot::Berth(ship), save.game.as_mut(), &mut overlay);
+    let hotspot = ship_at(p, docked)
+        .map(Hotspot::Berth)
+        .or_else(|| clicked_hotspot(&scene.hotspots, grid(p)));
+    if let Some(hotspot) = hotspot {
+        interact_with(hotspot, save.game.as_mut(), &mut overlay);
     }
+}
+
+/// Mouse wheel steps between the zoom levels.
+fn zoom_wheel(
+    scroll: Res<AccumulatedMouseScroll>,
+    pause: Res<PauseMenu>,
+    mut view: ResMut<CarrierView>,
+) {
+    if pause.open || scroll.delta.y == 0.0 {
+        return;
+    }
+    view.zoom = if scroll.delta.y > 0.0 {
+        (view.zoom + 1).min(ZOOMS.len() - 1)
+    } else {
+        view.zoom.saturating_sub(1)
+    };
+}
+
+/// Entering Build mode switches to Overview and pans from where the Pilot
+/// stands; leaving it restores the zoom.
+fn build_mode_camera(
+    overlay: Res<Overlay>,
+    mut view: ResMut<CarrierView>,
+    pilot: Query<&Transform, With<Pilot>>,
+) {
+    let building = matches!(*overlay, Overlay::Build { .. });
+    match (building, view.building) {
+        (true, None) => {
+            view.building = Some(view.zoom);
+            view.zoom = OVERVIEW;
+            if let Ok(tf) = pilot.single() {
+                view.pan = tf.translation.truncate();
+            }
+        }
+        (false, Some(zoom)) => {
+            view.zoom = zoom;
+            view.building = None;
+        }
+        _ => {}
+    }
+}
+
+/// Keeps the camera centre within one cell past the hull on each side, or
+/// centred on the hull when the view is bigger than that.
+pub fn clamp_camera(target: Vec2, half_view: Vec2) -> Vec2 {
+    let min = Vec2::new(-CELL, -(HULL_H as f32 + 1.0) * CELL);
+    let max = Vec2::new((HULL_W as f32 + 1.0) * CELL, CELL);
+    let axis = |t: f32, lo: f32, hi: f32, half: f32| {
+        if hi - lo <= 2.0 * half {
+            (lo + hi) / 2.0
+        } else {
+            t.clamp(lo + half, hi - half)
+        }
+    };
+    Vec2::new(
+        axis(target.x, min.x, max.x, half_view.x),
+        axis(target.y, min.y, max.y, half_view.y),
+    )
+}
+
+fn carrier_camera(
+    mut view: ResMut<CarrierView>,
+    pilot: Query<&Transform, (With<Pilot>, Without<Camera2d>)>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+    mut camera: Query<(&mut Transform, &mut Projection), With<Camera2d>>,
+) {
+    let (Ok(pilot), Ok((mut cam, mut projection))) = (pilot.single(), camera.single_mut()) else {
+        return;
+    };
+    let scale = 1.0 / ZOOMS[view.zoom];
+    if let Projection::Orthographic(ortho) = &mut *projection {
+        if ortho.scale != scale {
+            ortho.scale = scale;
+        }
+    }
+    let size = windows
+        .single()
+        .map(|w| Vec2::new(w.width(), w.height()))
+        .unwrap_or(Vec2::new(1280.0, 720.0));
+    let half = size / 2.0 * scale;
+    let target = if view.building.is_some() {
+        view.pan
+    } else {
+        pilot.translation.truncate()
+    };
+    let centre = clamp_camera(target, half);
+    if view.building.is_some() && view.pan != centre {
+        view.pan = centre;
+    }
+    cam.translation.x = centre.x;
+    cam.translation.y = centre.y;
+}
+
+/// In Build mode, the hull cell under the mouse.
+fn track_build_cursor(
+    overlay: Res<Overlay>,
+    autoplay: Option<Res<flow::Autoplay>>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+    camera: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
+    mut cursor: ResMut<BuildCursor>,
+) {
+    // Autoplay points the cursor itself.
+    if autoplay.is_some() || !matches!(*overlay, Overlay::Build { .. }) {
+        return;
+    }
+    if let Some(p) = cursor_world(&windows, &camera) {
+        let g = grid(p);
+        let cell = Some(layout::cell_at(g.x, g.y));
+        if cursor.0 != cell {
+            cursor.0 = cell;
+        }
+    }
+}
+
+/// What Build mode shows at the cursor.
+#[derive(Clone, PartialEq, Debug)]
+struct Ghost {
+    image: String,
+    /// Anchor cell and footprint.
+    at: (i32, i32),
+    size: (i32, i32),
+    /// Whether a click would succeed.
+    ok: bool,
+    /// The line over the ghost: the cost, or why not.
+    text: String,
+}
+
+/// The ghost for `tool` at `cell`.
+fn ghost(game: &SaveGame, tool: Tool, (x, y): (i32, i32)) -> Option<Ghost> {
+    let layout = &game.carrier;
+    let image = |piece: Piece, x: i32, y: i32| match piece {
+        Piece::Room(id) => id.content_id(),
+        Piece::Corridor => {
+            let mut after = layout.clone();
+            if layout.cell(x, y) == Cell::Empty {
+                after.place(Piece::Corridor, x, y);
+            }
+            corridor_id(after.mask(x, y))
+        }
+    };
+    match tool {
+        Tool::Place(piece) => {
+            let result = workshop::can_build(game, piece, x, y);
+            let text = match result {
+                Ok(()) => format!("{}: {}", piece.name(), cost_text(piece.cost())),
+                Err(e) => e.to_string(),
+            };
+            Some(Ghost {
+                image: image(piece, x, y),
+                at: (x, y),
+                size: piece.footprint(),
+                ok: result.is_ok(),
+                text,
+            })
+        }
+        Tool::Demolish => {
+            let (piece, ox, oy) = layout.piece_origin(x, y)?;
+            let result = layout.can_demolish(x, y);
+            let text = match result {
+                Ok(p) => format!("Demolish {}: +{}", p.name(), cost_text(p.cost())),
+                Err(e) => e.to_string(),
+            };
+            Some(Ghost {
+                image: image(piece, ox, oy),
+                at: (ox, oy),
+                size: piece.footprint(),
+                ok: result.is_ok(),
+                text,
+            })
+        }
+    }
+}
+
+/// Build mode visuals: a slot marker on every empty cell next to the
+/// network, and the ghost at the cursor (green = legal, red + why).
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+fn build_preview(
+    mut commands: Commands,
+    overlay: Res<Overlay>,
+    cursor: Res<BuildCursor>,
+    save: Res<SaveSlot>,
+    mut art: ResMut<ContentImages>,
+    mut images: ResMut<Assets<Image>>,
+    existing: Query<Entity, With<BuildUi>>,
+    mut drawn: Local<Option<(Overlay, Option<(i32, i32)>, CarrierLayout)>>,
+) {
+    let game = save.game.clone().unwrap_or_default();
+    let key = (overlay.clone(), cursor.0, game.carrier.clone());
+    if drawn.as_ref() == Some(&key) {
+        return;
+    }
+    *drawn = Some(key);
+    for entity in &existing {
+        commands.entity(entity).despawn();
+    }
+    let Overlay::Build { tool, .. } = &*overlay else {
+        return;
+    };
+    let preview = cursor.0.and_then(|cell| ghost(&game, *tool, cell));
+    let under_ghost = |x: i32, y: i32| {
+        preview.as_ref().is_some_and(|g| {
+            (g.at.0..g.at.0 + g.size.0).contains(&x) && (g.at.1..g.at.1 + g.size.1).contains(&y)
+        })
+    };
+    if matches!(tool, Tool::Place(_)) {
+        for (x, y) in game
+            .carrier
+            .build_slots()
+            .into_iter()
+            .filter(|&(x, y)| !under_ghost(x, y))
+        {
+            let (centre, size) = piece_rect(x, y, (1, 1));
+            commands.spawn((
+                floor(&mut art, &mut images, BUILD_SLOT, centre, size, Z_SLOT),
+                BuildUi,
+            ));
+        }
+    }
+    let Some(Ghost {
+        image,
+        at: (x, y),
+        size: footprint,
+        ok,
+        text,
+    }) = preview
+    else {
+        return;
+    };
+    let (centre, size) = piece_rect(x, y, footprint);
+    let tint = match (ok, tool) {
+        (true, Tool::Place(_)) => Color::srgba(0.55, 1.0, 0.55, 0.5),
+        (true, Tool::Demolish) => Color::srgba(1.0, 0.8, 0.3, 0.6),
+        (false, _) => Color::srgba(1.0, 0.35, 0.35, 0.5),
+    };
+    commands.spawn((
+        ScreenEntity,
+        BuildUi,
+        Sprite {
+            image: art.get(&mut images, &image).unwrap_or_default(),
+            custom_size: Some(size),
+            color: tint,
+            ..default()
+        },
+        Transform::from_translation(centre.extend(Z_GHOST)),
+    ));
+    let color = if ok {
+        Color::srgb(0.6, 1.0, 0.6)
+    } else {
+        Color::srgb(1.0, 0.5, 0.45)
+    };
+    commands.spawn((
+        label(
+            &text,
+            22.0,
+            color,
+            (centre + Vec2::Y * (size.y / 2.0 + 18.0)).extend(Z_LABEL + 2.0),
+        ),
+        BuildUi,
+    ));
 }
 
 /// Marks the docked ship the save has selected: a highlight ring and a
@@ -1061,6 +1764,7 @@ fn show_selected_ship(
 /// Carrier tutorial hint triggers (`hints`).
 fn carrier_hints(
     overlay: Res<Overlay>,
+    scene: Res<CarrierScene>,
     pilot: Query<&Transform, With<Pilot>>,
     mut hints: ResMut<Hints>,
     mut save: ResMut<SaveSlot>,
@@ -1068,15 +1772,31 @@ fn carrier_hints(
     let Ok(pilot) = pilot.single() else {
         return;
     };
-    let x = pilot.translation.x;
-    if nearest_hotspot(x).is_some() {
+    let feet = grid(pilot.translation.truncate());
+    if nearest_hotspot(&scene.hotspots, feet).is_some() {
         hints.trigger(&mut save, Hint::CarrierInteract);
     }
-    if room_at(x) == Room::Dock {
+    if room_under(&save, feet) == Some(RoomId::Dock) {
         hints.trigger(&mut save, Hint::Dock);
     }
-    if matches!(*overlay, Overlay::Workshop { .. }) {
-        hints.trigger(&mut save, Hint::Workshop);
+    match *overlay {
+        Overlay::Workshop { .. } => {
+            hints.trigger(&mut save, Hint::Workshop);
+        }
+        Overlay::Build { .. } => {
+            hints.trigger(&mut save, Hint::CarrierBuild);
+        }
+        _ => {}
+    }
+}
+
+/// The room the grid point `p` is in, if any.
+fn room_under(save: &SaveSlot, p: Vec2) -> Option<RoomId> {
+    let layout = &save.game.as_ref()?.carrier;
+    let (x, y) = layout::cell_at(p.x, p.y);
+    match layout.cell(x, y) {
+        Cell::Room(i) => Some(layout.rooms[i].id),
+        _ => None,
     }
 }
 
@@ -1088,6 +1808,8 @@ fn pilot_frame(moving: bool, walked: f32) -> &'static str {
     PILOT_FRAMES[(walked / STRIDE) as usize % PILOT_FRAMES.len()]
 }
 
+/// The side-view walk sheet: flipped when walking west, the last facing
+/// kept for north and south (§ Walking and interaction › Pilot art).
 fn animate_pilot(
     mut art: ResMut<ContentImages>,
     mut images: ResMut<Assets<Image>>,
@@ -1096,14 +1818,16 @@ fn animate_pilot(
     let Ok((mut pilot, tf, mut sprite)) = pilot.single_mut() else {
         return;
     };
-    let x = tf.translation.x;
-    let dx = x - pilot.last_x.unwrap_or(x);
-    pilot.last_x = Some(x);
-    let moving = dx.abs() > 0.01;
+    let p = tf.translation.truncate();
+    let d = p - pilot.last.unwrap_or(p);
+    pilot.last = Some(p);
+    let moving = d.length() > 0.01;
     if moving {
-        pilot.walked += dx.abs();
+        pilot.walked += d.length();
         // The art faces right.
-        sprite.flip_x = dx < 0.0;
+        if d.x.abs() > 0.01 {
+            sprite.flip_x = d.x < 0.0;
+        }
     } else {
         pilot.walked = 0.0;
     }
@@ -1114,45 +1838,30 @@ fn animate_pilot(
     }
 }
 
-fn follow_pilot(
-    pilot: Query<&Transform, (With<Pilot>, Without<Camera2d>)>,
-    windows: Query<&Window, With<PrimaryWindow>>,
-    mut camera: Query<&mut Transform, With<Camera2d>>,
-) {
-    let (Ok(pilot), Ok(mut cam)) = (pilot.single(), camera.single_mut()) else {
-        return;
-    };
-    let half = windows.single().map(|w| w.width() / 2.0).unwrap_or(500.0) * CAMERA_ZOOM;
-    let x = if DECK_LEN <= half * 2.0 {
-        DECK_LEN / 2.0
-    } else {
-        pilot
-            .translation
-            .x
-            .clamp(half - 20.0, DECK_LEN - half + 20.0)
-    };
-    cam.translation.x = x;
-    cam.translation.y = CAMERA_Y;
-}
-
 fn update_prompt(
     overlay: Res<Overlay>,
+    scene: Res<CarrierScene>,
     pilot: Query<&Transform, (With<Pilot>, Without<Prompt>)>,
     mut prompt: Query<(&mut Text2d, &mut Transform, &mut Visibility), With<Prompt>>,
 ) {
     let (Ok(pilot), Ok((mut text, mut tf, mut vis))) = (pilot.single(), prompt.single_mut()) else {
         return;
     };
-    let near = nearest_hotspot(pilot.translation.x);
+    let near = nearest_hotspot(&scene.hotspots, grid(pilot.translation.truncate()));
     match near {
-        Some((hotspot, x)) if *overlay == Overlay::None => {
-            text.0 = format!("[E] {}", hotspot.verb());
-            tf.translation.x = x;
-            // Under the docked ship's berth, clear of the ship.
-            tf.translation.y = match hotspot {
-                Hotspot::Berth(_) => -ROOM_ART_SINK - 12.0,
-                _ => CHARACTER_H + 24.0,
+        Some((hotspot, at)) if *overlay == Overlay::None => {
+            let label = format!("[E] {}", hotspot.verb());
+            if text.0 != label {
+                text.0 = label;
+            }
+            // Over the crew member or bench; for a docked ship, under the
+            // Pilot's feet (the ship fills the pad above the hotspot).
+            let pos = match hotspot {
+                Hotspot::Berth(_) => pilot.translation.truncate() - Vec2::Y * 34.0,
+                Hotspot::UpgradeBench => world(at) + Vec2::Y * 40.0,
+                Hotspot::Crew(_) => world(at) + Vec2::Y * (CHARACTER_H + 28.0),
             };
+            tf.translation = pos.extend(Z_LABEL + 1.0);
             *vis = Visibility::Visible;
         }
         _ => *vis = Visibility::Hidden,
@@ -1167,20 +1876,20 @@ fn update_hud(
     let (credits, crystal) = save
         .game
         .as_ref()
-        .map(|g| {
-            (
-                g.credits,
-                g.resources.get("void_crystal").copied().unwrap_or(0),
-            )
-        })
+        .map(|g| (g.credits, workshop::void_crystal(g)))
         .unwrap_or_default();
     let room = pilot
         .single()
-        .map(|tf| {
-            ROOMS
-                .iter()
-                .find(|r| r.0 == room_at(tf.translation.x))
-                .map_or("", |r| r.1)
+        .ok()
+        .and_then(|tf| {
+            let feet = grid(tf.translation.truncate());
+            let layout = &save.game.as_ref()?.carrier;
+            let (x, y) = layout::cell_at(feet.x, feet.y);
+            Some(match layout.cell(x, y) {
+                Cell::Room(i) => layout.rooms[i].id.name(),
+                Cell::Corridor => "Corridor",
+                Cell::Empty => "",
+            })
         })
         .unwrap_or("");
     for (mut text, field) in &mut hud {
@@ -1335,7 +2044,38 @@ fn sync_overlay(
                     ));
                 });
         }
-        Overlay::Workshop { index, message } => {
+        Overlay::Workshop {
+            tab,
+            index,
+            message,
+        } => {
+            let tab_color = |t: WorkshopTab| {
+                if t == *tab {
+                    Color::srgb(0.5, 0.9, 1.0)
+                } else {
+                    Color::srgb(0.45, 0.5, 0.55)
+                }
+            };
+            let row_bg = |selected: bool| {
+                (
+                    BackgroundColor(if selected {
+                        Color::srgb(0.10, 0.22, 0.28)
+                    } else {
+                        Color::srgb(0.07, 0.08, 0.10)
+                    }),
+                    BorderColor::all(if selected {
+                        Color::srgb(0.5, 0.9, 1.0)
+                    } else {
+                        Color::srgb(0.25, 0.3, 0.34)
+                    }),
+                    Node {
+                        padding: UiRect::axes(px(10), px(5)),
+                        border: UiRect::all(px(1)),
+                        column_gap: px(12),
+                        ..default()
+                    },
+                )
+            };
             commands
                 .spawn((
                     ScreenEntity,
@@ -1355,87 +2095,205 @@ fn sync_overlay(
                     },
                 ))
                 .with_children(|p| {
+                    p.spawn(Node {
+                        column_gap: px(24),
+                        ..default()
+                    })
+                    .with_children(|tabs| {
+                        tabs.spawn((Text::new("Workshop"), font(22.0, Color::WHITE)));
+                        tabs.spawn((
+                            Text::new("Upgrades"),
+                            font(20.0, tab_color(WorkshopTab::Upgrades)),
+                        ));
+                        tabs.spawn((
+                            Text::new("Build"),
+                            font(20.0, tab_color(WorkshopTab::Build)),
+                        ));
+                        tabs.spawn((
+                            Text::new("[Tab] switch"),
+                            font(15.0, Color::srgb(0.6, 0.7, 0.75)),
+                        ));
+                    });
                     p.spawn((
                         Text::new(format!(
-                            "Workshop - upgrades apply to every battleship\nCredits {}    Void Crystal {}",
+                            "Credits {}    Void Crystal {}",
                             game.credits,
                             workshop::void_crystal(&game)
                         )),
-                        font(20.0, Color::WHITE),
+                        font(18.0, Color::srgb(0.95, 0.9, 0.6)),
                     ));
-                    for (i, upgrade) in UPGRADES.iter().enumerate() {
-                        let level = upgrade.level_in(levels);
-                        let (price, affordable) = match workshop::next_level(&game, *upgrade) {
-                            Some((next, cost)) => (
-                                format!(
-                                    "Lv {next}: {} cr + {} VC",
-                                    cost.credits, cost.void_crystal
-                                ),
-                                workshop::can_afford(&game, cost),
-                            ),
-                            None => ("maxed".to_string(), false),
-                        };
-                        let selected = i == *index;
-                        let color = if affordable {
-                            Color::srgb(0.75, 1.0, 0.75)
-                        } else {
-                            Color::srgb(0.7, 0.72, 0.75)
-                        };
-                        p.spawn((
-                            BackgroundColor(if selected {
-                                Color::srgb(0.10, 0.22, 0.28)
-                            } else {
-                                Color::srgb(0.07, 0.08, 0.10)
-                            }),
-                            BorderColor::all(if selected {
-                                Color::srgb(0.5, 0.9, 1.0)
-                            } else {
-                                Color::srgb(0.25, 0.3, 0.34)
-                            }),
-                            Node {
-                                padding: UiRect::axes(px(10), px(5)),
-                                border: UiRect::all(px(1)),
-                                column_gap: px(12),
-                                ..default()
-                            },
-                        ))
-                        .with_children(|row| {
-                            if let Some(icon) = art.get(&mut images, upgrade.icon_id()) {
-                                row.spawn(icon_node(icon, 24.0));
+                    match tab {
+                        WorkshopTab::Upgrades => {
+                            p.spawn((
+                                Text::new("Upgrades apply to every battleship."),
+                                font(15.0, Color::srgb(0.82, 0.86, 0.9)),
+                            ));
+                            for (i, upgrade) in UPGRADES.iter().enumerate() {
+                                let level = upgrade.level_in(levels);
+                                let (price, affordable) =
+                                    match workshop::next_level(&game, *upgrade) {
+                                        Some((next, cost)) => (
+                                            format!(
+                                                "Lv {next}: {} cr + {} VC",
+                                                cost.credits, cost.void_crystal
+                                            ),
+                                            workshop::can_afford(&game, cost),
+                                        ),
+                                        None => ("maxed".to_string(), false),
+                                    };
+                                let color = if affordable {
+                                    Color::srgb(0.75, 1.0, 0.75)
+                                } else {
+                                    Color::srgb(0.7, 0.72, 0.75)
+                                };
+                                p.spawn(row_bg(i == *index)).with_children(|row| {
+                                    if let Some(icon) = art.get(&mut images, upgrade.icon_id()) {
+                                        row.spawn(icon_node(icon, 24.0));
+                                    }
+                                    let cells = [
+                                        (format!("{} {}", i + 1, upgrade.name()), 180.0),
+                                        (
+                                            format!(
+                                                "Lv {level}/{}",
+                                                sim::tuning::MAX_UPGRADE_LEVEL
+                                            ),
+                                            60.0,
+                                        ),
+                                        (upgrade.effect().to_string(), 350.0),
+                                        (price, 190.0),
+                                    ];
+                                    for (text, width) in cells {
+                                        row.spawn(Node {
+                                            width: px(width),
+                                            flex_shrink: 0.0,
+                                            ..default()
+                                        })
+                                        .with_child((Text::new(text), font(16.0, color)));
+                                    }
+                                });
                             }
-                            let cells = [
-                                (format!("{} {}", i + 1, upgrade.name()), 180.0),
-                                (
-                                    format!("Lv {level}/{}", sim::tuning::MAX_UPGRADE_LEVEL),
-                                    60.0,
+                            let upgrade = UPGRADES[(*index).min(UPGRADES.len() - 1)];
+                            p.spawn((
+                                Text::new(format!(
+                                    "{} next level:\n  {}",
+                                    upgrade.name(),
+                                    upgrade_preview(upgrade, levels).join("\n  ")
+                                )),
+                                font(15.0, Color::srgb(0.82, 0.86, 0.9)),
+                            ));
+                        }
+                        WorkshopTab::Build => {
+                            p.spawn((
+                                Text::new(
+                                    "Rooms connect through a corridor at one of their doors.",
                                 ),
-                                (upgrade.effect().to_string(), 350.0),
-                                (price, 190.0),
-                            ];
-                            for (text, width) in cells {
-                                row.spawn(Node {
-                                    width: px(width),
-                                    flex_shrink: 0.0,
-                                    ..default()
-                                })
-                                .with_child((Text::new(text), font(16.0, color)));
+                                font(15.0, Color::srgb(0.82, 0.86, 0.9)),
+                            ));
+                            for (i, tool) in BUILD_TOOLS.iter().enumerate() {
+                                let (size, effect, cost, lock) = match tool {
+                                    Tool::Place(piece) => {
+                                        let (w, d) = piece.footprint();
+                                        (
+                                            format!("{w} x {d}"),
+                                            piece.effect().to_string(),
+                                            cost_text(piece.cost()),
+                                            match workshop::build_lock(&game, *piece) {
+                                                Some(PlaceError::AlreadyBuilt) => {
+                                                    "already built".into()
+                                                }
+                                                Some(_) => "can't afford".into(),
+                                                None => String::new(),
+                                            },
+                                        )
+                                    }
+                                    Tool::Demolish => (
+                                        String::new(),
+                                        "remove a piece you built ([X] in Build mode)".into(),
+                                        "full refund".into(),
+                                        String::new(),
+                                    ),
+                                };
+                                let color = if lock.is_empty() {
+                                    Color::srgb(0.75, 1.0, 0.75)
+                                } else {
+                                    Color::srgb(0.7, 0.72, 0.75)
+                                };
+                                p.spawn(row_bg(i == *index)).with_children(|row| {
+                                    let cells = [
+                                        (format!("{} {}", i + 1, tool_name(*tool)), 170.0),
+                                        (size, 50.0),
+                                        (effect, 330.0),
+                                        (cost, 130.0),
+                                        (lock, 130.0),
+                                    ];
+                                    for (text, width) in cells {
+                                        row.spawn(Node {
+                                            width: px(width),
+                                            flex_shrink: 0.0,
+                                            ..default()
+                                        })
+                                        .with_child((Text::new(text), font(16.0, color)));
+                                    }
+                                });
                             }
-                        });
+                        }
                     }
-                    let upgrade = UPGRADES[*index];
+                    if !message.is_empty() {
+                        p.spawn((
+                            Text::new(message.clone()),
+                            font(16.0, Color::srgb(1.0, 0.85, 0.4)),
+                        ));
+                    }
+                    let keys = match tab {
+                        WorkshopTab::Upgrades => {
+                            "[W]/[S] or [1]-[3] Choose    [E] Buy    [Tab] Build    [X] Close"
+                        }
+                        WorkshopTab::Build => {
+                            "[W]/[S] or [1]-[4] Choose    [E] Pick    [Tab] Upgrades    [X] Close"
+                        }
+                    };
+                    p.spawn((Text::new(keys), font(15.0, Color::srgb(0.6, 0.7, 0.75))));
+                });
+        }
+        Overlay::Build { tool, message } => {
+            commands
+                .spawn((
+                    ScreenEntity,
+                    OverlayUi,
+                    panel_bg,
+                    border,
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: px(24),
+                        right: px(24),
+                        bottom: px(14),
+                        flex_direction: FlexDirection::Column,
+                        padding: UiRect::axes(px(12), px(8)),
+                        row_gap: px(4),
+                        border: UiRect::all(px(1)),
+                        ..default()
+                    },
+                ))
+                .with_children(|p| {
                     p.spawn((
                         Text::new(format!(
-                            "{} next level:\n  {}",
-                            upgrade.name(),
-                            upgrade_preview(upgrade, levels).join("\n  ")
+                            "Build mode: {}    Credits {}    Void Crystal {}",
+                            tool.label(),
+                            game.credits,
+                            workshop::void_crystal(&game)
                         )),
-                        font(15.0, Color::srgb(0.82, 0.86, 0.9)),
+                        font(18.0, Color::WHITE),
                     ));
                     if !message.is_empty() {
-                        p.spawn((Text::new(message.clone()), font(16.0, Color::srgb(1.0, 0.85, 0.4))));
+                        p.spawn((
+                            Text::new(message.clone()),
+                            font(16.0, Color::srgb(1.0, 0.85, 0.4)),
+                        ));
                     }
                     p.spawn((
-                        Text::new("[W]/[S] or [1]-[3] Choose    [E] Buy    [X] Close"),
+                        Text::new(
+                            "[Left click] Place    [X] Demolish mode    [WASD] Pan    [Wheel] Zoom    [Right click]/[Esc] Back",
+                        ),
                         font(15.0, Color::srgb(0.6, 0.7, 0.75)),
                     ));
                 });
@@ -1448,40 +2306,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn walls_stop_walking_at_both_ends() {
-        assert_eq!(walk(PILOT_HALF_W, -1.0, 1.0), PILOT_HALF_W);
-        assert_eq!(
-            walk(DECK_LEN - PILOT_HALF_W, 1.0, 1.0),
-            DECK_LEN - PILOT_HALF_W
-        );
-        assert_eq!(walk(500.0, 1.0, 0.5), 560.0);
-    }
-
-    #[test]
-    fn whole_deck_is_walkable_and_every_room_reached() {
-        let mut x = PILOT_SPAWN_NEW_GAME;
-        let mut rooms = vec![room_at(x)];
-        let mut hotspots = Vec::new();
-        for _ in 0..(20 * 60) {
-            x = walk(x, 1.0, 1.0 / 60.0);
-            if rooms.last() != Some(&room_at(x)) {
-                rooms.push(room_at(x));
-            }
-            if let Some((h, _)) = nearest_hotspot(x) {
-                if !hotspots.contains(&h) {
-                    hotspots.push(h);
-                }
-            }
-        }
-        assert_eq!(
-            rooms,
-            [Room::Bridge, Room::CrewQuarters, Room::Workshop, Room::Dock]
-        );
-        assert_eq!(hotspots.len(), HOTSPOTS.len());
-        assert_eq!(x, DECK_LEN - PILOT_HALF_W);
-    }
-
-    #[test]
     fn pilot_walk_cycle_steps_with_distance_and_idles_when_still() {
         assert_eq!(pilot_frame(false, 50.0), PILOT_IDLE);
         assert_eq!(pilot_frame(true, 0.0), PILOT_FRAMES[0]);
@@ -1490,36 +2314,145 @@ mod tests {
     }
 
     #[test]
-    fn nearest_hotspot_respects_range() {
+    fn crew_bench_and_berths_sit_in_their_rooms_and_are_reachable() {
+        let l = CarrierLayout::starting();
+        let spots = hotspots(&l);
+        let room_of = |p: Vec2| {
+            let (x, y) = layout::cell_at(p.x, p.y - 1.0);
+            match l.cell(x, y) {
+                Cell::Room(i) => Some(l.rooms[i].id),
+                _ => None,
+            }
+        };
+        let expect = [
+            (Hotspot::Crew(Crew::Gunner), RoomId::Bridge),
+            (Hotspot::Crew(Crew::Researcher), RoomId::CrewQuarters),
+            (Hotspot::Crew(Crew::Engineer), RoomId::Workshop),
+            (Hotspot::UpgradeBench, RoomId::Workshop),
+            (Hotspot::Berth(0), RoomId::Dock),
+            (Hotspot::Berth(1), RoomId::Dock),
+        ];
+        assert_eq!(spots.len(), expect.len());
+        let rects = l.walkable();
+        for (h, room) in expect {
+            let at = spots.iter().find(|s| s.0 == h).unwrap().1;
+            assert_eq!(room_of(at), Some(room), "{h:?}");
+            // Somewhere the Pilot can stand reaches it with E.
+            let reachable = (-7..=7).any(|i| {
+                (-7..=7).any(|j| {
+                    let p = at + Vec2::new(i as f32, j as f32) * 8.0;
+                    layout::can_stand(&rects, p.x, p.y)
+                        && nearest_hotspot(&spots, p).map(|n| n.0) == Some(h)
+                })
+            });
+            assert!(reachable, "{h:?} at {at}");
+        }
+        // Berth hotspots: the middle of each pad's front edge.
+        let dock = l.room(RoomId::Dock).unwrap();
         assert_eq!(
-            nearest_hotspot(840.0 + INTERACT_RANGE).map(|h| h.0),
-            Some(Hotspot::UpgradeBench)
-        );
-        assert_eq!(nearest_hotspot(840.0 + INTERACT_RANGE + 1.0), None);
-        assert_eq!(nearest_hotspot(PILOT_SPAWN_NEW_GAME), None);
-        assert_eq!(nearest_hotspot(PILOT_SPAWN_AFTER_MISSION), None);
-        assert_eq!(
-            nearest_hotspot(berth_x(1) - BERTH_REACH).map(|h| h.0),
-            Some(Hotspot::Berth(1))
+            spots.iter().find(|s| s.0 == Hotspot::Berth(1)).unwrap().1,
+            Vec2::from(room_px(dock, (384.0, 256.0)))
         );
     }
 
     #[test]
-    fn every_ship_has_one_berth_in_the_dock() {
-        let berths: Vec<_> = HOTSPOTS
-            .iter()
-            .filter_map(|&(h, x)| match h {
-                Hotspot::Berth(i) => Some((i, x)),
-                _ => None,
-            })
-            .collect();
-        assert_eq!(berths.len(), SHIPS.len());
-        for (i, (ship, x)) in berths.into_iter().enumerate() {
-            assert_eq!(ship, i);
-            assert_eq!(room_at(x), Room::Dock);
+    fn spawns_stand_on_the_floor_away_from_hotspots() {
+        let l = CarrierLayout::starting();
+        let rects = l.walkable();
+        let spots = hotspots(&l);
+        for cell in [SPAWN_NEW_GAME, SPAWN_AFTER_MISSION] {
+            let p = cell_centre(cell);
+            assert!(layout::can_stand(&rects, p.x, p.y), "{cell:?}");
+            assert_eq!(nearest_hotspot(&spots, p), None, "{cell:?}");
         }
-        assert_eq!(room_at(DOCK_X - 1.0), Room::Workshop);
-        assert_eq!(room_at(DECK_LEN), Room::Dock);
+    }
+
+    #[test]
+    fn nearest_hotspot_respects_range() {
+        let spots = [(Hotspot::UpgradeBench, Vec2::new(100.0, 100.0))];
+        assert_eq!(
+            nearest_hotspot(&spots, Vec2::new(100.0 + INTERACT_RANGE, 100.0)).map(|h| h.0),
+            Some(Hotspot::UpgradeBench)
+        );
+        assert_eq!(nearest_hotspot(&spots, Vec2::new(140.0, 141.0)), None);
+        assert_eq!(
+            clicked_hotspot(&spots, Vec2::new(110.0, 60.0)),
+            Some(Hotspot::UpgradeBench)
+        );
+        assert_eq!(clicked_hotspot(&spots, Vec2::new(130.0, 60.0)), None);
+    }
+
+    #[test]
+    fn camera_stays_within_a_cell_of_the_hull() {
+        let half = Vec2::new(640.0, 360.0);
+        // Pilot at the north-west corner: the view stops one cell out.
+        let c = clamp_camera(Vec2::new(0.0, 0.0), half);
+        assert_eq!(c, Vec2::new(-CELL + 640.0, CELL - 360.0));
+        // Overview (1 / 0.65 scale): the whole hull fits, so it's centred.
+        let c = clamp_camera(Vec2::ZERO, half / 0.65);
+        assert_eq!(c.x, HULL_W as f32 * CELL / 2.0);
+        assert_eq!(world(grid(Vec2::new(3.0, -4.0))), Vec2::new(3.0, -4.0));
+    }
+
+    #[test]
+    fn build_clicks_pay_place_and_refund() {
+        let mut game = SaveGame {
+            credits: 300,
+            ..Default::default()
+        };
+        game.resources.insert("void_crystal".into(), 6);
+        let (ok, text, to_tab) = apply_build_click(&mut game, Tool::Place(Piece::Corridor), (8, 6));
+        assert!(ok && !to_tab, "{text}");
+        assert_eq!(text, "Built Corridor for 10 cr.");
+        let bay = Tool::Place(Piece::Room(RoomId::SalvageBay));
+        let (ok, text, _) = apply_build_click(&mut game, bay, (9, 4));
+        assert!(!ok);
+        assert_eq!(text, "Must connect to a corridor");
+        let (ok, _, to_tab) = apply_build_click(&mut game, bay, (9, 5));
+        assert!(ok && to_tab);
+        assert_eq!(game.credits, 170);
+        let (ok, text, _) = apply_build_click(&mut game, Tool::Demolish, (8, 6));
+        assert!(!ok);
+        assert_eq!(text, "Something would be cut off");
+        let (ok, text, _) = apply_build_click(&mut game, Tool::Demolish, (10, 6));
+        assert!(ok, "{text}");
+        assert_eq!(game.credits, 290);
+    }
+
+    #[test]
+    fn ghost_shows_the_shaped_corridor_and_why_not() {
+        let game = SaveGame::default();
+        let g = ghost(&game, Tool::Place(Piece::Corridor), (8, 6)).unwrap();
+        assert_eq!(g.image, "core.carrier.corridor.w");
+        assert_eq!((g.at, g.size, g.ok), ((8, 6), (1, 1), false));
+        assert_eq!(g.text, "Need 10 cr");
+        let g = ghost(&game, Tool::Demolish, (3, 4)).unwrap();
+        assert!(!g.ok);
+        assert_eq!(g.text, "Part of the original carrier");
+        assert!(ghost(&game, Tool::Demolish, (10, 0)).is_none());
+        // A room's ghost is anchored at the mouse cell.
+        let g = ghost(
+            &game,
+            Tool::Place(Piece::Room(RoomId::TrainingRoom)),
+            (7, 0),
+        )
+        .unwrap();
+        assert_eq!(g.image, "core.carrier.room.training_room");
+        assert_eq!((g.at, g.size), ((7, 0), (2, 2)));
+    }
+
+    #[test]
+    fn dock_card_shows_training_room_cooldowns() {
+        let up = Upgrades {
+            training: 1,
+            ..Default::default()
+        };
+        let kite = ship_card(&SHIPS[0], up);
+        assert!(kite.contains("CD 3.4 s"), "{kite}");
+        assert!(kite.contains("CD 5.1 s"), "{kite}");
+        let bulwark = ship_card(&SHIPS[1], up);
+        assert!(bulwark.contains("CD 10.2 s"), "{bulwark}");
+        assert!(bulwark.contains("CD 7.65 s"), "{bulwark}");
     }
 
     #[test]
@@ -1623,6 +2556,7 @@ mod tests {
             hull: 1,
             weapon: 1,
             thruster: 2,
+            training: 0,
         };
         let kite = ship_card(&SHIPS[0], up);
         assert!(kite.contains("Hull 75 (+15)"), "{kite}");

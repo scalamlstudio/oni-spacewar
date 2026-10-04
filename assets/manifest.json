@@ -6,7 +6,7 @@
       "id": "core",
       "version": "0.2.0",
       "gameplay_affecting": false,
-      "content_hash": "76cfaddb2ffea01c4153b7f0c5593b2a984edaff560cb90c8ec7a4854a035210",
+      "content_hash": "3f234274534d35d706c59e8976e7f4d17f321d00fb8d48b65c55376de297f0cc",
       "assets": [
         {
           "id": "core.battle.enemy.void_spitter",
@@ -72,12 +72,201 @@
           "gameplay_affecting": false
         },
         {
+          "id": "core.carrier.build_slot",
+          "kind": "image/png",
+          "source": "source/core/carrier/build_slot.png",
+          "processed": "packs/core/processed/carrier/build_slot.png",
+          "compressed": "packs/core/bundles/carrier/build_slot.png.zst",
+          "hash": "5e058a2a0f654b42f7cbe9700e99b2f6f0cd5e320fd2ce77db98382d62c527e4",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.corridor.e",
+          "kind": "image/png",
+          "source": "source/core/carrier/corridor/e.png",
+          "processed": "packs/core/processed/carrier/corridor/e.png",
+          "compressed": "packs/core/bundles/carrier/corridor/e.png.zst",
+          "hash": "901438eb1c8528619150500f7d1eae7da5322d0de3901d2d6edc581b5b78a00a",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.corridor.es",
+          "kind": "image/png",
+          "source": "source/core/carrier/corridor/es.png",
+          "processed": "packs/core/processed/carrier/corridor/es.png",
+          "compressed": "packs/core/bundles/carrier/corridor/es.png.zst",
+          "hash": "afbf5c127535dbb0fde198b733b5935c8194f07df7e6e7b5f06edffd37d8d0a4",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.corridor.esw",
+          "kind": "image/png",
+          "source": "source/core/carrier/corridor/esw.png",
+          "processed": "packs/core/processed/carrier/corridor/esw.png",
+          "compressed": "packs/core/bundles/carrier/corridor/esw.png.zst",
+          "hash": "42f1a1fde6b58158850833aa3334024ae0a7c437a830418ffd13b8de00b3c920",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.corridor.ew",
+          "kind": "image/png",
+          "source": "source/core/carrier/corridor/ew.png",
+          "processed": "packs/core/processed/carrier/corridor/ew.png",
+          "compressed": "packs/core/bundles/carrier/corridor/ew.png.zst",
+          "hash": "b915fb965dbd84c48f19e44faedb646a4904d8b2d09a5bc5629d1e2fd4929c3f",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.corridor.n",
+          "kind": "image/png",
+          "source": "source/core/carrier/corridor/n.png",
+          "processed": "packs/core/processed/carrier/corridor/n.png",
+          "compressed": "packs/core/bundles/carrier/corridor/n.png.zst",
+          "hash": "245b6d1ec08dbcd1e052812c688b5409db43aaa90b24724a7e9621089eb914bf",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.corridor.ne",
+          "kind": "image/png",
+          "source": "source/core/carrier/corridor/ne.png",
+          "processed": "packs/core/processed/carrier/corridor/ne.png",
+          "compressed": "packs/core/bundles/carrier/corridor/ne.png.zst",
+          "hash": "7d5d4c5030266c00163214f701a5e5ef16a723c5c7d177211e78489e9ffd763b",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.corridor.nes",
+          "kind": "image/png",
+          "source": "source/core/carrier/corridor/nes.png",
+          "processed": "packs/core/processed/carrier/corridor/nes.png",
+          "compressed": "packs/core/bundles/carrier/corridor/nes.png.zst",
+          "hash": "12322dc3755e62bef949c9dbce7f90f69df99f9fb1ebeaee2fe86056c2f8b914",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.corridor.nesw",
+          "kind": "image/png",
+          "source": "source/core/carrier/corridor/nesw.png",
+          "processed": "packs/core/processed/carrier/corridor/nesw.png",
+          "compressed": "packs/core/bundles/carrier/corridor/nesw.png.zst",
+          "hash": "dde0af9b87374b71e5e08fd61e1fe5305c730a2cf478c46faaff7f5173070c69",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.corridor.new",
+          "kind": "image/png",
+          "source": "source/core/carrier/corridor/new.png",
+          "processed": "packs/core/processed/carrier/corridor/new.png",
+          "compressed": "packs/core/bundles/carrier/corridor/new.png.zst",
+          "hash": "b4a00f695ac0d92b0a2b5529b9be3aa837af11ae4f1a43e23a909dc6187882f8",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.corridor.ns",
+          "kind": "image/png",
+          "source": "source/core/carrier/corridor/ns.png",
+          "processed": "packs/core/processed/carrier/corridor/ns.png",
+          "compressed": "packs/core/bundles/carrier/corridor/ns.png.zst",
+          "hash": "62fa6eb70c51a41bffedeba4cfe8bdbd93b3f51d057a3598fe8cf42590a2cf78",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.corridor.nsw",
+          "kind": "image/png",
+          "source": "source/core/carrier/corridor/nsw.png",
+          "processed": "packs/core/processed/carrier/corridor/nsw.png",
+          "compressed": "packs/core/bundles/carrier/corridor/nsw.png.zst",
+          "hash": "e9c381f767e706238476b3a44135712854f6e7bd8498b877244f40ef6e6f30cd",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.corridor.nw",
+          "kind": "image/png",
+          "source": "source/core/carrier/corridor/nw.png",
+          "processed": "packs/core/processed/carrier/corridor/nw.png",
+          "compressed": "packs/core/bundles/carrier/corridor/nw.png.zst",
+          "hash": "963b81f4844aed9499b130bc6c41df9f0b06d515c45a83c4f5e032b3cb4cb89e",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.corridor.s",
+          "kind": "image/png",
+          "source": "source/core/carrier/corridor/s.png",
+          "processed": "packs/core/processed/carrier/corridor/s.png",
+          "compressed": "packs/core/bundles/carrier/corridor/s.png.zst",
+          "hash": "41cf5cb5fdafcd923602366d9ec04704551296a3b46178098e85d819244943bb",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.corridor.sw",
+          "kind": "image/png",
+          "source": "source/core/carrier/corridor/sw.png",
+          "processed": "packs/core/processed/carrier/corridor/sw.png",
+          "compressed": "packs/core/bundles/carrier/corridor/sw.png.zst",
+          "hash": "4db21d0a0a17ac82dccadea0b259e2390fb3bace0ea5658dac9d323eefbbf295",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.corridor.w",
+          "kind": "image/png",
+          "source": "source/core/carrier/corridor/w.png",
+          "processed": "packs/core/processed/carrier/corridor/w.png",
+          "compressed": "packs/core/bundles/carrier/corridor/w.png.zst",
+          "hash": "8316a20664b9edf87bd5f7e489ae974c72fd3a43e483fe57bdc7ed329cfba6d2",
+          "gameplay_affecting": false
+        },
+        {
           "id": "core.carrier.dock.berth",
           "kind": "image/png",
           "source": "source/core/carrier/dock/berth.png",
           "processed": "packs/core/processed/carrier/dock/berth.png",
           "compressed": "packs/core/bundles/carrier/dock/berth.png.zst",
           "hash": "6163bfae1dd9e7a9f9494fc744a602e4d4e2185084e73c4226cd0ef2acceb1fd",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.door.e",
+          "kind": "image/png",
+          "source": "source/core/carrier/door/e.png",
+          "processed": "packs/core/processed/carrier/door/e.png",
+          "compressed": "packs/core/bundles/carrier/door/e.png.zst",
+          "hash": "a0ba84d64d9bb13822bd2916e7ba15e4cbf3253fa7038d67c82995120ba3169b",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.door.n",
+          "kind": "image/png",
+          "source": "source/core/carrier/door/n.png",
+          "processed": "packs/core/processed/carrier/door/n.png",
+          "compressed": "packs/core/bundles/carrier/door/n.png.zst",
+          "hash": "4d8ed91f05c3353f6b260ca348f8ea6bbb0a673606ad3a18cabf37ac25cd2039",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.door.s",
+          "kind": "image/png",
+          "source": "source/core/carrier/door/s.png",
+          "processed": "packs/core/processed/carrier/door/s.png",
+          "compressed": "packs/core/bundles/carrier/door/s.png.zst",
+          "hash": "6682182e52284694beab363e9b6bbe9ad5f163d38fe6f2057b0aa0e87eb0038e",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.door.w",
+          "kind": "image/png",
+          "source": "source/core/carrier/door/w.png",
+          "processed": "packs/core/processed/carrier/door/w.png",
+          "compressed": "packs/core/bundles/carrier/door/w.png.zst",
+          "hash": "a0ba84d64d9bb13822bd2916e7ba15e4cbf3253fa7038d67c82995120ba3169b",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.hull_floor",
+          "kind": "image/png",
+          "source": "source/core/carrier/hull_floor.png",
+          "processed": "packs/core/processed/carrier/hull_floor.png",
+          "compressed": "packs/core/bundles/carrier/hull_floor.png.zst",
+          "hash": "474777d075724ed457bb0e20a296ed87d5eddd6fb26b910f9670fd9a60619613",
           "gameplay_affecting": false
         },
         {
@@ -140,7 +329,7 @@
           "source": "source/core/carrier/room/bridge.png",
           "processed": "packs/core/processed/carrier/room/bridge.png",
           "compressed": "packs/core/bundles/carrier/room/bridge.png.zst",
-          "hash": "5818018bdba0588cef67ec3d05fdab33a2830e076512d8ba2776722e80f218ac",
+          "hash": "b8197a045a5761bcb753d18434c4de8bcf8f47cb16593410b36b51a9a93b2af1",
           "gameplay_affecting": false
         },
         {
@@ -149,7 +338,34 @@
           "source": "source/core/carrier/room/crew_quarters.png",
           "processed": "packs/core/processed/carrier/room/crew_quarters.png",
           "compressed": "packs/core/bundles/carrier/room/crew_quarters.png.zst",
-          "hash": "e19d77f2415fe8d0992d57844a0b97861516c53edce99d79ae0d360e260f8304",
+          "hash": "e6898ddd3e3e131856b83da9a14cd18617b22cd98c6c6b8ded7f9eaf79e369cb",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.room.dock",
+          "kind": "image/png",
+          "source": "source/core/carrier/room/dock.png",
+          "processed": "packs/core/processed/carrier/room/dock.png",
+          "compressed": "packs/core/bundles/carrier/room/dock.png.zst",
+          "hash": "2b3e542452fa1c87922c7298e573bddace1dd23fe32b4f93295fcb377aef864d",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.room.salvage_bay",
+          "kind": "image/png",
+          "source": "source/core/carrier/room/salvage_bay.png",
+          "processed": "packs/core/processed/carrier/room/salvage_bay.png",
+          "compressed": "packs/core/bundles/carrier/room/salvage_bay.png.zst",
+          "hash": "d0ac45241691fa1a1c21234e8434929d00823426444600600edf6ecfe1a675ee",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.room.training_room",
+          "kind": "image/png",
+          "source": "source/core/carrier/room/training_room.png",
+          "processed": "packs/core/processed/carrier/room/training_room.png",
+          "compressed": "packs/core/bundles/carrier/room/training_room.png.zst",
+          "hash": "712cf1debaf75b909ce452739ab7254ef05c54bcec868b5a75180d3eaf9d3490",
           "gameplay_affecting": false
         },
         {
@@ -158,7 +374,7 @@
           "source": "source/core/carrier/room/workshop.png",
           "processed": "packs/core/processed/carrier/room/workshop.png",
           "compressed": "packs/core/bundles/carrier/room/workshop.png.zst",
-          "hash": "2c580aa3963fd1a67033fd6f04fa436a9ca5ff197923f780033b661356fff3a8",
+          "hash": "6e5f00a5274a1e521ed131feccde6144a19dba00f92c7d1b5c7a591a3dfae47a",
           "gameplay_affecting": false
         },
         {

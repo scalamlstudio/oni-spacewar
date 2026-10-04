@@ -276,13 +276,13 @@ impl SimState {
                 }
                 ship.dash_vel = vel;
                 ship.dash_ticks = AFTERBURN_TICKS;
-                ship.q_cooldown = AFTERBURN_COOLDOWN;
+                ship.q_cooldown = ship.stats.q_cooldown;
             }
             ShipKind::Bulwark => {
                 // Bastion: absorb the next N damage for a while.
                 ship.shield = BASTION_SHIELD;
                 ship.shield_ticks = BASTION_DURATION;
-                ship.q_cooldown = BASTION_COOLDOWN;
+                ship.q_cooldown = ship.stats.q_cooldown;
             }
         }
     }
@@ -309,7 +309,7 @@ impl SimState {
                         radius: SCATTER_RADIUS,
                     });
                 }
-                self.ships[i].w_cooldown = SCATTER_COOLDOWN;
+                self.ships[i].w_cooldown = self.ships[i].stats.w_cooldown;
             }
             ShipKind::Bulwark => {
                 // Shockwave: damage and push back every enemy in range.
@@ -327,7 +327,7 @@ impl SimState {
                     };
                     e.pos = clamp_to_arena(e.pos + push, e.kind.radius());
                 }
-                self.ships[i].w_cooldown = SHOCKWAVE_COOLDOWN;
+                self.ships[i].w_cooldown = self.ships[i].stats.w_cooldown;
             }
         }
     }
@@ -629,6 +629,7 @@ mod tests {
             hull: 0,
             weapon: 0,
             thruster: 0,
+            training: 0,
         },
     };
     const BULWARK: Loadout = Loadout {
@@ -753,6 +754,7 @@ mod tests {
             hull: l,
             weapon: l,
             thruster: l,
+            training: 0,
         };
         let k2 = ShipStats::new(Loadout {
             upgrades: up(2),

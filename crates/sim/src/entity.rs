@@ -23,6 +23,10 @@ pub struct Upgrades {
     pub hull: u8,
     pub weapon: u8,
     pub thruster: u8,
+    /// Training Room (0 or 1): shorter Q / W cooldowns. A carrier room, not
+    /// a Workshop purchase, but it reaches the sim the same way.
+    #[serde(default)]
+    pub training: u8,
 }
 
 /// What one player brings into a mission. Must be identical on every peer.
@@ -88,8 +92,8 @@ impl ShipSheet {
             basic_interval: interval,
             basic_range: range,
             w_damage: weapon(w_dmg),
-            q_cooldown: q_cd,
-            w_cooldown: w_cd,
+            q_cooldown: trained(q_cd, up.training),
+            w_cooldown: trained(w_cd, up.training),
         }
     }
 }
@@ -108,6 +112,9 @@ pub struct ShipStats {
     pub basic_range: i32,
     /// Weapon Tuning level, applied to skill damage.
     pub weapon_level: u8,
+    /// Q / W cooldowns in ticks (Training Room applied).
+    pub q_cooldown: u32,
+    pub w_cooldown: u32,
 }
 
 impl ShipStats {
@@ -121,6 +128,8 @@ impl ShipStats {
             basic_interval: sheet.basic_interval,
             basic_range: sheet.basic_range,
             weapon_level: loadout.upgrades.weapon,
+            q_cooldown: sheet.q_cooldown,
+            w_cooldown: sheet.w_cooldown,
         }
     }
 
@@ -185,17 +194,11 @@ impl Ship {
 
     /// Full cooldown of Q / W in ticks (for HUDs).
     pub fn q_cooldown_max(&self) -> u32 {
-        match self.kind {
-            ShipKind::Kite => AFTERBURN_COOLDOWN,
-            ShipKind::Bulwark => BASTION_COOLDOWN,
-        }
+        self.stats.q_cooldown
     }
 
     pub fn w_cooldown_max(&self) -> u32 {
-        match self.kind {
-            ShipKind::Kite => SCATTER_COOLDOWN,
-            ShipKind::Bulwark => SHOCKWAVE_COOLDOWN,
-        }
+        self.stats.w_cooldown
     }
 
     /// Apply incoming damage: the shield absorbs first, then the hull.
@@ -332,6 +335,7 @@ mod tests {
                 hull,
                 weapon,
                 thruster,
+                training: 0,
             },
         })
     }
@@ -373,6 +377,7 @@ mod tests {
                 hull: 1,
                 weapon: 2,
                 thruster: 1,
+                training: 0,
             },
         };
         let (sheet, stats) = (ShipSheet::new(loadout), ShipStats::new(loadout));
@@ -380,5 +385,28 @@ mod tests {
         assert_eq!(stats.speed, px_per_tick(sheet.speed));
         assert_eq!(stats.basic_damage, sheet.basic_damage);
         assert_eq!(stats.skill_damage(SHOCKWAVE_DAMAGE), sheet.w_damage);
+        assert_eq!(
+            (stats.q_cooldown, stats.w_cooldown),
+            (sheet.q_cooldown, sheet.w_cooldown)
+        );
+    }
+
+    #[test]
+    fn training_room_cuts_q_and_w_cooldowns_by_15_percent() {
+        let trained = |ship| {
+            let s = ShipSheet::new(Loadout {
+                ship,
+                upgrades: Upgrades {
+                    training: 1,
+                    ..Default::default()
+                },
+            });
+            (s.q_cooldown, s.w_cooldown)
+        };
+        // Kite Q 4 -> 3.4 s, W 6 -> 5.1 s; Bulwark Q 12 -> 10.2 s, W 9 -> 7.65 s.
+        assert_eq!(trained(ShipKind::Kite), (204, 306));
+        assert_eq!(trained(ShipKind::Bulwark), (612, 459));
+        let base = sheet(ShipKind::Kite, 0, 0, 0);
+        assert_eq!((base.q_cooldown, base.w_cooldown), (240, 360));
     }
 }

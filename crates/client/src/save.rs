@@ -9,9 +9,12 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-/// v2 (TAKOAI-42): adds `last_result` and `missions_won`. v1 saves load
-/// through [`migrate`]; both fields default.
-pub const SAVE_VERSION: u32 = 2;
+use crate::layout::{CarrierLayout, RoomId};
+
+/// v2 (TAKOAI-42): adds `last_result` and `missions_won`. v3 (TAKOAI-56):
+/// adds `carrier`, the 2.5D carrier layout. Older saves load through
+/// [`migrate`]; every added field defaults (the layout to the starting one).
+pub const SAVE_VERSION: u32 = 3;
 const OLDEST_SUPPORTED_VERSION: u32 = 1;
 const SAVE_FILE_NAME: &str = "save.json";
 
@@ -31,6 +34,10 @@ pub struct SaveGame {
     pub last_result: LastResult,
     #[serde(default)]
     pub missions_won: u32,
+    /// The carrier's rooms and corridors (design/READINESS.md § Carrier ›
+    /// Save). Checked on load; see [`migrate`].
+    #[serde(default)]
+    pub carrier: CarrierLayout,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -56,26 +63,52 @@ impl Default for SaveGame {
             mission_count: 0,
             last_result: LastResult::None,
             missions_won: 0,
+            carrier: CarrierLayout::starting(),
         }
     }
 }
 
+/// Salvage Bay: +25% of what a successful mission keeps (success bonus
+/// included), rounded down.
+pub const SALVAGE_BONUS_PCT: u32 = 25;
+
 impl SaveGame {
-    /// Books a finished mission: adds what the player keeps and counts it.
+    /// What the Salvage Bay adds to a mission that kept `credits` and
+    /// `resources`: nothing on failure or without the room.
+    pub fn salvage_bonus(
+        &self,
+        success: bool,
+        credits: u32,
+        resources: &BTreeMap<String, u32>,
+    ) -> (u32, BTreeMap<String, u32>) {
+        if !success || !self.carrier.has_room(RoomId::SalvageBay) {
+            return (0, BTreeMap::new());
+        }
+        let pct = |v: u32| v.saturating_mul(SALVAGE_BONUS_PCT) / 100;
+        let extra = resources
+            .iter()
+            .map(|(id, v)| (id.clone(), pct(*v)))
+            .filter(|(_, v)| *v > 0)
+            .collect();
+        (pct(credits), extra)
+    }
+
+    /// Books a finished mission: adds what the player keeps (plus the
+    /// Salvage Bay's share) and counts it.
     pub fn record_mission_return(
         &mut self,
         success: bool,
         credits: u32,
         resources: &BTreeMap<String, u32>,
     ) {
-        self.credits = self.credits.saturating_add(credits);
-        for (id, amount) in resources {
-            *self.resources.entry(id.clone()).or_default() = self
-                .resources
-                .get(id)
-                .copied()
-                .unwrap_or(0)
-                .saturating_add(*amount);
+        let (bonus_credits, bonus) = self.salvage_bonus(success, credits, resources);
+        self.credits = self
+            .credits
+            .saturating_add(credits)
+            .saturating_add(bonus_credits);
+        for (id, amount) in resources.iter().chain(&bonus) {
+            let v = self.resources.entry(id.clone()).or_default();
+            *v = v.saturating_add(*amount);
         }
         self.mission_count = self.mission_count.saturating_add(1);
         if success {
@@ -164,8 +197,11 @@ pub fn load(path: &Path) -> Result<SaveGame, SaveError> {
 }
 
 /// Brings an older save up to [`SAVE_VERSION`]. Every field added since v1
-/// has a serde default, so upgrading is just stamping the new version; the
-/// next store writes it back in the current format. Newer saves are refused.
+/// has a serde default (v1 / v2 saves get the starting carrier), so
+/// upgrading is stamping the new version; the next store writes it back in
+/// the current format. Newer saves are refused. The carrier layout is then
+/// checked: a broken one resets to the starting layout and refunds every
+/// non-starting piece (unknown rooms refund nothing), with a warning.
 pub fn migrate(mut save: SaveGame) -> Result<SaveGame, SaveError> {
     if !(OLDEST_SUPPORTED_VERSION..=SAVE_VERSION).contains(&save.version) {
         return Err(SaveError::VersionMismatch {
@@ -174,6 +210,21 @@ pub fn migrate(mut save: SaveGame) -> Result<SaveGame, SaveError> {
         });
     }
     save.version = SAVE_VERSION;
+    save.carrier.normalize();
+    if let Err(e) = save.carrier.validate() {
+        let refund = save.carrier.refund();
+        eprintln!(
+            "warning: saved carrier layout is invalid ({e:?}); reset to the starting layout, refunded {} cr + {} VC",
+            refund.credits, refund.void_crystal
+        );
+        save.credits = save.credits.saturating_add(refund.credits);
+        let vc = save
+            .resources
+            .entry(crate::mission::VOID_CRYSTAL_ID.to_string())
+            .or_default();
+        *vc = vc.saturating_add(refund.void_crystal);
+        save.carrier = CarrierLayout::starting();
+    }
     Ok(save)
 }
 
@@ -230,6 +281,84 @@ mod tests {
         assert_eq!(save.missions_won, 0);
         assert!(save.purchased_upgrades.contains("weapon_tuning_1"));
         let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn v2_save_migrates_to_the_starting_carrier() {
+        let path = temp_file("v2");
+        let v2 = r#"{"version":2,"credits":300,"resources":{"void_crystal":7},
+            "purchased_upgrades":[],"selected_battleship":"kite",
+            "tutorial_seen":["carrier_walk"],"mission_count":3,
+            "last_result":"Success","missions_won":2}"#;
+        fs::write(&path, v2).unwrap();
+        let save = load(&path).unwrap();
+        assert_eq!(save.version, 3);
+        assert_eq!(save.carrier, CarrierLayout::starting());
+        assert_eq!((save.credits, save.missions_won), (300, 2));
+        // Written back as v3 with the layout.
+        store(&path, &save).unwrap();
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(text.contains(r#""version": 3"#), "{text}");
+        assert!(text.contains(r#""id": "crew_quarters""#), "{text}");
+        assert_eq!(load(&path).unwrap(), save);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn built_layout_survives_a_round_trip() {
+        use crate::layout::Piece;
+        let path = temp_file("layout");
+        let mut save = SaveGame::default();
+        save.carrier.place(Piece::Corridor, 8, 6);
+        save.carrier.place(Piece::Room(RoomId::SalvageBay), 9, 5);
+        store(&path, &save).unwrap();
+        assert_eq!(load(&path).unwrap(), save);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn broken_layout_resets_with_a_refund() {
+        // A Salvage Bay floating with no corridor (disconnected), an extra
+        // corridor, and a room this build doesn't know.
+        let path = temp_file("broken");
+        let broken = r#"{"version":3,"credits":5,"resources":{"void_crystal":1},
+            "purchased_upgrades":[],"selected_battleship":"kite",
+            "tutorial_seen":[],"mission_count":1,"last_result":"None","missions_won":0,
+            "carrier":{"rooms":[{"id":"bridge","x":0,"y":1},{"id":"crew_quarters","x":4,"y":1},
+              {"id":"workshop","x":0,"y":4},{"id":"dock","x":4,"y":4},
+              {"id":"salvage_bay","x":9,"y":0},{"id":"hangar_bay","x":9,"y":4}],
+              "corridors":[[1,3],[2,3],[3,3],[4,3],[3,4],[3,5],[3,6],[8,6]]}}"#;
+        fs::write(&path, broken).unwrap();
+        let save = load(&path).unwrap();
+        assert_eq!(save.carrier, CarrierLayout::starting());
+        assert_eq!(
+            (save.credits, save.resources["void_crystal"]),
+            (5 + 120 + 10, 1 + 3)
+        );
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn salvage_bay_adds_a_quarter_on_success_only() {
+        use crate::layout::Piece;
+        let mut save = SaveGame::default();
+        let res = BTreeMap::from([("void_crystal".to_string(), 6)]);
+        save.record_mission_return(true, 180, &res);
+        assert_eq!((save.credits, save.resources["void_crystal"]), (180, 6));
+        save.carrier.place(Piece::Corridor, 8, 6);
+        save.carrier.place(Piece::Room(RoomId::SalvageBay), 9, 5);
+        assert_eq!(
+            save.salvage_bonus(true, 180, &res),
+            (45, BTreeMap::from([("void_crystal".to_string(), 1)]))
+        );
+        save.record_mission_return(true, 180, &res);
+        assert_eq!(
+            (save.credits, save.resources["void_crystal"]),
+            (180 + 225, 6 + 7)
+        );
+        save.record_mission_return(false, 0, &BTreeMap::new());
+        assert_eq!(save.salvage_bonus(false, 100, &res), (0, BTreeMap::new()));
+        assert_eq!(save.credits, 405);
     }
 
     #[test]

@@ -99,6 +99,21 @@ pub const WEAPON_PCT_PER_LEVEL: i32 = 25;
 pub const THRUSTER_PCT_PER_LEVEL: i32 = 15;
 pub const MAX_UPGRADE_LEVEL: u8 = 2;
 
+// --- Carrier rooms (design/READINESS.md § Carrier › Room catalogue) ----------
+
+/// Training Room: Q and W cooldowns × 85 / 100, rounded down. One level.
+pub const TRAINING_COOLDOWN_PCT: u32 = 85;
+pub const MAX_TRAINING_LEVEL: u8 = 1;
+
+/// A skill cooldown in ticks after `training` Training Room levels.
+pub const fn trained(cooldown: u32, training: u8) -> u32 {
+    if training > 0 {
+        cooldown * TRAINING_COOLDOWN_PCT / 100
+    } else {
+        cooldown
+    }
+}
+
 // --- Enemies (Demo Spec § Enemies) ------------------------------------------
 
 pub const ENEMY_MASS: i32 = 1;

@@ -12,8 +12,7 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy_ggrs::{LocalPlayers, Session};
 use sim::tuning::{
-    ARENA_HALF_H, ARENA_HALF_W, FISSURE_RADIUS, KILL_TARGET, SHOCKWAVE_COOLDOWN, SHOCKWAVE_RADIUS,
-    TICKS_PER_SEC,
+    ARENA_HALF_H, ARENA_HALF_W, FISSURE_RADIUS, KILL_TARGET, SHOCKWAVE_RADIUS, TICKS_PER_SEC,
 };
 use sim::{EnemyKind, FxVec2, LootKind, MissionStatus, Ship, ShipKind, SimState, SUB};
 
@@ -272,9 +271,9 @@ fn draw_ship_fx(gizmos: &mut Gizmos, ship: &Ship, me: usize) {
         gizmos.circle_2d(p, r + 6.0, Color::srgb(0.5, 0.8, 1.0));
         gizmos.circle_2d(p, r + 8.0, Color::srgba(0.5, 0.8, 1.0, 0.4));
     }
-    if ship.kind == ShipKind::Bulwark && ship.w_cooldown + 12 > SHOCKWAVE_COOLDOWN {
+    if ship.kind == ShipKind::Bulwark && ship.w_cooldown + 12 > ship.w_cooldown_max() {
         // Shockwave: a ring that expands over the first 12 ticks.
-        let age = (SHOCKWAVE_COOLDOWN - ship.w_cooldown) as f32 / 12.0;
+        let age = (ship.w_cooldown_max() - ship.w_cooldown) as f32 / 12.0;
         gizmos.circle_2d(
             p,
             SHOCKWAVE_RADIUS as f32 * age.min(1.0),

@@ -10,8 +10,11 @@ use sim::tuning::KILL_TARGET;
 use sim::{FxVec2, NetInput, SimState, SUB};
 
 use crate::art::ContentImages;
-use crate::carrier::{CarrierArrival, Overlay, Pilot};
+use crate::carrier::{
+    self, BuildCursor, CarrierArrival, CarrierView, Hotspot, Overlay, Pilot, Tool, WorkshopTab,
+};
 use crate::hints::{Hint, Hints};
+use crate::layout::{Piece, RoomId};
 use crate::mission::{self, MissionOutcome, MissionRequest, MissionResult};
 use crate::rollback::SimWorld;
 use crate::save::{self, SaveError, SaveGame};
@@ -110,6 +113,8 @@ pub struct Autoplay {
     pub abandon: bool,
     /// Missions flown so far in this run.
     pub flown: u32,
+    /// This Carrier visit builds the Salvage Bay (decided on arrival).
+    pub building: bool,
 }
 
 impl Autoplay {
@@ -375,6 +380,16 @@ pub(crate) fn enter_carrier(
             save.store();
         }
     }
+    let can_build = save.game.as_ref().is_some_and(|g| {
+        !g.carrier.has_built_room()
+            && RoomId::BUILDABLE
+                .iter()
+                .filter_map(|r| r.cost())
+                .any(|c| crate::workshop::can_afford(g, c))
+    });
+    if can_build {
+        hints.trigger(&mut save, Hint::CarrierCanBuild);
+    }
 }
 
 /// Launch from the Dock: remember the picked battleship and enter Battle.
@@ -421,8 +436,10 @@ pub fn mission_time(ticks: u32) -> String {
     format!("{}:{:02}", secs / 60, secs % 60)
 }
 
-/// The Result scene's body text (below the banner).
-pub fn result_text(r: &MissionResult, wallet: (u32, u32)) -> String {
+/// The Result scene's body text (below the banner). `salvage` is the
+/// Salvage Bay's extra credits and Void Crystal (zero without the room or
+/// on failure).
+pub fn result_text(r: &MissionResult, wallet: (u32, u32), salvage: (u32, u32)) -> String {
     let crystal = r
         .resources
         .get(mission::VOID_CRYSTAL_ID)
@@ -449,6 +466,9 @@ pub fn result_text(r: &MissionResult, wallet: (u32, u32)) -> String {
         "Kept          {} credits    {crystal} Void Crystal",
         r.credits
     ));
+    if salvage != (0, 0) {
+        lines.push(format!("Salvage Bay   +{} cr +{} VC", salvage.0, salvage.1));
+    }
     if r.lost != sim::Loot::default() {
         lines.push(format!(
             "Lost          {} credits    {} Void Crystal  (rewards don't survive failure)",
@@ -459,9 +479,9 @@ pub fn result_text(r: &MissionResult, wallet: (u32, u32)) -> String {
     lines.push(format!(
         "Credits {} -> {}    Void Crystal {} -> {}",
         wallet.0,
-        wallet.0 + r.credits,
+        wallet.0 + r.credits + salvage.0,
         wallet.1,
-        wallet.1 + crystal
+        wallet.1 + crystal + salvage.1
     ));
     lines.join("\n")
 }
@@ -494,7 +514,19 @@ fn enter_result(
                     ("MISSION FAILED - abandoned", Color::srgb(1.0, 0.4, 0.35))
                 }
             };
-            (banner, color, result_text(r, wallet))
+            let salvage = save
+                .game
+                .as_ref()
+                .map(|g| {
+                    let (credits, res) =
+                        g.salvage_bonus(r.outcome.success(), r.credits, &r.resources);
+                    (
+                        credits,
+                        res.get(mission::VOID_CRYSTAL_ID).copied().unwrap_or(0),
+                    )
+                })
+                .unwrap_or_default();
+            (banner, color, result_text(r, wallet, salvage))
         }
         None => ("No result", Color::WHITE, String::new()),
     };
@@ -675,12 +707,18 @@ fn handle_action(
     }
 }
 
-fn toggle_pause_menu(
+pub(crate) fn toggle_pause_menu(
     keys: Res<ButtonInput<KeyCode>>,
     state: Res<State<GameScreen>>,
+    overlay: Res<Overlay>,
     mut pause: ResMut<PauseMenu>,
 ) {
     if !keys.just_pressed(KeyCode::Escape) {
+        return;
+    }
+    // On the Carrier, Esc first backs out of an open panel or Build mode
+    // (`carrier::carrier_input`, which runs after this).
+    if *state.get() == GameScreen::Carrier && !pause.open && *overlay != Overlay::None {
         return;
     }
     if matches!(state.get(), GameScreen::Carrier | GameScreen::Battle) {
@@ -945,6 +983,7 @@ fn autoplay_flow(
     mut save: ResMut<SaveSlot>,
     mut next: ResMut<NextState<GameScreen>>,
     mut overlay: ResMut<Overlay>,
+    (mut view, mut cursor): (ResMut<CarrierView>, ResMut<BuildCursor>),
     mut pilot: Query<&mut Transform, With<Pilot>>,
     mut launch: MessageWriter<MissionRequest>,
     mut exit: MessageWriter<AppExit>,
@@ -1010,70 +1049,185 @@ fn autoplay_flow(
                         g.last_result,
                         g.tutorial_seen.len()
                     );
+                    println!(
+                        "autoplay: layout rooms {:?} corridors {:?}",
+                        g.carrier
+                            .rooms
+                            .iter()
+                            .map(|r| format!("{}@{},{}", r.id.id(), r.x, r.y))
+                            .collect::<Vec<_>>(),
+                        g.carrier.corridors
+                    );
                 }
             }
+            // The whole carrier at Overview zoom.
+            if at(1.3) {
+                view.zoom = 0;
+            }
+            if at(1.7) {
+                autoplay.shoot(
+                    &mut commands,
+                    &format!("{:02}-carrier-overview-{tag}-after-{n}", 11 + n * 10),
+                );
+            }
+            if at(2.0) {
+                view.zoom = 1;
+            }
             if n >= autoplay.missions {
-                if at(2.0) {
+                if at(2.5) {
                     save.store();
                     println!("autoplay: quit");
                     exit.write(AppExit::Success);
                 }
                 return;
             }
-            if n > 0 && at(1.5) {
-                *overlay = Overlay::Workshop {
-                    index: 0,
-                    message: String::new(),
-                };
+            // Between missions: build the spec's example Salvage Bay (and its
+            // corridor) when it's affordable and not built yet, else buy the
+            // first affordable upgrade.
+            let bay = Piece::Room(RoomId::SalvageBay);
+            let can_build = save.game.as_ref().is_some_and(|g| {
+                !g.carrier.has_room(RoomId::SalvageBay)
+                    && crate::workshop::can_afford(
+                        g,
+                        crate::workshop::Cost {
+                            credits: bay.cost().credits + Piece::Corridor.cost().credits,
+                            void_crystal: bay.cost().void_crystal,
+                        },
+                    )
+            });
+            if at(2.5) {
+                autoplay.building = n > 0 && can_build;
             }
+            let build_run = autoplay.building;
             if n > 0 && at(2.5) {
-                if let Some(game) = &mut save.game {
-                    let bought = AUTOPLAY_UPGRADES
-                        .iter()
-                        .find_map(|&u| crate::workshop::buy(game, u).ok().map(|l| (u, l)));
-                    let message = match bought {
-                        Some((u, level)) => format!("Bought {} {level}.", u.name()),
-                        None => "Nothing affordable.".to_string(),
-                    };
-                    println!(
-                        "autoplay: workshop: {message} credits {} VC {}",
-                        game.credits,
-                        crate::workshop::void_crystal(game)
+                *overlay = Overlay::workshop(
+                    if build_run {
+                        WorkshopTab::Build
+                    } else {
+                        WorkshopTab::Upgrades
+                    },
+                    0,
+                    String::new(),
+                );
+            }
+            if n > 0 && build_run {
+                if at(3.0) {
+                    autoplay.shoot(
+                        &mut commands,
+                        &format!("{:02}a-workshop-build", 12 + n * 10),
                     );
-                    let index = bought
-                        .and_then(|(u, _)| crate::workshop::UPGRADES.iter().position(|&x| x == u))
-                        .unwrap_or(0);
-                    *overlay = Overlay::Workshop { index, message };
                 }
-                save.store();
+                if at(3.5) {
+                    *overlay = Overlay::Build {
+                        tool: Tool::Place(Piece::Corridor),
+                        message: String::new(),
+                    };
+                    cursor.0 = Some((8, 6));
+                }
+                if at(4.2) {
+                    autoplay.shoot(
+                        &mut commands,
+                        &format!("{:02}b-build-preview-corridor", 12 + n * 10),
+                    );
+                }
+                if at(4.5) {
+                    autoplay_build(
+                        &mut save,
+                        &mut overlay,
+                        Tool::Place(Piece::Corridor),
+                        (8, 6),
+                    );
+                }
+                if at(4.8) {
+                    *overlay = Overlay::Build {
+                        tool: Tool::Place(bay),
+                        message: String::new(),
+                    };
+                    cursor.0 = Some((9, 5));
+                }
+                if at(5.3) {
+                    autoplay.shoot(
+                        &mut commands,
+                        &format!("{:02}c-build-preview-room", 12 + n * 10),
+                    );
+                }
+                if at(5.6) {
+                    autoplay_build(&mut save, &mut overlay, Tool::Place(bay), (9, 5));
+                    *overlay = Overlay::None;
+                }
+                if at(6.2) {
+                    view.zoom = 0;
+                }
+                if at(6.6) {
+                    autoplay.shoot(
+                        &mut commands,
+                        &format!("{:02}d-expanded-carrier", 12 + n * 10),
+                    );
+                }
+                if at(7.0) {
+                    view.zoom = 1;
+                }
+            } else if n > 0 {
+                if at(3.5) {
+                    if let Some(game) = &mut save.game {
+                        let bought = AUTOPLAY_UPGRADES
+                            .iter()
+                            .find_map(|&u| crate::workshop::buy(game, u).ok().map(|l| (u, l)));
+                        let message = match bought {
+                            Some((u, level)) => format!("Bought {} {level}.", u.name()),
+                            None => "Nothing affordable.".to_string(),
+                        };
+                        println!(
+                            "autoplay: workshop: {message} credits {} VC {}",
+                            game.credits,
+                            crate::workshop::void_crystal(game)
+                        );
+                        let index = bought
+                            .and_then(|(u, _)| {
+                                crate::workshop::UPGRADES.iter().position(|&x| x == u)
+                            })
+                            .unwrap_or(0);
+                        *overlay = Overlay::workshop(WorkshopTab::Upgrades, index, message);
+                    }
+                    save.store();
+                }
+                if at(4.5) {
+                    autoplay.shoot(&mut commands, &format!("{:02}-workshop", 12 + n * 10));
+                }
+                if at(5.0) {
+                    *overlay = Overlay::None;
+                }
             }
-            if n > 0 && at(3.5) {
-                autoplay.shoot(&mut commands, &format!("{:02}-workshop", 12 + n * 10));
-            }
-            let berth = crate::carrier::ship_index(&autoplay.ship);
-            if at(4.0) {
+            let berth = carrier::ship_index(&autoplay.ship);
+            if at(7.5) {
                 // Walk-free: put the Pilot at the ship's berth and board it
                 // (selects it and starts the briefing).
-                if let Ok(mut tf) = pilot.single_mut() {
-                    tf.translation.x = crate::carrier::berth_x(berth);
+                let layout = save
+                    .game
+                    .as_ref()
+                    .map(|g| g.carrier.clone())
+                    .unwrap_or_default();
+                let spot = carrier::hotspots(&layout)
+                    .into_iter()
+                    .find(|(h, _)| *h == Hotspot::Berth(berth))
+                    .map(|(_, at)| at);
+                if let (Ok(mut tf), Some(at)) = (pilot.single_mut(), spot) {
+                    let feet = at + Vec2::new(0.0, 30.0);
+                    tf.translation = carrier::world(feet).extend(tf.translation.z);
                 }
-                crate::carrier::interact_with(
-                    crate::carrier::Hotspot::Berth(berth),
-                    save.game.as_mut(),
-                    &mut overlay,
-                );
+                carrier::interact_with(Hotspot::Berth(berth), save.game.as_mut(), &mut overlay);
                 *overlay = Overlay::None;
             }
-            if at(5.0) {
+            if at(8.5) {
                 autoplay.shoot(&mut commands, &format!("{:02}-dock-berths", 13 + n * 10));
             }
-            if at(5.5) {
+            if at(9.0) {
                 *overlay = Overlay::Launch { index: berth };
             }
-            if at(6.0) {
+            if at(9.5) {
                 autoplay.shoot(&mut commands, &format!("{:02}-dock-launch", 14 + n * 10));
             }
-            if at(6.5) {
+            if at(10.0) {
                 launch.write(MissionRequest {
                     battleship_id: autoplay.ship.clone(),
                 });
@@ -1121,6 +1275,23 @@ fn autoplay_flow(
             }
         }
     }
+}
+
+/// One autoplay Build-mode click, logged and saved like a player's.
+fn autoplay_build(save: &mut SaveSlot, overlay: &mut Overlay, tool: Tool, cell: (i32, i32)) {
+    if let Some(game) = &mut save.game {
+        let (_, text, _) = carrier::apply_build_click(game, tool, cell);
+        println!(
+            "autoplay: build {cell:?}: {text} credits {} VC {}",
+            game.credits,
+            crate::workshop::void_crystal(game)
+        );
+        *overlay = Overlay::Build {
+            tool,
+            message: text,
+        };
+    }
+    save.store();
 }
 
 #[cfg(test)]

@@ -25,6 +25,10 @@ pub enum Hint {
     Workshop,
     /// First return from a mission with loot.
     ReturnWithLoot,
+    /// First Carrier arrival that can afford a room, with none built yet.
+    CarrierCanBuild,
+    /// First time in Build mode.
+    CarrierBuild,
     /// First battle start.
     BattleMove,
     /// First enemy in basic-attack range.
@@ -42,6 +46,8 @@ impl Hint {
             Hint::Dock => "carrier_dock",
             Hint::Workshop => "carrier_workshop",
             Hint::ReturnWithLoot => "carrier_return_with_loot",
+            Hint::CarrierCanBuild => "carrier_can_build",
+            Hint::CarrierBuild => "carrier_build",
             Hint::BattleMove => "battle_move",
             Hint::BattleSkills => "battle_skills",
             Hint::BattleLoot => "battle_loot",
@@ -50,13 +56,17 @@ impl Hint {
 
     pub fn text(self) -> &'static str {
         match self {
-            Hint::CarrierWalk => "A / D to walk. E to talk or use.",
+            Hint::CarrierWalk => "WASD to walk. E to talk or use.",
             Hint::CarrierInteract => "[E] appears when you can talk to crew or use a console.",
             Hint::Dock => "Pick a battleship here to start a mission.",
             Hint::Workshop => {
-                "W / S pick an upgrade, E buys it. Upgrades apply to both battleships."
+                "W / S pick an upgrade, E buys it. Tab switches to Build for new rooms."
             }
             Hint::ReturnWithLoot => "Spend credits and Void Crystal at the Workshop.",
+            Hint::CarrierCanBuild => "You can afford a new room. Build it at the Workshop bench.",
+            Hint::CarrierBuild => {
+                "Click a glowing slot to build. Rooms need a corridor at one of their doors."
+            }
             Hint::BattleMove => "Click to move. Your guns fire on their own.",
             Hint::BattleSkills => "Q / W use skills. Watch the cooldowns.",
             Hint::BattleLoot => "Fly over drops to collect them.",
@@ -260,6 +270,8 @@ mod tests {
             Hint::Dock,
             Hint::Workshop,
             Hint::ReturnWithLoot,
+            Hint::CarrierCanBuild,
+            Hint::CarrierBuild,
             Hint::BattleMove,
             Hint::BattleSkills,
             Hint::BattleLoot,

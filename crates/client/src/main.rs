@@ -14,6 +14,7 @@ mod carrier;
 mod flow;
 mod hints;
 mod input;
+mod layout;
 mod mission;
 mod net;
 mod pacing;
@@ -258,7 +259,7 @@ fn main() {
                 missions: args.missions,
                 resume: args.resume,
                 abandon: args.abandon,
-                flown: 0,
+                ..Default::default()
             });
         }
         if app.run().is_error() {
@@ -331,7 +332,9 @@ fn main() {
     }
 }
 
-/// Synctest / p2p fleet: even handles fly Kite, odd handles Bulwark.
+/// Synctest / p2p fleet: even handles fly Kite, odd handles Bulwark;
+/// handles 2 and up have the Training Room, so the gate covers its
+/// cooldowns too.
 fn test_loadouts(players: usize) -> Vec<Loadout> {
     (0..players)
         .map(|h| Loadout {
@@ -340,7 +343,10 @@ fn test_loadouts(players: usize) -> Vec<Loadout> {
             } else {
                 ShipKind::Bulwark
             },
-            ..Default::default()
+            upgrades: sim::Upgrades {
+                training: u8::from(h >= 2),
+                ..Default::default()
+            },
         })
         .collect()
 }
