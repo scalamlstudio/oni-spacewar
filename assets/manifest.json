@@ -6,7 +6,7 @@
       "id": "core",
       "version": "0.2.0",
       "gameplay_affecting": false,
-      "content_hash": "a14330e2f4d49693982a737acbc448e0e2657ab86f4886711695a13b14ce4206",
+      "content_hash": "76cfaddb2ffea01c4153b7f0c5593b2a984edaff560cb90c8ec7a4854a035210",
       "assets": [
         {
           "id": "core.battle.enemy.void_spitter",
@@ -69,6 +69,15 @@
           "processed": "packs/core/processed/battle/ship/kite.png",
           "compressed": "packs/core/bundles/battle/ship/kite.png.zst",
           "hash": "e793ef65f5659f84e95b052ed7c0c8a0490cc8ad19987d466b9de8f4fe8b10de",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.dock.berth",
+          "kind": "image/png",
+          "source": "source/core/carrier/dock/berth.png",
+          "processed": "packs/core/processed/carrier/dock/berth.png",
+          "compressed": "packs/core/bundles/carrier/dock/berth.png.zst",
+          "hash": "6163bfae1dd9e7a9f9494fc744a602e4d4e2185084e73c4226cd0ef2acceb1fd",
           "gameplay_affecting": false
         },
         {
@@ -141,15 +150,6 @@
           "processed": "packs/core/processed/carrier/room/crew_quarters.png",
           "compressed": "packs/core/bundles/carrier/room/crew_quarters.png.zst",
           "hash": "e19d77f2415fe8d0992d57844a0b97861516c53edce99d79ae0d360e260f8304",
-          "gameplay_affecting": false
-        },
-        {
-          "id": "core.carrier.room.dock",
-          "kind": "image/png",
-          "source": "source/core/carrier/room/dock.png",
-          "processed": "packs/core/processed/carrier/room/dock.png",
-          "compressed": "packs/core/bundles/carrier/room/dock.png.zst",
-          "hash": "5d81da6d7b28c6c2f2b4f54b948cd86e860dd9ea0b5e7fdeb2563c58c27ede72",
           "gameplay_affecting": false
         },
         {

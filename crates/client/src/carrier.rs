@@ -19,19 +19,27 @@ use crate::art::{self, icon_node, ContentImages};
 use crate::flow::{self, GameScreen, PauseMenu, SaveSlot, ScreenEntity};
 use crate::hints::{Hint, Hints};
 use crate::mission::MissionRequest;
-use crate::save::LastResult;
+use crate::save::{LastResult, SaveGame};
 use crate::workshop::{self, BuyError, Upgrade, UPGRADES};
 
-/// Width of one room; the deck is four rooms long.
+/// Width of one room. Bridge, Crew Quarters and Workshop are one room wide;
+/// the Dock is one berth per battleship.
 pub const ROOM_W: f32 = 320.0;
-pub const DECK_LEN: f32 = ROOM_W * 4.0;
+/// Width of one Dock berth.
+pub const BERTH_W: f32 = ROOM_W;
+/// Where the Dock starts: after the three one-room rooms.
+pub const DOCK_X: f32 = ROOM_W * 3.0;
+pub const DECK_LEN: f32 = DOCK_X + BERTH_W * SHIPS.len() as f32;
 /// A / D walking speed, px/s.
 pub const WALK_SPEED: f32 = 120.0;
 /// E reaches the nearest hotspot within this many px.
 pub const INTERACT_RANGE: f32 = 40.0;
+/// A docked battleship is big; E reaches it from this far.
+pub const BERTH_REACH: f32 = 90.0;
 const PILOT_HALF_W: f32 = 10.0;
 const PILOT_SPAWN_NEW_GAME: f32 = 110.0;
-const PILOT_SPAWN_AFTER_MISSION: f32 = 1060.0;
+/// Between the two berths, out of reach of both.
+const PILOT_SPAWN_AFTER_MISSION: f32 = DOCK_X + BERTH_W;
 const CAMERA_Y: f32 = 70.0;
 /// Carrier camera zoom (world px per screen px); the deck art reads better
 /// close up than at 1:1.
@@ -39,9 +47,13 @@ const CAMERA_ZOOM: f32 = 0.7;
 /// Room art is fitted to the room width; this much of it hangs below the
 /// walking line (the art's lower frame).
 const ROOM_ART_SINK: f32 = 34.0;
-/// On-screen height of the Pilot and crew sprites, px.
-const PILOT_H: f32 = 64.0;
-const CREW_H: f32 = 70.0;
+/// Height of the Pilot and the crew from head to feet, px. The art has
+/// different amounts of empty canvas, so this is measured on the visible
+/// pixels (`standing`), not the image size.
+const CHARACTER_H: f32 = 48.0;
+/// Berth pad size the docked ships' lengths are given for
+/// (design/READINESS.md § Dock and berths: 256 px pad).
+const BERTH_PAD: f32 = 256.0;
 /// Pilot walk cycle: a new frame every this many px walked.
 const STRIDE: f32 = 12.0;
 const PILOT_FRAMES: [&str; 4] = [
@@ -60,20 +72,42 @@ pub enum Room {
     Dock,
 }
 
-const ROOMS: [(Room, &str, &str); 4] = [
-    (Room::Bridge, "Bridge", "core.carrier.room.bridge"),
+/// Rooms left to right: room, name, room art (the Dock draws its berths
+/// instead), left edge, width.
+const ROOMS: [(Room, &str, Option<&str>, f32, f32); 4] = [
+    (
+        Room::Bridge,
+        "Bridge",
+        Some("core.carrier.room.bridge"),
+        0.0,
+        ROOM_W,
+    ),
     (
         Room::CrewQuarters,
         "Crew Quarters",
-        "core.carrier.room.crew_quarters",
+        Some("core.carrier.room.crew_quarters"),
+        ROOM_W,
+        ROOM_W,
     ),
-    (Room::Workshop, "Workshop", "core.carrier.room.workshop"),
-    (Room::Dock, "Dock", "core.carrier.room.dock"),
+    (
+        Room::Workshop,
+        "Workshop",
+        Some("core.carrier.room.workshop"),
+        ROOM_W * 2.0,
+        ROOM_W,
+    ),
+    (Room::Dock, "Dock", None, DOCK_X, DECK_LEN - DOCK_X),
 ];
 
+/// An empty ship berth; the docked battleship is drawn on top.
+const BERTH_IMAGE: &str = "core.carrier.dock.berth";
+
 pub fn room_at(x: f32) -> Room {
-    let i = (x / ROOM_W).floor().clamp(0.0, 3.0) as usize;
-    ROOMS[i].0
+    ROOMS
+        .iter()
+        .rev()
+        .find(|r| x >= r.3)
+        .map_or(Room::Bridge, |r| r.0)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -251,8 +285,10 @@ pub struct ShipInfo {
     pub name: &'static str,
     pub role: &'static str,
     pub kind: ShipKind,
-    /// Battle sprite, also shown on the Dock card.
+    /// Battle sprite, also drawn in its Dock berth.
     pub image_id: &'static str,
+    /// Longest side of the docked sprite on a [`BERTH_PAD`] pad, px.
+    pub berth_len: f32,
 }
 
 pub const SHIPS: [ShipInfo; 2] = [
@@ -262,6 +298,7 @@ pub const SHIPS: [ShipInfo; 2] = [
         role: "fast, fragile, short cooldowns",
         kind: ShipKind::Kite,
         image_id: crate::render::ids::SHIP_KITE,
+        berth_len: 150.0,
     },
     ShipInfo {
         id: "bulwark",
@@ -269,6 +306,7 @@ pub const SHIPS: [ShipInfo; 2] = [
         role: "slow, tanky, stronger basic attack",
         kind: ShipKind::Bulwark,
         image_id: crate::render::ids::SHIP_BULWARK,
+        berth_len: 210.0,
     },
 ];
 
@@ -383,27 +421,40 @@ pub fn ship_index(id: &str) -> usize {
 pub enum Hotspot {
     Crew(Crew),
     UpgradeBench,
-    LaunchConsole,
+    /// The battleship docked in berth `n` (an index into [`SHIPS`]).
+    Berth(usize),
 }
 
 impl Hotspot {
-    fn verb(self) -> &'static str {
+    fn verb(self) -> String {
         match self {
-            Hotspot::Crew(_) => "Talk",
-            Hotspot::UpgradeBench | Hotspot::LaunchConsole => "Use",
+            Hotspot::Crew(_) => "Talk".into(),
+            Hotspot::UpgradeBench => "Use".into(),
+            Hotspot::Berth(i) => format!("Board {}", SHIPS[i].name),
+        }
+    }
+
+    fn reach(self) -> f32 {
+        match self {
+            Hotspot::Berth(_) => BERTH_REACH,
+            _ => INTERACT_RANGE,
         }
     }
 }
 
-pub const LAUNCH_CONSOLE_X: f32 = 1010.0;
+/// Centre of Dock berth `i`, where its battleship sits.
+pub const fn berth_x(i: usize) -> f32 {
+    DOCK_X + (i as f32 + 0.5) * BERTH_W
+}
 
 /// Interactable things on the deck and their x position.
-pub const HOTSPOTS: [(Hotspot, f32); 5] = [
+pub const HOTSPOTS: [(Hotspot, f32); 6] = [
     (Hotspot::Crew(Crew::Gunner), 210.0),
     (Hotspot::Crew(Crew::Researcher), 500.0),
     (Hotspot::Crew(Crew::Engineer), 700.0),
     (Hotspot::UpgradeBench, 840.0),
-    (Hotspot::LaunchConsole, LAUNCH_CONSOLE_X),
+    (Hotspot::Berth(0), berth_x(0)),
+    (Hotspot::Berth(1), berth_x(1)),
 ];
 
 /// The hotspot E would use from `x`: the closest one within reach.
@@ -412,7 +463,7 @@ pub fn nearest_hotspot(x: f32) -> Option<(Hotspot, f32)> {
         .iter()
         .copied()
         .map(|(h, hx)| (h, hx, (hx - x).abs()))
-        .filter(|&(_, _, d)| d <= INTERACT_RANGE)
+        .filter(|&(h, _, d)| d <= h.reach())
         .min_by(|a, b| a.2.total_cmp(&b.2))
         .map(|(h, hx, _)| (h, hx))
 }
@@ -427,20 +478,17 @@ pub fn walk(x: f32, dir: f32, dt: f32) -> f32 {
 pub enum Overlay {
     #[default]
     None,
-    /// Dialogue lines; a briefing continues into ship select.
+    /// Dialogue lines; a briefing (`launch` = the boarded ship) continues
+    /// into the launch panel.
     Dialogue {
         lines: Vec<Line>,
         index: usize,
-        briefing: bool,
+        launch: Option<usize>,
     },
-    ShipSelect {
-        index: usize,
-    },
+    /// Confirm and launch the battleship in [`SHIPS`]`[index]`.
+    Launch { index: usize },
     /// The upgrade shop: the selected row and the last purchase's feedback.
-    Workshop {
-        index: usize,
-        message: String,
-    },
+    Workshop { index: usize, message: String },
 }
 
 /// Set by the flow when the Carrier is entered straight from a mission, so the
@@ -460,6 +508,26 @@ pub(crate) struct Pilot {
 
 #[derive(Component)]
 struct Prompt;
+
+/// A Dock berth: one slot holding one battleship (`ship`, an index into
+/// [`SHIPS`]). Spawned by [`berth`]; the 2.5D carrier reuses it for more
+/// berths.
+#[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Berth {
+    pub ship: usize,
+}
+
+/// The battleship sprite inside a [`Berth`]; clicking it boards the ship.
+#[derive(Component, Clone, Copy)]
+pub struct DockedShip {
+    pub ship: usize,
+    /// Half the sprite's on-screen extent (for clicks and the highlight).
+    pub half: Vec2,
+}
+
+/// "Selected" tag over the docked ship the save will launch.
+#[derive(Component)]
+struct SelectedTag;
 
 /// One live value in the Carrier HUD.
 #[derive(Component, Clone, Copy, PartialEq)]
@@ -487,7 +555,11 @@ fn portrait(
 /// Every manifest image the Carrier draws (besides dialogue portraits).
 #[cfg(test)]
 pub fn image_ids() -> Vec<String> {
-    let mut ids: Vec<String> = ROOMS.iter().map(|r| r.2.to_string()).collect();
+    let mut ids: Vec<String> = ROOMS
+        .iter()
+        .filter_map(|r| r.2.map(str::to_string))
+        .collect();
+    ids.push(BERTH_IMAGE.into());
     ids.extend(PILOT_FRAMES.iter().map(|f| f.to_string()));
     ids.push(PILOT_IDLE.into());
     ids.extend(SHIPS.iter().map(|s| s.image_id.to_string()));
@@ -511,11 +583,13 @@ impl Plugin for CarrierPlugin {
             .add_systems(
                 Update,
                 (
+                    click_ship,
                     carrier_input,
                     follow_pilot,
                     animate_pilot,
                     update_prompt,
                     update_hud,
+                    show_selected_ship,
                     carrier_hints,
                     sync_overlay,
                 )
@@ -538,7 +612,27 @@ fn label(text: &str, size: f32, color: Color, pos: Vec3) -> impl Bundle {
     )
 }
 
-/// A sprite `height` px tall standing with its feet at `pos`.
+/// Share of an image's height above and below its visible pixels
+/// (alpha > 0): `(top, bottom)`. Images without pixel data count as full.
+fn empty_rows(image: Option<&Image>) -> (f32, f32) {
+    let Some((image, data)) = image.and_then(|i| i.data.as_ref().map(|d| (i, d))) else {
+        return (0.0, 0.0);
+    };
+    let (w, h) = (image.width() as usize, image.height() as usize);
+    if data.len() < w * h * 4 || h == 0 {
+        return (0.0, 0.0);
+    }
+    let visible = |y: usize| (0..w).any(|x| data[(y * w + x) * 4 + 3] > 0);
+    let Some(top) = (0..h).position(visible) else {
+        return (0.0, 0.0);
+    };
+    let bottom = (0..h).rev().position(visible).unwrap_or(0);
+    (top as f32 / h as f32, bottom as f32 / h as f32)
+}
+
+/// A character `height` px tall from head to feet, feet at `pos`. The
+/// sprite is scaled by its visible pixels, so empty canvas above or below
+/// the character doesn't change how big it looks.
 fn standing(
     art: &mut ContentImages,
     images: &mut Assets<Image>,
@@ -548,15 +642,59 @@ fn standing(
 ) -> impl Bundle {
     let image = art.get(images, id).unwrap_or_default();
     let px = ContentImages::size(images, &image);
+    let (top, bottom) = empty_rows(images.get(&image));
+    let canvas_h = height / (1.0 - top - bottom).max(0.1);
     (
         ScreenEntity,
         Sprite {
             image,
-            custom_size: Some(Vec2::new(px.x * height / px.y, height)),
+            custom_size: Some(Vec2::new(px.x * canvas_h / px.y, canvas_h)),
             ..default()
         },
-        Transform::from_translation(pos + Vec3::Y * height / 2.0),
+        Transform::from_translation(pos + Vec3::Y * (canvas_h / 2.0 - bottom * canvas_h)),
     )
+}
+
+/// A Dock berth at `x0..x0 + BERTH_W` holding `SHIPS[ship]`, drawn with the
+/// same sprite as in battle, nose up, sized for the berth's height the way
+/// the design sizes it on a 256 px pad.
+pub fn berth(
+    commands: &mut Commands,
+    art: &mut ContentImages,
+    images: &mut Assets<Image>,
+    x0: f32,
+    ship: usize,
+) {
+    let image = art.get(images, BERTH_IMAGE).unwrap_or_default();
+    let px = ContentImages::size(images, &image);
+    let h = BERTH_W * px.y / px.x;
+    let centre = Vec2::new(x0 + BERTH_W / 2.0, h / 2.0 - ROOM_ART_SINK);
+    commands.spawn((
+        ScreenEntity,
+        Berth { ship },
+        Sprite {
+            image,
+            custom_size: Some(Vec2::new(BERTH_W, h)),
+            ..default()
+        },
+        Transform::from_translation(centre.extend(-1.0)),
+    ));
+    let image = art.get(images, SHIPS[ship].image_id).unwrap_or_default();
+    let px = ContentImages::size(images, &image);
+    let size = px * (SHIPS[ship].berth_len / BERTH_PAD) * h / px.max_element();
+    commands.spawn((
+        ScreenEntity,
+        DockedShip {
+            ship,
+            half: size / 2.0,
+        },
+        Sprite {
+            image,
+            custom_size: Some(size),
+            ..default()
+        },
+        Transform::from_translation(centre.extend(0.2)),
+    ));
 }
 
 fn spawn_carrier(
@@ -575,27 +713,43 @@ fn spawn_carrier(
     }
     // Rooms: each room's art fitted to its width, its lower frame below the
     // walking line (y = 0).
-    for (i, (_, name, id)) in ROOMS.iter().enumerate() {
-        let x0 = i as f32 * ROOM_W;
-        let image = art.get(&mut images, id).unwrap_or_default();
-        let px = ContentImages::size(&images, &image);
-        let h = ROOM_W * px.y / px.x;
-        commands.spawn((
-            ScreenEntity,
-            Sprite {
-                image,
-                custom_size: Some(Vec2::new(ROOM_W, h)),
-                ..default()
-            },
-            Transform::from_xyz(x0 + ROOM_W / 2.0, h / 2.0 - ROOM_ART_SINK, -1.0),
-        ));
+    for (_, name, id, x0, w) in ROOMS {
+        // Rooms are about this tall; the label sits over the art.
+        let mut h = ROOM_W * 0.57;
+        if let Some(id) = id {
+            let image = art.get(&mut images, id).unwrap_or_default();
+            let px = ContentImages::size(&images, &image);
+            h = w * px.y / px.x;
+            commands.spawn((
+                ScreenEntity,
+                Sprite {
+                    image,
+                    custom_size: Some(Vec2::new(w, h)),
+                    ..default()
+                },
+                Transform::from_xyz(x0 + w / 2.0, h / 2.0 - ROOM_ART_SINK, -1.0),
+            ));
+        }
         commands.spawn(label(
             name,
             16.0,
             Color::srgb(0.75, 0.82, 0.9),
-            Vec3::new(x0 + ROOM_W / 2.0, h - ROOM_ART_SINK + 14.0, 1.0),
+            Vec3::new(x0 + w / 2.0, h - ROOM_ART_SINK + 14.0, 1.0),
         ));
     }
+    for (i, _) in SHIPS.iter().enumerate() {
+        berth(
+            &mut commands,
+            &mut art,
+            &mut images,
+            DOCK_X + i as f32 * BERTH_W,
+            i,
+        );
+    }
+    commands.spawn((
+        label("Selected", 11.0, Color::srgb(0.5, 0.9, 1.0), Vec3::ZERO),
+        SelectedTag,
+    ));
     commands.spawn(label(
         "Next: Elimination",
         11.0,
@@ -612,14 +766,14 @@ fn spawn_carrier(
             &mut art,
             &mut images,
             &crew.sprite_id(),
-            CREW_H,
+            CHARACTER_H,
             Vec3::new(x, 0.0, 0.5),
         ));
         commands.spawn(label(
             crew.name(),
             11.0,
             crew.color(),
-            Vec3::new(x, CREW_H + 8.0, 0.6),
+            Vec3::new(x, CHARACTER_H + 10.0, 0.6),
         ));
     }
 
@@ -634,7 +788,7 @@ fn spawn_carrier(
             &mut art,
             &mut images,
             PILOT_IDLE,
-            PILOT_H,
+            CHARACTER_H,
             Vec3::new(x, 0.0, 2.0),
         ),
         Pilot::default(),
@@ -723,8 +877,6 @@ fn carrier_input(
     let confirm =
         interact || keys.just_pressed(KeyCode::Enter) || keys.just_pressed(KeyCode::Space);
     let back = keys.just_pressed(KeyCode::KeyX) || keys.just_pressed(KeyCode::Backspace);
-    let left = keys.just_pressed(KeyCode::KeyA) || keys.just_pressed(KeyCode::ArrowLeft);
-    let right = keys.just_pressed(KeyCode::KeyD) || keys.just_pressed(KeyCode::ArrowRight);
 
     match &mut *overlay {
         Overlay::None => {
@@ -739,58 +891,30 @@ fn carrier_input(
             if !interact {
                 return;
             }
-            let last = save
-                .game
-                .as_ref()
-                .map(|g| g.last_result)
-                .unwrap_or_default();
-            *overlay = match nearest_hotspot(tf.translation.x) {
-                Some((Hotspot::Crew(crew), _)) => Overlay::Dialogue {
-                    lines: crew_lines(crew, last),
-                    index: 0,
-                    briefing: false,
-                },
-                Some((Hotspot::LaunchConsole, _)) => Overlay::Dialogue {
-                    lines: crew_lines(Crew::Pilot, last),
-                    index: 0,
-                    briefing: true,
-                },
-                Some((Hotspot::UpgradeBench, _)) => Overlay::Workshop {
-                    index: 0,
-                    message: String::new(),
-                },
-                None => return,
-            };
+            if let Some((hotspot, _)) = nearest_hotspot(tf.translation.x) {
+                interact_with(hotspot, save.game.as_mut(), &mut overlay);
+            }
         }
         Overlay::Dialogue {
             lines,
             index,
-            briefing,
+            launch,
         } => {
             if back {
                 *overlay = Overlay::None;
             } else if confirm {
                 if *index + 1 < lines.len() {
                     *index += 1;
-                } else if *briefing {
-                    let selected = save
-                        .game
-                        .as_ref()
-                        .map(|g| ship_index(&g.selected_battleship))
-                        .unwrap_or(0);
-                    *overlay = Overlay::ShipSelect { index: selected };
+                } else if let Some(ship) = *launch {
+                    *overlay = Overlay::Launch { index: ship };
                 } else {
                     *overlay = Overlay::None;
                 }
             }
         }
-        Overlay::ShipSelect { index } => {
+        Overlay::Launch { index } => {
             if back {
                 *overlay = Overlay::None;
-            } else if left || keys.just_pressed(KeyCode::Digit1) {
-                *index = 0;
-            } else if right || keys.just_pressed(KeyCode::Digit2) {
-                *index = 1;
             } else if confirm {
                 launch.write(MissionRequest {
                     battleship_id: SHIPS[*index].id.to_string(),
@@ -828,6 +952,107 @@ fn carrier_input(
                 };
                 // Spec § Save file: saved on every Workshop purchase.
                 save.store();
+            }
+        }
+    }
+}
+
+/// Using `hotspot`: talk to crew, open the Workshop, or board a docked
+/// battleship, which selects it and starts the briefing before launch.
+pub fn interact_with(hotspot: Hotspot, game: Option<&mut SaveGame>, overlay: &mut Overlay) {
+    let last = game.as_ref().map(|g| g.last_result).unwrap_or_default();
+    *overlay = match hotspot {
+        Hotspot::Crew(crew) => Overlay::Dialogue {
+            lines: crew_lines(crew, last),
+            index: 0,
+            launch: None,
+        },
+        Hotspot::Berth(ship) => {
+            if let Some(game) = game {
+                game.selected_battleship = SHIPS[ship].id.to_string();
+            }
+            Overlay::Dialogue {
+                lines: crew_lines(Crew::Pilot, last),
+                index: 0,
+                launch: Some(ship),
+            }
+        }
+        Hotspot::UpgradeBench => Overlay::Workshop {
+            index: 0,
+            message: String::new(),
+        },
+    };
+}
+
+/// The docked ship under world point `p`, if any.
+pub fn ship_at(p: Vec2, ships: impl IntoIterator<Item = (Vec2, DockedShip)>) -> Option<usize> {
+    ships
+        .into_iter()
+        .find(|(centre, s)| (p - *centre).abs().cmple(s.half).all())
+        .map(|(_, s)| s.ship)
+}
+
+/// Clicking a docked battleship boards it, like walking up and pressing E.
+fn click_ship(
+    mouse: Res<ButtonInput<MouseButton>>,
+    pause: Res<PauseMenu>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+    camera: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
+    ships: Query<(&GlobalTransform, &DockedShip)>,
+    mut save: ResMut<SaveSlot>,
+    mut overlay: ResMut<Overlay>,
+) {
+    if pause.open || *overlay != Overlay::None || !mouse.just_pressed(MouseButton::Left) {
+        return;
+    }
+    let (Ok(window), Ok((camera, cam_tf))) = (windows.single(), camera.single()) else {
+        return;
+    };
+    let Some(p) = window
+        .cursor_position()
+        .and_then(|c| camera.viewport_to_world_2d(cam_tf, c).ok())
+    else {
+        return;
+    };
+    let docked = ships
+        .iter()
+        .map(|(tf, s)| (tf.translation().truncate(), *s));
+    if let Some(ship) = ship_at(p, docked) {
+        interact_with(Hotspot::Berth(ship), save.game.as_mut(), &mut overlay);
+    }
+}
+
+/// Marks the docked ship the save has selected: a highlight ring and a
+/// "Selected" tag; the other ship is dimmed.
+fn show_selected_ship(
+    save: Res<SaveSlot>,
+    mut ships: Query<(&Transform, &DockedShip, &mut Sprite), Without<SelectedTag>>,
+    mut tag: Query<&mut Transform, With<SelectedTag>>,
+    mut gizmos: Gizmos,
+) {
+    let selected = save
+        .game
+        .as_ref()
+        .map(|g| ship_index(&g.selected_battleship))
+        .unwrap_or(0);
+    for (tf, ship, mut sprite) in &mut ships {
+        let chosen = ship.ship == selected;
+        let color = if chosen {
+            Color::WHITE
+        } else {
+            Color::srgb(0.6, 0.6, 0.65)
+        };
+        if sprite.color != color {
+            sprite.color = color;
+        }
+        if chosen {
+            let centre = tf.translation.truncate();
+            let ring = ship.half.max_element() + 6.0;
+            for r in [ring, ring + 2.0] {
+                gizmos.circle_2d(centre, r, Color::srgb(0.5, 0.9, 1.0));
+            }
+            if let Ok(mut tag) = tag.single_mut() {
+                tag.translation = (centre + Vec2::Y * (ring + 10.0)).extend(1.0);
             }
         }
     }
@@ -923,7 +1148,11 @@ fn update_prompt(
         Some((hotspot, x)) if *overlay == Overlay::None => {
             text.0 = format!("[E] {}", hotspot.verb());
             tf.translation.x = x;
-            tf.translation.y = PILOT_H + 20.0;
+            // Under the docked ship's berth, clear of the ship.
+            tf.translation.y = match hotspot {
+                Hotspot::Berth(_) => -ROOM_ART_SINK - 12.0,
+                _ => CHARACTER_H + 24.0,
+            };
             *vis = Visibility::Visible;
         }
         _ => *vis = Visibility::Hidden,
@@ -998,14 +1227,14 @@ fn sync_overlay(
         Overlay::Dialogue {
             lines,
             index,
-            briefing,
+            launch,
         } => {
             let line = lines[*index];
             let portrait = portrait(&mut art, &mut images, line.speaker, line.expression);
             let more = if *index + 1 < lines.len() {
                 "[E] Next"
-            } else if *briefing {
-                "[E] Pick battleship"
+            } else if launch.is_some() {
+                "[E] Launch prep"
             } else {
                 "[E] Close"
             };
@@ -1069,7 +1298,8 @@ fn sync_overlay(
                     });
                 });
         }
-        Overlay::ShipSelect { index } => {
+        Overlay::Launch { index } => {
+            let ship = &SHIPS[*index];
             commands
                 .spawn((
                     ScreenEntity,
@@ -1078,73 +1308,29 @@ fn sync_overlay(
                     border,
                     Node {
                         position_type: PositionType::Absolute,
-                        left: px(60),
-                        right: px(60),
+                        // Beside the boarded ship, not over it.
+                        left: if *index % 2 == 1 { px(30) } else { auto() },
+                        right: if *index % 2 == 0 { px(30) } else { auto() },
                         top: px(100),
+                        width: px(520),
                         flex_direction: FlexDirection::Column,
                         padding: UiRect::all(px(14)),
-                        row_gap: px(12),
+                        row_gap: px(10),
                         border: UiRect::all(px(1)),
                         ..default()
                     },
                 ))
                 .with_children(|p| {
                     p.spawn((
-                        Text::new("Dock - pick a battleship"),
+                        Text::new(format!("Launch the {}?", ship.name)),
                         font(22.0, Color::WHITE),
                     ));
-                    p.spawn(Node {
-                        column_gap: px(14),
-                        ..default()
-                    })
-                    .with_children(|row| {
-                        for (i, ship) in SHIPS.iter().enumerate() {
-                            let selected = i == *index;
-                            row.spawn((
-                                BackgroundColor(if selected {
-                                    Color::srgb(0.10, 0.22, 0.28)
-                                } else {
-                                    Color::srgb(0.07, 0.08, 0.10)
-                                }),
-                                BorderColor::all(if selected {
-                                    Color::srgb(0.5, 0.9, 1.0)
-                                } else {
-                                    Color::srgb(0.25, 0.3, 0.34)
-                                }),
-                                Node {
-                                    flex_direction: FlexDirection::Column,
-                                    flex_grow: 1.0,
-                                    flex_basis: px(0),
-                                    padding: UiRect::all(px(10)),
-                                    row_gap: px(4),
-                                    border: UiRect::all(px(if selected { 2 } else { 1 })),
-                                    ..default()
-                                },
-                            ))
-                            .with_children(|card| {
-                                card.spawn((
-                                    Text::new(format!("{} {}", i + 1, ship.name)),
-                                    font(20.0, Color::WHITE),
-                                ));
-                                if let Some(image) = art.get(&mut images, ship.image_id) {
-                                    card.spawn((
-                                        ImageNode::new(image),
-                                        Node {
-                                            height: px(72),
-                                            align_self: AlignSelf::Center,
-                                            ..default()
-                                        },
-                                    ));
-                                }
-                                card.spawn((
-                                    Text::new(ship_card(ship, levels)),
-                                    font(14.0, Color::srgb(0.82, 0.86, 0.9)),
-                                ));
-                            });
-                        }
-                    });
                     p.spawn((
-                        Text::new("[A]/[D] or [1]/[2] Choose    [E] Launch    [X] Back"),
+                        Text::new(ship_card(ship, levels)),
+                        font(14.0, Color::srgb(0.82, 0.86, 0.9)),
+                    ));
+                    p.spawn((
+                        Text::new("[E] Launch    [X] Back"),
                         font(15.0, Color::srgb(0.6, 0.7, 0.75)),
                     ));
                 });
@@ -1306,11 +1492,94 @@ mod tests {
     #[test]
     fn nearest_hotspot_respects_range() {
         assert_eq!(
-            nearest_hotspot(1010.0 + INTERACT_RANGE).map(|h| h.0),
-            Some(Hotspot::LaunchConsole)
+            nearest_hotspot(840.0 + INTERACT_RANGE).map(|h| h.0),
+            Some(Hotspot::UpgradeBench)
         );
-        assert_eq!(nearest_hotspot(1010.0 + INTERACT_RANGE + 1.0), None);
+        assert_eq!(nearest_hotspot(840.0 + INTERACT_RANGE + 1.0), None);
         assert_eq!(nearest_hotspot(PILOT_SPAWN_NEW_GAME), None);
+        assert_eq!(nearest_hotspot(PILOT_SPAWN_AFTER_MISSION), None);
+        assert_eq!(
+            nearest_hotspot(berth_x(1) - BERTH_REACH).map(|h| h.0),
+            Some(Hotspot::Berth(1))
+        );
+    }
+
+    #[test]
+    fn every_ship_has_one_berth_in_the_dock() {
+        let berths: Vec<_> = HOTSPOTS
+            .iter()
+            .filter_map(|&(h, x)| match h {
+                Hotspot::Berth(i) => Some((i, x)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(berths.len(), SHIPS.len());
+        for (i, (ship, x)) in berths.into_iter().enumerate() {
+            assert_eq!(ship, i);
+            assert_eq!(room_at(x), Room::Dock);
+        }
+        assert_eq!(room_at(DOCK_X - 1.0), Room::Workshop);
+        assert_eq!(room_at(DECK_LEN), Room::Dock);
+    }
+
+    #[test]
+    fn boarding_a_ship_selects_it_and_briefs_before_launch() {
+        let mut game = SaveGame::default();
+        let mut overlay = Overlay::None;
+        interact_with(Hotspot::Berth(1), Some(&mut game), &mut overlay);
+        assert_eq!(game.selected_battleship, "bulwark");
+        assert!(matches!(
+            overlay,
+            Overlay::Dialogue {
+                launch: Some(1),
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn clicks_hit_the_docked_ship_under_the_cursor() {
+        let ships = [
+            (
+                Vec2::new(100.0, 50.0),
+                DockedShip {
+                    ship: 0,
+                    half: Vec2::new(60.0, 30.0),
+                },
+            ),
+            (
+                Vec2::new(400.0, 50.0),
+                DockedShip {
+                    ship: 1,
+                    half: Vec2::new(60.0, 30.0),
+                },
+            ),
+        ];
+        assert_eq!(ship_at(Vec2::new(150.0, 70.0), ships), Some(0));
+        assert_eq!(ship_at(Vec2::new(345.0, 25.0), ships), Some(1));
+        assert_eq!(ship_at(Vec2::new(250.0, 50.0), ships), None);
+        assert_eq!(ship_at(Vec2::new(100.0, 90.0), ships), None);
+    }
+
+    #[test]
+    fn empty_canvas_rows_are_measured() {
+        let mut image = Image::new_fill(
+            bevy::render::render_resource::Extent3d {
+                width: 2,
+                height: 10,
+                depth_or_array_layers: 1,
+            },
+            bevy::render::render_resource::TextureDimension::D2,
+            &[0, 0, 0, 0],
+            bevy::render::render_resource::TextureFormat::Rgba8UnormSrgb,
+            Default::default(),
+        );
+        let data = image.data.as_mut().unwrap();
+        for y in 4..9 {
+            data[(y * 2) * 4 + 3] = 255;
+        }
+        assert_eq!(empty_rows(Some(&image)), (0.4, 0.1));
+        assert_eq!(empty_rows(None), (0.0, 0.0));
     }
 
     #[test]

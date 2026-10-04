@@ -41,7 +41,7 @@ crates/
     src/main.rs         CLI (synctest / p2p modes), app + GGRS session setup, ICE (STUN/TURN) config
     src/art.rs          ContentImages: shipped images by stable content ID (manifest -> processed PNG), cached
     src/flow.rs         first-playable scene state machine, Title / Result UI, --autoplay QA driver: Title → Carrier → Battle → Result
-    src/carrier.rs      Carrier scene: walkable one-deck cross-section, crew dialogue, Dock briefing + ship select, Workshop shop panel
+    src/carrier.rs      Carrier scene: walkable one-deck cross-section, crew dialogue, Dock berths (board a ship → briefing → launch), Workshop shop panel
     src/workshop.rs     Workshop upgrade rules: costs, levels, buy() writing the purchase IDs the battle reads
     src/hints.rs        one-time tutorial hints: triggers, display queue, seen IDs in the save
     src/save.rs         versioned JSON save data in the OS data directory (override: ONI_SAVE_DIR) + migration
@@ -217,7 +217,9 @@ cargo run --release --bin content-pipeline -- .
 has a transparent background is only cropped), cuts the Pilot walk sheet
 (idle + 4 frames, shared canvas) and the icon sheet (5 icons) with the same
 sheet slicer as the portraits, scales everything down to its in-game size
-and writes `assets/source/core/{battle,carrier,title,ui/icon}/...`. It also
+and writes `assets/source/core/{battle,carrier,title,ui/icon}/...`. Restyled
+pieces from `design/art/demo-v2/` are rows in its `V2_SPRITES` table (so far
+the ship-free Dock berth, `core.carrier.dock.berth`). It also
 writes `target/demo-art-contact-sheet.png` for a visual check. The file
 names and target sizes are tables at the top of the tool; a new art file
 means a new table row.
@@ -243,14 +245,29 @@ means a new table row.
   `GameScreen::Carrier`; it owns no sim state. Each room is its art
   (`core.carrier.room.*`) fitted to the room width, crew stand as their
   `normal` portrait, and the Pilot animates through `core.carrier.pilot.*`
-  (a frame per 12 px walked, mirrored when walking left). The camera zooms
+  (a frame per 12 px walked, mirrored when walking left). Characters are
+  scaled by their visible pixels (`standing` measures the empty canvas
+  rows), so the Pilot and the crew are the same height on screen
+  (`CHARACTER_H`) whatever padding their art has. The camera zooms
   in (`CAMERA_ZOOM`) while on the Carrier and resets on leaving. Every image
   comes from `art::ContentImages` by stable ID. Pure helpers
-  (`walk`, `nearest_hotspot`, `crew_lines`, `ship_card`, `upgrade_preview`)
+  (`walk`, `nearest_hotspot`, `interact_with`, `ship_at`, `crew_lines`,
+  `ship_card`, `upgrade_preview`)
   hold the rules and are unit tested. The Dock's Launch writes a
   `mission::MissionRequest` message; the flow stores the picked battleship in
   the save and enters Battle, where `config_from_save` builds the
   `MissionConfig`.
+- **Dock berths.** The Dock is one berth per entry in `carrier::SHIPS`
+  (`BERTH_W` wide each, so the deck grows with the roster). `carrier::berth()`
+  spawns one berth: the empty berth art (`Berth { ship }`) and the ship's
+  battle sprite on it (`DockedShip`), nose up, sized from
+  `ShipInfo::berth_len` on a 256 px pad (design/READINESS.md § Dock and
+  berths); the 2.5D carrier reuses it. The ship is the interaction: E near it
+  (`Hotspot::Berth`, `BERTH_REACH`) or a click on it (`click_ship`) calls
+  `interact_with`, which writes it to `selected_battleship`, plays the
+  Pilot's briefing and ends in the launch confirm panel for that ship. The
+  selected ship gets a highlight ring and a "Selected" tag; the other is
+  dimmed.
 - **Ship numbers have one source.** `sim::ShipSheet::new(loadout)` gives a
   battleship's stats after upgrades in human units; `ShipStats` (what the
   battle uses) is derived from it, and the Dock card and Workshop preview
@@ -284,7 +301,7 @@ means a new table row.
   Player bolts are a generated soft glow tinted per player; shields, the
   Shockwave ring, hull bars and the move marker stay gizmo effects. The
   Title shows `core.title.key_art`, the Result screen a dimmed
-  `core.carrier.interior`, and the Workshop rows, Dock cards and Carrier
+  `core.carrier.interior`, and the Workshop rows, Dock berths and Carrier
   wallet show icons / ship art.
 - **Fissures and the spawn director** (`state.rs`, numbers in `tuning.rs`):
   `SimState::fissures` is placed once in `with_loadouts` from the seeded RNG

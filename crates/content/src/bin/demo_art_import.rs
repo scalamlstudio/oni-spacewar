@@ -62,7 +62,12 @@ const SPRITES: [(&str, &str, u32, u32); 11] = [
         480,
         360,
     ),
-    ("demo/carrier-room-dock-v1", "carrier/room/dock", 480, 360),
+    (
+        "demo-v2/carrier-room-dock-empty-v2",
+        "carrier/dock/berth",
+        480,
+        360,
+    ),
     (
         "demo/carrier-interior-wide-v1",
         "carrier/interior",
