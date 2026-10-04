@@ -42,6 +42,10 @@ use net::{EmulatedGgrsSocket, NetEmuConfig};
 use rollback::{GameConfig, InjectDesync, RollbackPlugin, SimWorld};
 use stats::{RunLimit, Stats, StatsPlugin};
 
+/// Default window size in px. The sim's `INITIAL_VIEW_HALF_*` is this at
+/// `render::BATTLE_ZOOM` (checked by a test).
+pub const DEFAULT_WINDOW: UVec2 = UVec2::new(1000, 580);
+
 const USAGE: &str = "\
 usage:
   oni-spacewar [--autoplay [--ship kite|bulwark] [--missions N] [--continue] [--abandon]
@@ -210,7 +214,7 @@ fn main() {
         app.add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: format!("Oni Spacewar — {}", args.mode),
-                resolution: WindowResolution::new(1000, 580),
+                resolution: WindowResolution::new(DEFAULT_WINDOW.x, DEFAULT_WINDOW.y),
                 present_mode: if args.vsync {
                     PresentMode::AutoVsync
                 } else {

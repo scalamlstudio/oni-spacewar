@@ -1,17 +1,19 @@
 //! Battle visuals, camera and HUD. Runs in `Update`, outside the rollback
 //! schedule, and only reads `SimWorld`.
 //!
-//! Ships, enemies, loot and enemy shots are sprites of the shipped art, looked
-//! up by stable content ID (`ids`) through the manifest. Player bolts use a
-//! generated glow tinted per player; shields, the shockwave, hull bars and the
-//! move marker are gizmo effects.
+//! Ships, enemies, fissures, loot and enemy shots are sprites of the shipped
+//! art, looked up by stable content ID (`ids`) through the manifest, over a
+//! tiled background. Player bolts use a generated glow tinted per player;
+//! shields, the shockwave, hull bars, the move marker and the off-screen
+//! fissure pointer are gizmo effects.
 
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
+use bevy::window::PrimaryWindow;
 use bevy_ggrs::{LocalPlayers, Session};
 use sim::tuning::{
-    ARENA_HALF_H, ARENA_HALF_W, KILL_TARGET, SHOCKWAVE_COOLDOWN, SHOCKWAVE_RADIUS, TICKS_PER_SEC,
-    WAVE_COUNT,
+    ARENA_HALF_H, ARENA_HALF_W, FISSURE_RADIUS, KILL_TARGET, SHOCKWAVE_COOLDOWN, SHOCKWAVE_RADIUS,
+    TICKS_PER_SEC,
 };
 use sim::{EnemyKind, FxVec2, LootKind, MissionStatus, Ship, ShipKind, SimState, SUB};
 
@@ -35,6 +37,8 @@ impl Plugin for RenderPlugin {
                 (
                     draw_world,
                     draw_sprites,
+                    battle_background,
+                    draw_fissure_pointer,
                     battle_zoom,
                     follow_camera,
                     update_hud,
@@ -50,6 +54,10 @@ struct Hud;
 #[derive(Component)]
 struct Banner;
 
+/// The tiled space background behind the battle.
+#[derive(Component)]
+struct Background;
+
 /// Stable content IDs of the battle sprites (`assets/manifest.json`).
 pub mod ids {
     pub const SHIP_KITE: &str = "core.battle.ship.kite";
@@ -59,6 +67,8 @@ pub mod ids {
     pub const LOOT_CREDITS: &str = crate::art::ids::ICON_CREDITS;
     pub const LOOT_VOID_CRYSTAL: &str = crate::art::ids::ICON_VOID_CRYSTAL;
     pub const FX_SPIT: &str = "core.battle.fx.spit";
+    pub const FISSURE: &str = "core.battle.env.void_fissure";
+    pub const BACKGROUND: &str = "core.battle.env.background_tile";
 }
 
 /// Default sprite size: the longest side is this many times the sim hit
@@ -110,12 +120,22 @@ const SPRITES: &[SpriteArt] = &[
         scale: SPRITE_SCALE,
         spin: 0.0,
     },
+    // Fissures have no hit circle; drawn at about their spawn ring's size.
+    SpriteArt {
+        id: ids::FISSURE,
+        scale: 1.0,
+        spin: 0.2,
+    },
 ];
 
 /// Every manifest image the battle draws.
 #[cfg(test)]
 pub fn sprite_ids() -> Vec<&'static str> {
-    SPRITES.iter().map(|s| s.id).collect()
+    SPRITES
+        .iter()
+        .map(|s| s.id)
+        .chain([ids::BACKGROUND])
+        .collect()
 }
 
 /// Loot is drawn as if its hit circle had this radius (pickups have none;
@@ -138,6 +158,11 @@ const PLAYER_COLORS: [Color; 4] = [
     Color::srgb(1.0, 0.4, 0.9),
 ];
 const ARENA_EDGE: Color = Color::srgb(0.25, 0.3, 0.4);
+/// Off-screen fissure pointer (the fissure art's magenta).
+const POINTER_COLOR: Color = Color::srgb(0.95, 0.24, 0.88);
+/// Background tiles cover the arena plus this much beyond each edge, so the
+/// camera never sees past them.
+const BACKGROUND_MARGIN: f32 = 800.0;
 
 /// Fixed-point sim position -> Bevy world units (1 unit = 1 px). The only
 /// place floats meet sim state, and it is one-way.
@@ -180,6 +205,12 @@ fn skill_names(kind: ShipKind) -> (&'static str, &'static str) {
 
 fn setup_scene(mut commands: Commands) {
     commands.spawn(Camera2d);
+    commands.spawn((
+        Background,
+        Sprite::default(),
+        Transform::from_xyz(0.0, 0.0, -10.0),
+        Visibility::Hidden,
+    ));
     commands.spawn((
         Hud,
         Text::new(""),
@@ -382,6 +413,16 @@ fn draw_sprites(
                 });
             }
         };
+        for f in &world.fissures {
+            push(
+                ids::FISSURE,
+                to_world(f.pos),
+                FISSURE_RADIUS as f32,
+                0.0,
+                Color::WHITE,
+                0.05,
+            );
+        }
         for p in &world.pickups {
             push(
                 loot_id(p.kind),
@@ -488,6 +529,116 @@ fn draw_sprites(
     }
 }
 
+/// Show the tiled background while a battle world exists.
+fn battle_background(
+    world: Option<Res<SimWorld>>,
+    mut art: ResMut<ContentImages>,
+    mut images: ResMut<Assets<Image>>,
+    mut bg: Query<(&mut Sprite, &mut Visibility), With<Background>>,
+) {
+    let Ok((mut sprite, mut vis)) = bg.single_mut() else {
+        return;
+    };
+    let want = if world.is_some() {
+        Visibility::Visible
+    } else {
+        Visibility::Hidden
+    };
+    if *vis != want {
+        *vis = want;
+    }
+    if world.is_none() || sprite.custom_size.is_some() {
+        return;
+    }
+    let Some(image) = art.get(&mut images, ids::BACKGROUND) else {
+        return;
+    };
+    *sprite = Sprite {
+        image,
+        custom_size: Some(Vec2::new(
+            2.0 * (ARENA_HALF_W as f32 + BACKGROUND_MARGIN),
+            2.0 * (ARENA_HALF_H as f32 + BACKGROUND_MARGIN),
+        )),
+        image_mode: SpriteImageMode::Tiled {
+            tile_x: true,
+            tile_y: true,
+            stretch_value: 1.0,
+        },
+        ..default()
+    };
+}
+
+/// Where the off-screen fissure pointer goes: `None` while any fissure is
+/// (even partly) on screen, else a point just inside the screen edge toward
+/// the nearest fissure and the unit direction to it. `half` is half the
+/// visible world area, `inset` how far inside the edge the point sits.
+pub fn fissure_pointer(
+    centre: Vec2,
+    half: Vec2,
+    inset: f32,
+    fissures: &[Vec2],
+) -> Option<(Vec2, Vec2)> {
+    let r = FISSURE_RADIUS as f32;
+    let on_screen = |f: &Vec2| {
+        let d = (*f - centre).abs();
+        d.x <= half.x + r && d.y <= half.y + r
+    };
+    if fissures.is_empty() || fissures.iter().any(on_screen) {
+        return None;
+    }
+    let nearest = fissures.iter().min_by(|a, b| {
+        a.distance_squared(centre)
+            .total_cmp(&b.distance_squared(centre))
+    })?;
+    let dir = (*nearest - centre).normalize_or_zero();
+    if dir == Vec2::ZERO {
+        return None;
+    }
+    let edge = (half - Vec2::splat(inset)).max(Vec2::ONE);
+    let t = (edge.x / dir.x.abs()).min(edge.y / dir.y.abs());
+    Some((centre + dir * t, dir))
+}
+
+/// While no fissure is on screen, an arrow at the screen edge points to the
+/// nearest one. Client-only.
+fn draw_fissure_pointer(
+    mut gizmos: Gizmos,
+    world: Option<Res<SimWorld>>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+    camera: Query<(&Transform, &Projection), With<Camera2d>>,
+) {
+    let (Some(world), Ok(window), Ok((cam, projection))) =
+        (world, windows.single(), camera.single())
+    else {
+        return;
+    };
+    if world.mission.status != MissionStatus::InProgress {
+        return;
+    }
+    let scale = match projection {
+        Projection::Orthographic(o) => o.scale,
+        _ => 1.0,
+    };
+    let half = window.size() / 2.0 * scale;
+    let fissures: Vec<Vec2> = world.fissures.iter().map(|f| to_world(f.pos)).collect();
+    let Some((tip, dir)) =
+        fissure_pointer(cam.translation.truncate(), half, 24.0 * scale, &fissures)
+    else {
+        return;
+    };
+    // A solid-looking chevron: nested outlines shrinking toward the tip.
+    let side = dir.perp();
+    let size = 22.0 * scale;
+    for k in 0..6 {
+        let s = size * (1.0 - k as f32 * 0.15);
+        let base = tip - dir * s;
+        gizmos.linestrip_2d(
+            [tip, base + side * s * 0.6, base - side * s * 0.6, tip],
+            POINTER_COLOR,
+        );
+    }
+}
+
 /// Zoom out while a battle world exists, back to 1:1 when it goes (the
 /// Carrier sets its own zoom on entry).
 fn battle_zoom(world: Option<Res<SimWorld>>, mut camera: Query<&mut Projection, With<Camera2d>>) {
@@ -539,7 +690,8 @@ fn cooldown_text(ticks: u32) -> String {
     }
 }
 
-/// Battle HUD: hull, kills/objective, wave, Q/W cooldowns, loot so far.
+/// Battle HUD: hull, kills/objective, mission time and live enemies, Q/W
+/// cooldowns, loot so far.
 pub fn battle_hud(world: &SimState, me: usize) -> String {
     let m = &world.mission;
     let mut s = String::new();
@@ -563,9 +715,15 @@ pub fn battle_hud(world: &SimState, me: usize) -> String {
             cooldown_text(ship.w_cooldown)
         );
     }
+    let secs = world.frame / TICKS_PER_SEC as u32;
     s += &format!(
-        "\nKills {}/{KILL_TARGET} - Objective: destroy {KILL_TARGET} void monsters\nWave {}/{WAVE_COUNT}\nLoot: {} credits, {} Void Crystal",
-        m.kills, m.wave, m.collected.credits, m.collected.void_crystal
+        "\nKills {}/{KILL_TARGET} - Objective: destroy {KILL_TARGET} void monsters\nTime {}:{:02}   Enemies {}\nLoot: {} credits, {} Void Crystal",
+        m.kills,
+        secs / 60,
+        secs % 60,
+        world.enemies.len(),
+        m.collected.credits,
+        m.collected.void_crystal
     );
     s
 }
@@ -616,7 +774,6 @@ fn update_banner(mut banner: Query<&mut Text, With<Banner>>, world: Option<Res<S
     let s = match world.as_deref().map(|w| &w.mission) {
         Some(m) if m.status == MissionStatus::Success => "MISSION SUCCESS".to_string(),
         Some(m) if m.status == MissionStatus::Failed => "MISSION FAILED".to_string(),
-        Some(m) if m.banner_up() => format!("Wave {}", m.wave),
         _ => String::new(),
     };
     if text.0 != s {
@@ -639,9 +796,48 @@ mod tests {
             loot_id(LootKind::Credits),
             loot_id(LootKind::VoidCrystal),
             ids::FX_SPIT,
+            ids::FISSURE,
         ] {
             assert!(SPRITES.iter().any(|p| p.id == id), "{id}");
         }
+    }
+
+    #[test]
+    fn sim_starting_view_matches_the_battle_camera() {
+        // The sim keeps fissures off the starting screen using its own copy
+        // of the view size; it must match the default window at battle zoom.
+        use sim::tuning::{INITIAL_VIEW_HALF_H, INITIAL_VIEW_HALF_W};
+        let half = crate::DEFAULT_WINDOW.as_vec2() * BATTLE_ZOOM / 2.0;
+        assert_eq!(half.x.round() as i32, INITIAL_VIEW_HALF_W);
+        assert_eq!(half.y.round() as i32, INITIAL_VIEW_HALF_H);
+        // ... and that view is about 40% of the arena.
+        let frac = half.x * half.y / (ARENA_HALF_W * ARENA_HALF_H) as f32;
+        assert!((0.38..=0.42).contains(&frac), "{frac}");
+    }
+
+    #[test]
+    fn pointer_shows_only_while_every_fissure_is_off_screen() {
+        let half = Vec2::new(600.0, 350.0);
+        let far_right = Vec2::new(900.0, 0.0);
+        let far_up_left = Vec2::new(-700.0, 700.0);
+        // On screen (even just the edge of its sprite): no pointer.
+        assert_eq!(
+            fissure_pointer(Vec2::ZERO, half, 20.0, &[Vec2::new(620.0, 0.0)]),
+            None
+        );
+        assert_eq!(
+            fissure_pointer(Vec2::ZERO, half, 20.0, &[far_right, Vec2::new(0.0, 300.0)]),
+            None
+        );
+        assert_eq!(fissure_pointer(Vec2::ZERO, half, 20.0, &[]), None);
+        // Off screen: the arrow sits on the edge toward the nearest one.
+        let (tip, dir) =
+            fissure_pointer(Vec2::ZERO, half, 20.0, &[far_up_left, far_right]).unwrap();
+        assert_eq!(dir, Vec2::X);
+        assert_eq!(tip, Vec2::new(580.0, 0.0));
+        let (tip, dir) =
+            fissure_pointer(Vec2::new(-650.0, 0.0), half, 20.0, &[far_up_left]).unwrap();
+        assert!(dir.y > 0.99 && (tip.y - 330.0).abs() < 1e-3, "{tip} {dir}");
     }
 
     #[test]
@@ -651,7 +847,7 @@ mod tests {
     }
 
     #[test]
-    fn hud_shows_hull_kills_wave_cooldowns_and_loot() {
+    fn hud_shows_hull_kills_time_enemies_cooldowns_and_loot() {
         let mut w = SimState::with_loadouts(
             1,
             &[Loadout {
@@ -662,10 +858,14 @@ mod tests {
         w.mission.kills = 7;
         w.mission.collected.credits = 35;
         w.ships[0].w_cooldown = 90;
+        w.frame = 75 * 60;
+        w.enemies
+            .push(sim::Enemy::new(EnemyKind::Swarmer, FxVec2::ZERO));
         let hud = battle_hud(&w, 0);
         assert!(hud.contains("140/140"), "{hud}");
         assert!(hud.contains("Kills 7/20"), "{hud}");
-        assert!(hud.contains("Wave 1/3"), "{hud}");
+        assert!(hud.contains("Time 1:15   Enemies 1"), "{hud}");
+        assert!(!hud.contains("Wave"), "{hud}");
         assert!(
             hud.contains("Q Bastion: ready") && hud.contains("W Shockwave: 1.5s"),
             "{hud}"

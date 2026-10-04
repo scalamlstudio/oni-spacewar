@@ -70,7 +70,6 @@ pub const VOID_CRYSTAL_REWARD: RewardRule = RewardRule {
 pub struct MissionResult {
     pub outcome: MissionOutcome,
     pub kills: u32,
-    pub wave: u32,
     /// Mission length in sim ticks (60 per second), to the end or the quit.
     pub ticks: u32,
     /// Loot picked up during the mission.
@@ -184,7 +183,6 @@ pub fn result_from_sim(sim: &SimState, outcome: MissionOutcome) -> MissionResult
     MissionResult {
         outcome,
         kills: m.kills,
-        wave: m.wave,
         ticks,
         collected: m.collected,
         bonus,

@@ -27,8 +27,16 @@ pub const fn upgraded(base: i32, pct_per_level: i32, level: u8) -> i32 {
 // --- Arena (Demo Spec § Elimination mission) --------------------------------
 
 /// The arena is a rectangle centred on the origin; edges block movement.
-pub const ARENA_HALF_W: i32 = 800;
-pub const ARENA_HALF_H: i32 = 600;
+/// 2000 × 1160 px: the starting view covers about 40% of it (TAKOAI-53).
+pub const ARENA_HALF_W: i32 = 1000;
+pub const ARENA_HALF_H: i32 = 580;
+
+/// Half the battle view at the start of a mission, centred on the spawn
+/// point: the client's default window (1000 × 580) at its battle zoom
+/// (1.265), rounded. Only used to keep fissures off the starting screen;
+/// the client checks it matches its camera.
+pub const INITIAL_VIEW_HALF_W: i32 = 633;
+pub const INITIAL_VIEW_HALF_H: i32 = 367;
 
 // --- Battleships (Demo Spec § Battleships) ----------------------------------
 
@@ -118,28 +126,53 @@ pub const SPIT_SPEED: i32 = 160;
 pub const SPIT_RADIUS: i32 = 5;
 pub const SPIT_LIFETIME: u32 = ticks(3, 1);
 
-// --- Elimination waves (Demo Spec § Elimination mission) --------------------
+// --- Elimination: void fissures and the spawn director ----------------------
 
 pub const KILL_TARGET: u32 = 20;
-pub const WAVE_COUNT: u32 = 3;
-/// "Wave N" banner pause before each wave spawns.
-pub const WAVE_BANNER: u32 = ticks(4, 1);
-/// The next wave comes this long after the current one spawned, even if
-/// it isn't cleared.
-pub const WAVE_TIMEOUT: u32 = ticks(25, 1);
-pub const WAVE_RING_RADIUS: i32 = 450;
 
-/// One spawn group of a wave: `(delay after the wave starts, swarmers, spitters)`.
-pub type SpawnGroup = (u32, u32, u32);
+/// Each mission places `FISSURES_MIN..=FISSURES_MAX` void fissures.
+pub const FISSURES_MIN: i32 = 1;
+pub const FISSURES_MAX: i32 = 2;
+/// Fissure size for drawing (px). Fissures can't be hit or destroyed.
+pub const FISSURE_RADIUS: i32 = 40;
+/// A fissure's centre stays at least this far outside the starting view
+/// (its radius plus the widest 4-ship spawn spread, 90 px).
+pub const FISSURE_OFFSCREEN_MARGIN: i32 = 130;
+/// ... and this far inside the arena edge.
+pub const FISSURE_EDGE_MARGIN: i32 = 60;
+/// Two fissures are at least this far apart.
+pub const FISSURE_MIN_GAP: i32 = 600;
+/// Enemies appear on a ring this far from a fissure's centre.
+pub const FISSURE_SPAWN_RING: i32 = 60;
 
-/// Spawn groups for wave `n` (1-based).
-pub const fn wave_groups(n: u32) -> &'static [SpawnGroup] {
-    const WAVE_1: [SpawnGroup; 2] = [(0, 4, 0), (ticks(2, 1), 4, 0)];
-    const WAVE_2_3: [SpawnGroup; 1] = [(0, 6, 2)];
-    match n {
-        1 => &WAVE_1,
-        _ => &WAVE_2_3,
-    }
+/// First spawn this long after the mission starts.
+pub const SPAWN_FIRST: u32 = ticks(2, 1);
+/// Time between spawns falls linearly from `SPAWN_INTERVAL_START` to
+/// `SPAWN_INTERVAL_END` over `SPAWN_RAMP`, then stays there.
+pub const SPAWN_INTERVAL_START: u32 = ticks(4, 1);
+pub const SPAWN_INTERVAL_END: u32 = ticks(3, 2);
+/// The Spitter share of spawns rises from `SPITTER_PCT_START`% to
+/// `SPITTER_PCT_END`% over the same ramp.
+pub const SPITTER_PCT_START: i32 = 10;
+pub const SPITTER_PCT_END: i32 = 40;
+pub const SPAWN_RAMP: u32 = ticks(120, 1);
+/// The director holds off while this many enemies are alive.
+pub const MAX_LIVE_ENEMIES: usize = 12;
+
+/// `start` moved toward `end` by the fraction of the ramp elapsed at tick `t`.
+const fn ramp(start: i64, end: i64, t: u32) -> i64 {
+    let t = if t < SPAWN_RAMP { t } else { SPAWN_RAMP } as i64;
+    start + (end - start) * t / SPAWN_RAMP as i64
+}
+
+/// Ticks until the next spawn, for a spawn at mission tick `t`.
+pub const fn spawn_interval(t: u32) -> u32 {
+    ramp(SPAWN_INTERVAL_START as i64, SPAWN_INTERVAL_END as i64, t) as u32
+}
+
+/// Chance (percent) that a spawn at mission tick `t` is a Spitter.
+pub const fn spitter_pct(t: u32) -> i32 {
+    ramp(SPITTER_PCT_START as i64, SPITTER_PCT_END as i64, t) as i32
 }
 
 // --- Loot (Demo Spec § Loot) -------------------------------------------------

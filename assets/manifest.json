@@ -6,7 +6,7 @@
       "id": "core",
       "version": "0.2.0",
       "gameplay_affecting": false,
-      "content_hash": "6e66476e2810fb11706468693fe477ed2658ec4de7671f92481d070eb33c69c9",
+      "content_hash": "a14330e2f4d49693982a737acbc448e0e2657ab86f4886711695a13b14ce4206",
       "assets": [
         {
           "id": "core.battle.enemy.void_spitter",
@@ -14,7 +14,7 @@
           "source": "source/core/battle/enemy/void_spitter.png",
           "processed": "packs/core/processed/battle/enemy/void_spitter.png",
           "compressed": "packs/core/bundles/battle/enemy/void_spitter.png.zst",
-          "hash": "11d4d7a8fbd24a3d745e4d3dfd168a1c001eabb1b45501e7e8d2e759ca931d63",
+          "hash": "f0510e8966264c8cb8f0dbc484d4c28dad04b1e838e2588b8d972b1d055b9261",
           "gameplay_affecting": false
         },
         {
@@ -23,7 +23,25 @@
           "source": "source/core/battle/enemy/void_swarmer.png",
           "processed": "packs/core/processed/battle/enemy/void_swarmer.png",
           "compressed": "packs/core/bundles/battle/enemy/void_swarmer.png.zst",
-          "hash": "0521c88b8dbff0812adfaf4bda94a824421e435edbcba48710b8d4b66eca1019",
+          "hash": "4ab1129a7ea256d28c06f97fb57a62bef4a9061736959d987af4dcf00b9d0a98",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.env.background_tile",
+          "kind": "image/png",
+          "source": "source/core/battle/env/background_tile.png",
+          "processed": "packs/core/processed/battle/env/background_tile.png",
+          "compressed": "packs/core/bundles/battle/env/background_tile.png.zst",
+          "hash": "084b087d11b546acea3329ee0fa13ab487d236ec8a3298011e554d2b520625d4",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.env.void_fissure",
+          "kind": "image/png",
+          "source": "source/core/battle/env/void_fissure.png",
+          "processed": "packs/core/processed/battle/env/void_fissure.png",
+          "compressed": "packs/core/bundles/battle/env/void_fissure.png.zst",
+          "hash": "7453bf90dd180d18d438cb3ebeedc1186d6987b2ecb8853625389d572d66ebc9",
           "gameplay_affecting": false
         },
         {
@@ -32,7 +50,7 @@
           "source": "source/core/battle/fx/spit.png",
           "processed": "packs/core/processed/battle/fx/spit.png",
           "compressed": "packs/core/bundles/battle/fx/spit.png.zst",
-          "hash": "639d5ce0ddae0c8910dceaf0e5d41882a20b6b3a0cde3221a30078cebcd1b7d2",
+          "hash": "0586ceb0b5a7122a91a87e70df7ed4d24cb79670200b2855c2552839061f15f9",
           "gameplay_affecting": false
         },
         {
@@ -563,7 +581,7 @@
           "source": "source/core/ui/icon/credits.png",
           "processed": "packs/core/processed/ui/icon/credits.png",
           "compressed": "packs/core/bundles/ui/icon/credits.png.zst",
-          "hash": "5a489761f0cf6cdcdf2b49070db1231465d08141da0b5990cdd48221885d8d50",
+          "hash": "a9a67e423b6285677e227d977140a1b930eb342dcd5cba2ea7034b3864bc1708",
           "gameplay_affecting": false
         },
         {
@@ -590,7 +608,7 @@
           "source": "source/core/ui/icon/void_crystal.png",
           "processed": "packs/core/processed/ui/icon/void_crystal.png",
           "compressed": "packs/core/bundles/ui/icon/void_crystal.png.zst",
-          "hash": "a283836fd4a68481e4e682f9712484ef2df6ea506a01d752833ebbafcdf7827b",
+          "hash": "8f4c8f80e361dfd19552b93ee0769390ca6496e69051d2d45dd81aee1542fab8",
           "gameplay_affecting": false
         },
         {
