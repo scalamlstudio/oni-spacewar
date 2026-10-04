@@ -153,6 +153,9 @@ pub struct Ship {
     /// Afterburn: per-tick dash velocity and ticks left.
     pub dash_vel: FxVec2,
     pub dash_ticks: u32,
+    /// `NetInput::buttons` from the previous tick. Skills fire on the tick
+    /// their button goes down (edge), not while it is held.
+    pub prev_buttons: u8,
 }
 
 impl Ship {
@@ -172,6 +175,7 @@ impl Ship {
             shield_ticks: 0,
             dash_vel: FxVec2::ZERO,
             dash_ticks: 0,
+            prev_buttons: 0,
         }
     }
 

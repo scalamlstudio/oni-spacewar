@@ -272,7 +272,11 @@ means a new table row.
 - Battle visuals are sprites drawn by stable content ID
   (`core.battle.ship.kite`, `core.battle.enemy.void_swarmer`,
   `core.battle.fx.spit`, loot as `core.ui.icon.*`, ... in `render::ids`)
-  from a reused pool of sprite entities, sized from the sim hit radius.
+  from a reused pool of sprite entities, sized from the sim hit radius
+  (longest side ≈ 1.2× the hit-circle diameter, `render::SPRITE_SCALE`, so
+  what you see is what gets hit). The battle camera zooms out to
+  `render::BATTLE_ZOOM` (1.265 ≈ √1.6, i.e. 1.6× the visible area) while a
+  battle world exists; HUD text is UI and keeps its screen size.
   Ship facing is visual-only client state (from the move target / dash).
   Player bolts are a generated soft glow tinted per player; shields, the
   Shockwave ring, hull bars and the move marker stay gizmo effects. The
@@ -332,7 +336,14 @@ follow:
   100 cr + 3 VC instead of 50 + 2 so one win buys an upgrade; TAKOAI-42).
 - **Input** (`NetInput`) is a button bitmask (move, Q/W/E/R) plus the cursor in
   world pixels: click-to-move sets the ship's target, skills aim at the cursor.
-  The basic attack needs no input.
+  The basic attack needs no input. Inputs are *levels* (key held = bit set);
+  the sim latches each ship's previous buttons (`Ship::prev_buttons`, rolled
+  back with the rest of the state) and fires a skill only on the tick its bit
+  goes 0 → 1, so a held key fires once and a press during the cooldown is
+  spent (TAKOAI-50). Chosen over an edge bit sent by the client because a
+  level input survives GGRS prediction (which repeats the last input) and
+  dropped/duplicated frames without double-firing; move stays level-
+  triggered (hold to keep steering).
 - **Mission result.** `SimState::outcome()` returns a `sim::MissionOutcome`
   (success, kills, wave, loot collected, success bonus) once the mission
   ends. Which loot the player keeps is client policy: `client::mission`
