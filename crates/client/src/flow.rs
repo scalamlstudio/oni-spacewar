@@ -1051,26 +1051,28 @@ fn autoplay_flow(
             if n > 0 && at(3.5) {
                 autoplay.shoot(&mut commands, &format!("{:02}-workshop", 12 + n * 10));
             }
+            let berth = crate::carrier::ship_index(&autoplay.ship);
             if at(4.0) {
-                // Walk-free: put the Pilot at the launch console.
+                // Walk-free: put the Pilot at the ship's berth and board it
+                // (selects it and starts the briefing).
                 if let Ok(mut tf) = pilot.single_mut() {
-                    tf.translation.x = crate::carrier::LAUNCH_CONSOLE_X;
+                    tf.translation.x = crate::carrier::berth_x(berth);
                 }
+                crate::carrier::interact_with(
+                    crate::carrier::Hotspot::Berth(berth),
+                    save.game.as_mut(),
+                    &mut overlay,
+                );
                 *overlay = Overlay::None;
             }
             if at(5.0) {
-                autoplay.shoot(&mut commands, &format!("{:02}-dock-console", 13 + n * 10));
+                autoplay.shoot(&mut commands, &format!("{:02}-dock-berths", 13 + n * 10));
             }
             if at(5.5) {
-                *overlay = Overlay::ShipSelect {
-                    index: crate::carrier::ship_index(&autoplay.ship),
-                };
+                *overlay = Overlay::Launch { index: berth };
             }
             if at(6.0) {
-                autoplay.shoot(
-                    &mut commands,
-                    &format!("{:02}-dock-ship-select", 14 + n * 10),
-                );
+                autoplay.shoot(&mut commands, &format!("{:02}-dock-launch", 14 + n * 10));
             }
             if at(6.5) {
                 launch.write(MissionRequest {
