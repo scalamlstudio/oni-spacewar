@@ -430,10 +430,9 @@ pub fn result_text(r: &MissionResult, wallet: (u32, u32)) -> String {
         .unwrap_or(0);
     let mut lines = vec![
         format!(
-            "Kills {}/{KILL_TARGET}    Time {}    Wave reached {}",
+            "Kills {}/{KILL_TARGET}    Time {}",
             r.kills,
-            mission_time(r.ticks),
-            r.wave
+            mission_time(r.ticks)
         ),
         format!(
             "Collected     {} credits    {} Void Crystal",
@@ -1081,7 +1080,7 @@ fn autoplay_flow(
             }
         }
         GameScreen::Battle => {
-            for (i, t) in [6.0, 20.0, 35.0].into_iter().enumerate() {
+            for (i, t) in [1.0, 6.0, 20.0, 35.0].into_iter().enumerate() {
                 if at(t) {
                     autoplay.shoot(
                         &mut commands,

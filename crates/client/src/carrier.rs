@@ -186,7 +186,7 @@ const BRIEFING: [Line; 3] = [
     line(
         Crew::Pilot,
         "normal",
-        "Twenty kills clears it. They come in three waves.",
+        "Twenty kills clears it. They keep pouring out of void fissures.",
     ),
     line(
         Crew::Pilot,

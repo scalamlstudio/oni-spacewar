@@ -29,8 +29,8 @@ pub mod trig;
 pub mod tuning;
 
 pub use entity::{
-    Enemy, EnemyKind, Loadout, Loot, LootKind, Pickup, Projectile, Ship, ShipKind, ShipSheet,
-    ShipStats, Upgrades,
+    Enemy, EnemyKind, Fissure, Loadout, Loot, LootKind, Pickup, Projectile, Ship, ShipKind,
+    ShipSheet, ShipStats, Upgrades,
 };
 pub use fixed::{FxVec2, SUB};
 pub use input::NetInput;

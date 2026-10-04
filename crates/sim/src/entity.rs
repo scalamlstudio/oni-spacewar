@@ -246,6 +246,9 @@ pub struct Enemy {
     pub hp: i32,
     /// Ticks until it can attack again (contact or shot).
     pub cooldown: u32,
+    /// Spitter strafing direction around its target: 1 counter-clockwise,
+    /// -1 clockwise. Flips when it runs into the arena edge.
+    pub orbit: i32,
 }
 
 impl Enemy {
@@ -258,8 +261,16 @@ impl Enemy {
                 EnemyKind::Swarmer => 0,
                 EnemyKind::Spitter => SPITTER_FIRST_SHOT,
             },
+            orbit: 1,
         }
     }
+}
+
+/// A void fissure: enemies come out of it. Fixed for the whole mission and
+/// can't be hit or destroyed.
+#[derive(Clone, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
+pub struct Fissure {
+    pub pos: FxVec2,
 }
 
 /// A shot. Ship shots live in `SimState::projectiles` and hit enemies;

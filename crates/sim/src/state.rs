@@ -2,7 +2,7 @@
 //!
 //! One Elimination mission (design/READINESS.md § Demo Spec): click-to-move
 //! battleships with an auto-firing basic attack and two skills each, two void
-//! monster types arriving in three waves, loot drops, and a win/lose result.
+//! monster types pouring out of void fissures, loot drops, and a win/lose result.
 //!
 //! - All state is plain data in [`SimState`] (entities in `Vec`s, see
 //!   [`crate::entity`]).
@@ -49,6 +49,8 @@ pub struct SimState {
     /// Shots fired by enemies.
     pub enemy_projectiles: Vec<Projectile>,
     pub pickups: Vec<Pickup>,
+    /// Where enemies come from; placed once at mission start.
+    pub fissures: Vec<Fissure>,
     pub mission: Mission,
 }
 
@@ -65,6 +67,44 @@ fn ship_spawn(handle: usize, n: usize) -> FxVec2 {
 fn clamp_to_arena(p: FxVec2, radius: i32) -> FxVec2 {
     let (hw, hh) = (px(ARENA_HALF_W - radius), px(ARENA_HALF_H - radius));
     FxVec2::new(p.x.clamp(-hw, hw), p.y.clamp(-hh, hh))
+}
+
+/// Is a fissure at `p` (px) out of the starting view, with margin?
+fn offscreen_at_start(p: FxVec2) -> bool {
+    p.x.abs() > px(INITIAL_VIEW_HALF_W + FISSURE_OFFSCREEN_MARGIN)
+        || p.y.abs() > px(INITIAL_VIEW_HALF_H + FISSURE_OFFSCREEN_MARGIN)
+}
+
+/// Place 1-2 fissures at seeded positions inside the arena but outside the
+/// starting view, apart from each other. Rejection sampling with a bounded
+/// number of tries (all from `rng`, so every peer gets the same result).
+fn place_fissures(rng: &mut SimRng) -> Vec<Fissure> {
+    let count = rng.range(FISSURES_MIN, FISSURES_MAX);
+    let (hw, hh) = (
+        ARENA_HALF_W - FISSURE_EDGE_MARGIN,
+        ARENA_HALF_H - FISSURE_EDGE_MARGIN,
+    );
+    let gap = px(FISSURE_MIN_GAP) as i64;
+    let mut fissures: Vec<Fissure> = Vec::new();
+    for _ in 0..count {
+        for _ in 0..256 {
+            let p = FxVec2::from_px(rng.range(-hw, hw), rng.range(-hh, hh));
+            let apart = fissures
+                .iter()
+                .all(|f| (f.pos - p).length_squared() >= gap * gap);
+            if offscreen_at_start(p) && apart {
+                fissures.push(Fissure { pos: p });
+                break;
+            }
+        }
+    }
+    if fissures.is_empty() {
+        // Unreachable with the shipped tuning; never start without a source.
+        fissures.push(Fissure {
+            pos: FxVec2::from_px(hw, 0),
+        });
+    }
+    fissures
 }
 
 /// `v` rotated by `angle` (`trig::ANGLE_STEPS` units, counter-clockwise).
@@ -107,18 +147,21 @@ impl SimState {
             .enumerate()
             .map(|(handle, l)| Ship::new(handle, *l, ship_spawn(handle, n)))
             .collect();
+        let mut rng = SimRng::new(seed);
+        let fissures = place_fissures(&mut rng);
         Self {
             params: SimParams {
                 num_players: n,
                 seed,
             },
             frame: 0,
-            rng: SimRng::new(seed),
+            rng,
             ships,
             enemies: Vec::new(),
             projectiles: Vec::new(),
             enemy_projectiles: Vec::new(),
             pickups: Vec::new(),
+            fissures,
             mission: Mission::default(),
         }
     }
@@ -133,7 +176,7 @@ impl SimState {
     pub fn step(&mut self, inputs: &[NetInput]) {
         assert_eq!(inputs.len(), self.ships.len(), "one input per player");
         if self.mission.status == MissionStatus::InProgress {
-            self.advance_waves();
+            self.direct_spawns();
             self.apply_inputs(inputs);
             self.move_ships();
             self.basic_attacks();
@@ -148,65 +191,44 @@ impl SimState {
         self.frame += 1;
     }
 
-    /// Banner countdown, then the current wave's spawn groups; the next wave
-    /// starts when this one is cleared or timed out.
-    fn advance_waves(&mut self) {
+    /// The spawn director: one enemy every `spawn_interval` ticks out of a
+    /// random fissure, a Spitter with `spitter_pct` chance, both ramping up
+    /// with mission time. It waits while `MAX_LIVE_ENEMIES` are alive.
+    fn direct_spawns(&mut self) {
         let m = &mut self.mission;
-        if m.banner_ticks > 0 {
-            m.banner_ticks -= 1;
-            if m.banner_ticks > 0 {
+        if m.spawn_timer > 0 {
+            m.spawn_timer -= 1;
+            if m.spawn_timer > 0 {
                 return;
             }
-            m.wave_ticks = 0;
         }
-        let groups = wave_groups(m.wave);
-        let t = m.wave_ticks;
-        for &(delay, swarmers, spitters) in groups {
-            if delay == t {
-                self.spawn_group(swarmers, spitters);
-            }
-        }
-        let m = &mut self.mission;
-        m.wave_ticks += 1;
-        let all_spawned = groups.iter().all(|g| g.0 < m.wave_ticks);
-        let cleared = self.enemies.is_empty();
-        if m.wave < WAVE_COUNT && all_spawned && (cleared || m.wave_ticks >= WAVE_TIMEOUT) {
-            m.wave += 1;
-            m.banner_ticks = WAVE_BANNER;
-        }
-    }
-
-    /// Spawn evenly on a ring around the living ships' centroid, at a random
-    /// rotation, clamped into the arena.
-    fn spawn_group(&mut self, swarmers: u32, spitters: u32) {
-        let living: Vec<FxVec2> = self
-            .ships
-            .iter()
-            .filter(|s| s.alive())
-            .map(|s| s.pos)
-            .collect();
-        if living.is_empty() {
+        if self.enemies.len() >= MAX_LIVE_ENEMIES {
             return;
         }
-        let n = living.len() as i32;
-        let sum = living.iter().fold(FxVec2::ZERO, |a, p| a + *p);
-        let centre = FxVec2::new(sum.x / n, sum.y / n);
-        let count = (swarmers + spitters) as i32;
-        let offset = self.rng.range(0, ANGLE_STEPS - 1);
-        let r = px(WAVE_RING_RADIUS);
-        for i in 0..count {
-            // Spitters are spread between the swarmers, not bunched together.
-            let kind = if spitters > 0 && i % (count / spitters as i32) == 0 {
-                EnemyKind::Spitter
-            } else {
-                EnemyKind::Swarmer
-            };
-            let angle = offset + i * ANGLE_STEPS / count;
-            let pos = centre + FxVec2::new(mul_q16(r, cos_q16(angle)), mul_q16(r, sin_q16(angle)));
-            self.enemies
-                .push(Enemy::new(kind, clamp_to_arena(pos, kind.radius())));
-            self.mission.spawned += 1;
+        let t = self.frame;
+        let kind = if self.rng.range(0, 99) < spitter_pct(t) {
+            EnemyKind::Spitter
+        } else {
+            EnemyKind::Swarmer
+        };
+        self.spawn_at_fissure(kind);
+        self.mission.spawn_timer = spawn_interval(t);
+    }
+
+    /// Spawn one enemy on the spawn ring of a random fissure, at a random
+    /// angle, clamped into the arena. Spitters strafe a random way round.
+    fn spawn_at_fissure(&mut self, kind: EnemyKind) {
+        let f = self.rng.range(0, self.fissures.len() as i32 - 1) as usize;
+        let angle = self.rng.range(0, ANGLE_STEPS - 1);
+        let r = px(FISSURE_SPAWN_RING);
+        let pos = self.fissures[f].pos
+            + FxVec2::new(mul_q16(r, cos_q16(angle)), mul_q16(r, sin_q16(angle)));
+        let mut e = Enemy::new(kind, clamp_to_arena(pos, kind.radius()));
+        if self.rng.range(0, 1) == 0 {
+            e.orbit = -1;
         }
+        self.enemies.push(e);
+        self.mission.spawned += 1;
     }
 
     /// Click-to-move sets the target while held; Q / W use the ship's skills
@@ -363,8 +385,9 @@ impl SimState {
         }
     }
 
-    /// Swarmers rush the nearest ship and hit on contact; Spitters hold a
-    /// distance band and shoot.
+    /// Swarmers rush the nearest ship and hit on contact; Spitters close to
+    /// a distance band, then strafe around the ship inside it and shoot, so
+    /// no enemy ever sits still.
     fn enemy_behaviour(&mut self) {
         for i in 0..self.enemies.len() {
             let e = &mut self.enemies[i];
@@ -389,12 +412,20 @@ impl SimState {
                 }
                 EnemyKind::Spitter => {
                     let d = to_ship.length();
-                    if d < px(SPITTER_MIN_RANGE) as i64 {
-                        e.pos = e.pos - to_ship.scale_to(speed);
+                    let step = if d < px(SPITTER_MIN_RANGE) as i64 {
+                        FxVec2::ZERO - to_ship.scale_to(speed)
                     } else if d > px(SPITTER_MAX_RANGE) as i64 {
-                        e.pos = e.pos + to_ship.scale_to(speed);
+                        to_ship.scale_to(speed)
+                    } else {
+                        // In the band: strafe along the circle round the ship.
+                        FxVec2::new(-to_ship.y * e.orbit, to_ship.x * e.orbit).scale_to(speed)
+                    };
+                    let moved = e.pos + step;
+                    e.pos = clamp_to_arena(moved, e.kind.radius());
+                    if e.pos != moved {
+                        // Hit the arena edge: strafe back the other way.
+                        e.orbit = -e.orbit;
                     }
-                    e.pos = clamp_to_arena(e.pos, e.kind.radius());
                     let vel = to_ship.scale_to(px_per_tick(SPIT_SPEED));
                     if e.cooldown == 0 && d <= px(SPITTER_FIRE_RANGE) as i64 && vel != FxVec2::ZERO
                     {
@@ -656,10 +687,10 @@ mod tests {
         }
     }
 
-    /// Ships only: the wave banner is held off so nothing spawns.
+    /// Ships only: the spawn director is held off so nothing spawns.
     fn quiet(loadouts: &[Loadout]) -> SimState {
         let mut s = SimState::with_loadouts(7, loadouts);
-        s.mission.banner_ticks = u32::MAX;
+        s.mission.spawn_timer = u32::MAX;
         s
     }
 
@@ -694,7 +725,7 @@ mod tests {
     fn scripted_run_exercises_gameplay() {
         // Guard against the tests above passing on a sim that does nothing.
         let s = run(2, 3600);
-        assert!(s.mission.wave > 1, "wave {}", s.mission.wave);
+        assert!(s.mission.spawned > 10, "spawned {}", s.mission.spawned);
         assert!(s.mission.kills > 0);
         assert_ne!(s.ships[0].pos, ship_spawn(0, 2));
     }
@@ -941,54 +972,148 @@ mod tests {
     }
 
     #[test]
-    fn waves_follow_the_schedule() {
-        let mut s = SimState::with_loadouts(3, &[KITE]);
-        s.ships[0].basic_cooldown = u32::MAX;
-        for _ in 0..WAVE_BANNER - 1 {
-            s.step(&idle(1));
+    fn fissures_start_off_screen_inside_the_arena() {
+        let mut counts = [0; 3];
+        for seed in 0..500 {
+            let s = SimState::with_loadouts(seed, &mixed(1 + seed as usize % MAX_PLAYERS));
+            counts[s.fissures.len()] += 1;
+            for f in &s.fissures {
+                let p = FxVec2::new(f.pos.x / SUB, f.pos.y / SUB);
+                // Outside the starting view, with room for the sprite and
+                // any ship's spawn offset.
+                assert!(
+                    p.x.abs() >= INITIAL_VIEW_HALF_W + FISSURE_RADIUS + 90
+                        || p.y.abs() >= INITIAL_VIEW_HALF_H + FISSURE_RADIUS + 90,
+                    "seed {seed}: {p:?}"
+                );
+                assert!(p.x.abs() <= ARENA_HALF_W - FISSURE_EDGE_MARGIN, "{p:?}");
+                assert!(p.y.abs() <= ARENA_HALF_H - FISSURE_EDGE_MARGIN, "{p:?}");
+            }
+            if let [a, b] = &s.fissures[..] {
+                assert!((a.pos - b.pos).length() >= px(FISSURE_MIN_GAP) as i64);
+            }
         }
-        assert!(s.enemies.is_empty() && s.mission.banner_up());
-        s.step(&idle(1));
-        assert_eq!(s.enemies.len(), 4);
-        for _ in 0..ticks(2, 1) {
-            s.step(&idle(1));
-        }
-        assert_eq!(s.mission.spawned, 8);
-        // Clearing the wave brings the next banner, then 6 + 2.
-        s.ships[0].hull = 1000;
-        s.enemies.clear();
-        s.step(&idle(1));
-        assert_eq!((s.mission.wave, s.mission.banner_up()), (2, true));
-        for _ in 0..WAVE_BANNER {
-            s.step(&idle(1));
-        }
-        let spitters = s
-            .enemies
-            .iter()
-            .filter(|e| e.kind == EnemyKind::Spitter)
-            .count();
-        assert_eq!((s.enemies.len(), spitters), (8, 2));
-        // Wave 3 comes on the timeout even if wave 2 isn't cleared.
-        for _ in 0..WAVE_TIMEOUT {
-            s.step(&idle(1));
-        }
-        assert_eq!(s.mission.wave, 3);
-        for _ in 0..WAVE_BANNER + WAVE_TIMEOUT + 10 {
-            s.ships[0].hull = 1000;
-            s.step(&idle(1));
-        }
-        assert_eq!((s.mission.wave, s.mission.spawned), (3, 24));
+        // Both counts happen, never zero.
+        assert_eq!(counts[0], 0);
+        assert!(counts[1] > 100 && counts[2] > 100, "{counts:?}");
+        // Seeded: same seed, same fissures; different seeds differ.
+        let f = |seed| SimState::with_loadouts(seed, &[KITE]).fissures;
+        assert_eq!(f(5), f(5));
+        assert!((0..20).any(|seed| f(seed) != f(5)));
     }
 
     #[test]
-    fn spawns_stay_inside_the_arena() {
+    fn enemies_spawn_on_a_ring_around_a_fissure() {
+        let mut s = SimState::with_loadouts(3, &[KITE]);
+        s.ships[0].basic_cooldown = u32::MAX;
+        s.ships[0].hull = 100_000;
+        let mut seen = 0;
+        for _ in 0..ticks(60, 1) {
+            let before = s.enemies.len();
+            s.step(&idle(1));
+            for e in &s.enemies[before.min(s.enemies.len())..] {
+                // Spawned this tick, before it moved: on some fissure's ring.
+                let on_ring = s.fissures.iter().any(|f| {
+                    let d = (e.pos - f.pos).length();
+                    (d - px(FISSURE_SPAWN_RING) as i64).abs() <= px(2) as i64
+                });
+                let moved = e.kind.speed() as i64 + px(e.kind.radius()) as i64;
+                let near = s
+                    .fissures
+                    .iter()
+                    .any(|f| (e.pos - f.pos).length() <= px(FISSURE_SPAWN_RING) as i64 + moved);
+                assert!(on_ring || near, "{e:?} vs {:?}", s.fissures);
+                seen += 1;
+            }
+        }
+        assert!(seen > 10, "{seen}");
+        // Ring spawns stay inside the arena even for a fissure at the edge.
         let mut s = quiet(&[KITE]);
-        s.ships[0].pos = FxVec2::from_px(780, 580);
-        s.spawn_group(6, 2);
+        s.fissures = vec![Fissure {
+            pos: FxVec2::from_px(ARENA_HALF_W, ARENA_HALF_H),
+        }];
+        for _ in 0..50 {
+            s.spawn_at_fissure(EnemyKind::Spitter);
+        }
         for e in &s.enemies {
             let r = px(e.kind.radius());
             assert!(e.pos.x.abs() <= px(ARENA_HALF_W) - r && e.pos.y.abs() <= px(ARENA_HALF_H) - r);
         }
+    }
+
+    #[test]
+    fn director_ramps_up_rate_and_spitters_to_a_cap() {
+        // The curve: faster spawns and more Spitters over the ramp, flat after.
+        assert_eq!(spawn_interval(0), SPAWN_INTERVAL_START);
+        assert_eq!(spawn_interval(SPAWN_RAMP), SPAWN_INTERVAL_END);
+        assert_eq!(spawn_interval(SPAWN_RAMP * 10), SPAWN_INTERVAL_END);
+        assert_eq!(spitter_pct(0), SPITTER_PCT_START);
+        assert_eq!(spitter_pct(SPAWN_RAMP * 10), SPITTER_PCT_END);
+        for t in 0..SPAWN_RAMP {
+            assert!(spawn_interval(t + 1) <= spawn_interval(t));
+            assert!(spitter_pct(t + 1) >= spitter_pct(t));
+        }
+        // In the sim: spawns get closer together, Spitters get commoner,
+        // and the live count never passes the cap.
+        let mut s = SimState::with_loadouts(9, &[KITE]);
+        let mut spawn_ticks = Vec::new();
+        let mut kinds = Vec::new();
+        for _ in 0..ticks(240, 1) {
+            s.ships[0].hull = 100_000;
+            s.ships[0].basic_cooldown = u32::MAX;
+            let before = s.mission.spawned;
+            s.step(&idle(1));
+            if s.mission.spawned > before {
+                spawn_ticks.push(s.frame - 1);
+                kinds.push(s.enemies.last().unwrap().kind);
+            }
+            assert!(s.enemies.len() <= MAX_LIVE_ENEMIES);
+            // Thin the field now and then so the cap doesn't stop the curve.
+            if s.frame.is_multiple_of(ticks(5, 1)) {
+                s.enemies.truncate(2);
+            }
+        }
+        assert_eq!(spawn_ticks[0], SPAWN_FIRST - 1);
+        let first_gap = spawn_ticks[1] - spawn_ticks[0];
+        let late: Vec<_> = spawn_ticks.windows(2).map(|w| w[1] - w[0]).collect();
+        assert_eq!(first_gap, spawn_interval(SPAWN_FIRST - 1));
+        assert!(late.iter().rev().take(10).all(|&g| g >= SPAWN_INTERVAL_END));
+        assert!(late.iter().rev().take(10).any(|&g| g == SPAWN_INTERVAL_END));
+        let spit = |k: &[EnemyKind]| k.iter().filter(|k| **k == EnemyKind::Spitter).count();
+        let half = kinds.len() / 2;
+        assert!(spit(&kinds[half..]) > spit(&kinds[..half]), "{kinds:?}");
+        // With nobody killing anything, the field fills to the cap and stops.
+        let mut s = SimState::with_loadouts(9, &[KITE]);
+        for _ in 0..ticks(120, 1) {
+            s.ships[0].hull = 100_000;
+            s.ships[0].basic_cooldown = u32::MAX;
+            s.step(&idle(1));
+        }
+        assert_eq!(s.enemies.len(), MAX_LIVE_ENEMIES);
+        assert_eq!(s.mission.spawned as usize, MAX_LIVE_ENEMIES);
+    }
+
+    #[test]
+    fn spitters_strafe_inside_their_band() {
+        let mut s = quiet(&[BULWARK]);
+        s.ships[0].basic_cooldown = u32::MAX;
+        s.ships[0].hull = 100_000;
+        s.enemies.push(enemy(EnemyKind::Spitter, 260, 0));
+        let mut last = s.enemies[0].pos;
+        for t in 0..ticks(20, 1) {
+            s.step(&idle(1));
+            let e = &s.enemies[0];
+            assert_ne!(e.pos, last, "tick {t}: Spitter stood still");
+            last = e.pos;
+            let d = e.pos.length();
+            assert!(
+                d >= px(SPITTER_MIN_RANGE - 2) as i64 && d <= px(SPITTER_MAX_RANGE + 2) as i64,
+                "tick {t}: {}",
+                d / SUB as i64
+            );
+        }
+        // It went a good way round the ship, not back and forth on the spot.
+        assert!(s.enemies[0].pos.y.abs() > px(100) || s.enemies[0].pos.x < 0);
     }
 
     #[test]

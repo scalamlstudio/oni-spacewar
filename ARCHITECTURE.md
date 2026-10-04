@@ -22,8 +22,8 @@ crates/
   sim/                package `oni-sim`, lib `sim` — deterministic mission simulation, NO Bevy
     src/lib.rs          crate docs + determinism rules
     src/state.rs        SimState (all rolled-back state), step() and its phases
-    src/entity.rs       plain-data entities: Ship (+ ShipKind, Loadout, ShipSheet, ShipStats), Enemy, Projectile, Pickup
-    src/mission.rs      Elimination bookkeeping: wave schedule, kills, loot totals, MissionStatus/MissionOutcome
+    src/entity.rs       plain-data entities: Ship (+ ShipKind, Loadout, ShipSheet, ShipStats), Enemy, Projectile, Pickup, Fissure
+    src/mission.rs      Elimination bookkeeping: spawn-director timer, kills, loot totals, MissionStatus/MissionOutcome
     src/tuning.rs       Demo Spec numbers (design/READINESS.md) + unit conversion (px/s -> sub-px/tick)
     src/collision.rs    integer circle overlap + separation
     src/fixed.rs        fixed-point: SUB (1 px = 256), FxVec2 (+ scale_to), mul_q16
@@ -36,7 +36,7 @@ crates/
     src/bin/content_manifest_diff.rs   compare manifests and list packs/assets a patch needs
     src/cutouts.rs                     background keying, sheet slicing, single-sprite crop, resize
     src/bin/sprite_sheet_cutouts.rs    expression sheets -> portraits
-    src/bin/demo_art_import.rs         design/art/demo (+ demo-v2) -> battle / carrier / title / icon sources
+    src/bin/demo_art_import.rs         design/art/demo (+ demo-v2 battle art) -> battle / carrier / title / icon sources
   client/             package `oni-client`, bin `oni-spacewar` — everything else
     src/main.rs         CLI (synctest / p2p modes), app + GGRS session setup, ICE (STUN/TURN) config
     src/art.rs          ContentImages: shipped images by stable content ID (manifest -> processed PNG), cached
@@ -51,7 +51,7 @@ crates/
     src/net.rs          matchbox ↔ ggrs socket adapter + latency/loss emulator (from the spike)
     src/stats.rs        rollback / frame-time / desync measurement + report (from the spike)
     src/pacing.rs       frame-pacing profiler (windowed): main / render / swapchain-acquire split + OS-stall probe
-    src/render.rs       battle sprites keyed by stable content IDs + gizmo FX, camera follow, battle HUD + wave banner (Update, outside rollback)
+    src/render.rs       battle sprites keyed by stable content IDs + gizmo FX, tiled background, fissure pointer, camera follow, battle HUD (Update, outside rollback)
 ```
 
 Dependency direction is one-way for gameplay: `client → sim`, while content
@@ -203,7 +203,10 @@ detected pose count differs from the provided expression count.
 
 ### Demo art import
 
-The First Playable art set (`design/art/demo/*-v1.png`) is imported with:
+The First Playable art set (`design/art/demo/*-v1.png`, with the restyled
+battle art from `design/art/demo-v2/` replacing the Swarmer, Spitter, Spitter
+shot and loot icons under the same stable IDs, plus the void fissure and the
+battle background tile) is imported with:
 
 ```sh
 cargo run --release --bin demo-art-import -- .
@@ -300,6 +303,18 @@ means a new table row.
   Title shows `core.title.key_art`, the Result screen a dimmed
   `core.carrier.interior`, and the Workshop rows, Dock berths and Carrier
   wallet show icons / ship art.
+- **Fissures and the spawn director** (`state.rs`, numbers in `tuning.rs`):
+  `SimState::fissures` is placed once in `with_loadouts` from the seeded RNG
+  (rejection sampling: inside the arena, outside the starting view given by
+  `INITIAL_VIEW_HALF_*`, apart from each other). `direct_spawns` runs first
+  each tick: one enemy per `spawn_interval(t)` on a random fissure's ring,
+  Spitter with `spitter_pct(t)`, both integer ramps of the mission tick,
+  held while `MAX_LIVE_ENEMIES` are alive. Spitters strafe around their
+  target inside their range band (`Enemy::orbit`, flipped at the arena
+  edge). The sim's starting-view size mirrors the client's default window
+  at `BATTLE_ZOOM` (`DEFAULT_WINDOW`); a client test keeps them equal. The
+  off-screen fissure arrow (`render::fissure_pointer`) and the tiled
+  background (`core.battle.env.background_tile`) are client-only.
 - `oni-spacewar --autoplay [--ship kite|bulwark] [--missions N] [--continue]
   [--abandon] [--shots DIR]` is a QA mode for the whole demo loop: New Game
   (or Continue the existing save), fly N battles (default 1) with a scripted
@@ -324,25 +339,25 @@ means a new table row.
 The gameplay in `sim` is the First Playable's Elimination mission
 (design/READINESS.md § Demo Spec): click-to-move battleships (Kite or
 Bulwark, from a per-player `Loadout` with Workshop upgrade levels) with an
-auto-firing basic attack and Q/W skills, Void Swarmers and Void Spitters in
-three waves inside a 1600 × 1200 arena, loot pickups, and a win (20 kills) /
+auto-firing basic attack and Q/W skills, Void Swarmers and Void Spitters
+spawned continuously from 1–2 void fissures inside a 2000 × 1160 arena, loot pickups, and a win (20 kills) /
 lose (every ship destroyed) result. The structure is what new gameplay should
 follow:
 
 - **Entities are plain data** (`entity.rs`), one `Vec` per kind inside
   `SimState`. Removal uses `retain`, so order stays stable. No Bevy entities or
   components in the simulation.
-- **`step()` is a fixed list of phases** (`state.rs`): waves/spawn → apply
+- **`step()` is a fixed list of phases** (`state.rs`): spawn director → apply
   inputs (move target, Q/W skills) → move ships → basic attacks → enemy
-  behaviour (chase / keep distance, contact damage, shots) → move projectiles
+  behaviour (chase / strafe in range band, contact damage, shots) → move projectiles
   → hits → separation → kills + loot drops → pickups → win/lose check. Each
   phase is a method over whole collections, so the order of effects is
   explicit and identical on every peer. New mechanics add a phase (or a new
   module with one) rather than hooking into Bevy schedules. Once the mission
   has ended the world is frozen and only `frame` advances.
 - **Never one battleship.** Ships stay in their `Vec` slot when destroyed
-  (`hull <= 0`), enemies target the nearest *living* ship, waves spawn around
-  the living ships' centroid, loot totals are mission-wide, and the mission
+  (`hull <= 0`), enemies target the nearest *living* ship (spawns come from the
+  fissures, not from any one ship), loot totals are mission-wide, and the mission
   fails only when every ship is down. Synctest/p2p runs give even handles
   Kite and odd handles Bulwark so both ships are always exercised.
 - **Numbers live in `tuning.rs`** in human units (px, px/s, seconds) and are
@@ -362,7 +377,7 @@ follow:
   dropped/duplicated frames without double-firing; move stays level-
   triggered (hold to keep steering).
 - **Mission result.** `SimState::outcome()` returns a `sim::MissionOutcome`
-  (success, kills, wave, loot collected, success bonus) once the mission
+  (success, kills, loot collected, success bonus) once the mission
   ends. Which loot the player keeps is client policy: `client::mission`
   applies each reward's `survives_failure` flag (all off in the demo) and
   turns it into the `MissionResult` the Result scene shows and the save

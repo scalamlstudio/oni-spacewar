@@ -40,12 +40,13 @@ Carrier, result, menus and save live in `client`.
   skills (Q, W).
 - **Battle scene:** the existing top-down click-to-move battleship, auto-firing
   its basic attack. One mission type, **Elimination** (kill 20 enemies), in one
-  hand-built arena, with 3 enemy waves of 2 void-monster types (**Void Swarmer**,
-  **Void Spitter**).
+  hand-built arena, with 2 void-monster types (**Void Swarmer**, **Void
+  Spitter**) pouring continuously out of 1–2 void fissures.
 - **Loot:** enemies drop **Credits** and **Void Crystal**, collected by flying
   over them.
-- **Battle HUD:** hull bar, skill cooldowns, kill counter, wave banner, loot
-  collected this mission.
+- **Battle HUD:** hull bar, skill cooldowns, kill counter, mission time and
+  live enemies, loot collected this mission, and an edge arrow to the nearest
+  off-screen fissure.
 - **Result scene:** Success or Failed, kills, and the loot kept or lost. On
   failure the mission's loot is lost, following each reward's "survives
   failure" flag (all off in the demo).
@@ -339,7 +340,9 @@ Basic attacks fire at the nearest enemy in range (design/DESIGN.md § Player).
 
 ### Elimination mission
 
-- **Arena:** one hand-built rectangle, 1600 × 1200 px, edges block movement.
+- **Arena:** one hand-built rectangle, 2000 × 1160 px, edges block movement.
+  The starting view (1000 × 580 window at the 1.265 battle zoom, ≈ 1265 × 734
+  px) covers about 40% of it.
 - **Kill target:** 20. The HUD shows "Kills x/20". Reaching 20 is Success
   immediately: remaining enemies vanish and every pickup still on the field is
   collected.
@@ -347,18 +350,23 @@ Basic attacks fire at the nearest enemy in range (design/DESIGN.md § Player).
   Mission from the pause menu also counts as Failed.
 - **No time limit.**
 
-| Wave | Spawns | Total spawned |
-|---|---|---|
-| 1 | 8 Swarmers (2 groups of 4, 2 s apart) | 8 |
-| 2 | 6 Swarmers + 2 Spitters | 16 |
-| 3 | 6 Swarmers + 2 Spitters | 24 |
+Spawn plan (Revision 1, TAKOAI-53; replaces the 3 fixed waves):
 
-- 24 spawn for a target of 20, so the player never has to hunt the last one.
-- The next wave comes when the current one is cleared or 25 s after it spawned,
-  whichever is first, after a **4 s pause** with a "Wave N" banner. Wave 1 also
-  gets the 4 s banner.
-- Enemies spawn on a ring 450 px from the centroid of the living battleships,
-  clamped into the arena.
+- **Void fissures:** 1 or 2 per mission (seeded), placed inside the arena
+  (≥ 60 px from the edge) but outside the starting view (centre ≥ 130 px past
+  its edge), ≥ 600 px apart. They can't be hit or destroyed. While none is on
+  screen, an arrow at the screen edge points to the nearest one.
+- **Spawn director:** one enemy at a time out of a random fissure, on a ring
+  60 px from its centre. First spawn 2 s in. The gap between spawns falls
+  from 4 s to 1.5 s and the Spitter share rises from 10% to 40%, both
+  linearly over the first 120 s, then stay. At most 12 enemies alive at once
+  (the director waits while the field is full). It keeps spawning until the
+  kill target, so the player never has to hunt the last one.
+- **Moving enemies:** Swarmers chase the nearest battleship. Spitters close to
+  their 200–320 px band, then strafe around the battleship inside it (a random
+  way round, reversing at the arena edge) while shooting.
+- Tuned so a Kite or Bulwark with no upgrades wins in about 1–1.5 minutes
+  (65–85 s over 12 seeds with the scripted QA pilot).
 
 ### Loot
 
@@ -400,7 +408,7 @@ sleepy).
 
 | Crew | Lines (expression) |
 |---|---|
-| **Pilot** (main character) — Dock briefing | "Elimination run. Void monsters are nesting in the next segment." (serious) · "Twenty kills clears it. They come in three waves." (normal) · "Grab whatever they drop — the Workshop runs on it." (excited) |
+| **Pilot** (main character) — Dock briefing | "Elimination run. Void monsters are nesting in the next segment." (serious) · "Twenty kills clears it. They keep pouring out of void fissures." (normal) · "Grab whatever they drop — the Workshop runs on it." (excited) |
 | **Gunner** — Bridge | "Swarmers rush you. Keep moving and let the guns work." (serious) · "Spitters hang back. Their shots are slow — sidestep them." (normal) · Reaction — success: "Clean shooting out there." (happy) / failed: "We lost the hull, not the crew. Again." (angry) |
 | **Researcher** — Crew Quarters | "Void Crystal hums when you hold it. I'd love a proper lab." (excited) · "Kite or Bulwark? Speed or armor — both are valid." (confused) · Reaction — success: "Fascinating samples! Well, crystals." (happy) / failed: "We'll learn from it… next time." (sad) |
 | **Engineer** — Workshop | "Bring me credits and crystals and I'll make her sing." (happy) · "Plating, weapons, thrusters — pick one." (normal) · Reaction — success: "Haul's in. Let's upgrade." (excited) / failed: "Nothing came back with you. Not even scrap." (sleepy) |
