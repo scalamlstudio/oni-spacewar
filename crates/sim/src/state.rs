@@ -209,8 +209,10 @@ impl SimState {
         }
     }
 
-    /// Click-to-move sets the target; Q / W use the ship's skills toward the
-    /// cursor when off cooldown.
+    /// Click-to-move sets the target while held; Q / W use the ship's skills
+    /// toward the cursor once per key press (the tick the button goes down)
+    /// when off cooldown. A press during the cooldown is spent, so holding a
+    /// key never re-fires a skill by itself.
     fn apply_inputs(&mut self, inputs: &[NetInput]) {
         for i in 0..self.ships.len() {
             let ship = &mut self.ships[i];
@@ -225,14 +227,16 @@ impl SimState {
                 continue;
             }
             let input = inputs[ship.handle];
+            let down = input.buttons & !ship.prev_buttons;
+            ship.prev_buttons = input.buttons;
             let aim = FxVec2::from_px(input.target_x, input.target_y);
             if input.pressed(INPUT_MOVE) {
                 ship.target = clamp_to_arena(aim, ship.stats.radius);
             }
-            if input.pressed(INPUT_SKILL_Q) && ship.q_cooldown == 0 {
+            if down & INPUT_SKILL_Q != 0 && ship.q_cooldown == 0 {
                 self.skill_q(i, aim);
             }
-            if input.pressed(INPUT_SKILL_W) && self.ships[i].w_cooldown == 0 {
+            if down & INPUT_SKILL_W != 0 && self.ships[i].w_cooldown == 0 {
                 self.skill_w(i, aim);
             }
         }
@@ -788,6 +792,60 @@ mod tests {
         assert_eq!(s.ships[0].pos, FxVec2::from_px(AFTERBURN_DISTANCE, 0));
         assert_eq!(s.ships[0].target, s.ships[0].pos);
         assert_eq!(s.ships[0].q_cooldown, AFTERBURN_COOLDOWN - AFTERBURN_TICKS);
+    }
+
+    #[test]
+    fn held_q_dashes_once_and_a_new_press_dashes_again() {
+        let mut s = quiet(&[KITE]);
+        let q = input(INPUT_SKILL_Q, 1000, 0);
+        let mut dashes = 0;
+        let mut was_dashing = false;
+        // Hold Q for 10 s: more than two Afterburn cooldowns.
+        for _ in 0..ticks(10, 1) {
+            s.step(&[q]);
+            let dashing = s.ships[0].dash_ticks > 0;
+            dashes += (dashing && !was_dashing) as u32;
+            was_dashing = dashing;
+        }
+        assert_eq!(dashes, 1);
+        assert_eq!(s.ships[0].pos, FxVec2::from_px(AFTERBURN_DISTANCE, 0));
+        // Release, then press again (the cooldown is long over).
+        s.step(&idle(1));
+        s.step(&[q]);
+        // The dash starts this tick (its first step is already taken).
+        assert_eq!(s.ships[0].dash_ticks, AFTERBURN_TICKS - 1);
+        assert_eq!(s.ships[0].q_cooldown, AFTERBURN_COOLDOWN);
+    }
+
+    #[test]
+    fn held_skills_never_refire() {
+        // Every skill, both ships: holding Q+W for 30 s uses each once.
+        for loadout in [KITE, BULWARK] {
+            let mut s = quiet(&[loadout]);
+            let (mut q_uses, mut w_uses) = (0, 0);
+            for _ in 0..ticks(30, 1) {
+                s.step(&[input(INPUT_SKILL_Q | INPUT_SKILL_W, 0, 300)]);
+                let ship = &s.ships[0];
+                q_uses += (ship.q_cooldown == ship.q_cooldown_max()) as u32;
+                w_uses += (ship.w_cooldown == ship.w_cooldown_max()) as u32;
+            }
+            assert_eq!((q_uses, w_uses), (1, 1), "{loadout:?}");
+        }
+    }
+
+    #[test]
+    fn idle_ship_never_moves_by_itself() {
+        // No input at all: no skill, upgrade or timer moves the ship.
+        for loadout in [KITE, BULWARK] {
+            let mut l = loadout;
+            l.upgrades.thruster = MAX_UPGRADE_LEVEL;
+            let mut s = quiet(&[l]);
+            let start = s.ships[0].pos;
+            for _ in 0..ticks(30, 1) {
+                s.step(&idle(1));
+                assert_eq!(s.ships[0].pos, start, "{l:?}");
+            }
+        }
     }
 
     #[test]

@@ -35,6 +35,7 @@ impl Plugin for RenderPlugin {
                 (
                     draw_world,
                     draw_sprites,
+                    battle_zoom,
                     follow_camera,
                     update_hud,
                     update_banner,
@@ -60,8 +61,12 @@ pub mod ids {
     pub const FX_SPIT: &str = "core.battle.fx.spit";
 }
 
+/// Default sprite size: the longest side is this many times the sim hit
+/// circle's diameter, so what you see is close to what gets hit (TAKOAI-50).
+const SPRITE_SCALE: f32 = 1.2;
+
 /// How big each sprite is drawn: its longest side is `scale` times the sim
-/// hit circle's diameter (the art includes wings, spikes and glow).
+/// hit circle's diameter.
 struct SpriteArt {
     id: &'static str,
     scale: f32,
@@ -72,37 +77,37 @@ struct SpriteArt {
 const SPRITES: &[SpriteArt] = &[
     SpriteArt {
         id: ids::SHIP_KITE,
-        scale: 2.4,
+        scale: SPRITE_SCALE,
         spin: 0.0,
     },
     SpriteArt {
         id: ids::SHIP_BULWARK,
-        scale: 2.4,
+        scale: SPRITE_SCALE,
         spin: 0.0,
     },
     SpriteArt {
         id: ids::ENEMY_SWARMER,
-        scale: 2.8,
+        scale: SPRITE_SCALE,
         spin: 1.5,
     },
     SpriteArt {
         id: ids::ENEMY_SPITTER,
-        scale: 2.6,
+        scale: SPRITE_SCALE,
         spin: 0.0,
     },
     SpriteArt {
         id: ids::LOOT_CREDITS,
-        scale: 2.4,
+        scale: SPRITE_SCALE,
         spin: 0.0,
     },
     SpriteArt {
         id: ids::LOOT_VOID_CRYSTAL,
-        scale: 2.4,
+        scale: SPRITE_SCALE,
         spin: 0.0,
     },
     SpriteArt {
         id: ids::FX_SPIT,
-        scale: 3.2,
+        scale: SPRITE_SCALE,
         spin: 0.0,
     },
 ];
@@ -113,9 +118,17 @@ pub fn sprite_ids() -> Vec<&'static str> {
     SPRITES.iter().map(|s| s.id).collect()
 }
 
-/// Loot is drawn this big regardless of its pickup radius.
-const LOOT_RADIUS: f32 = 10.0;
-const BOLT_GLOW_SCALE: f32 = 3.0;
+/// Loot is drawn as if its hit circle had this radius (pickups have none;
+/// collection uses `PICKUP_COLLECT_RANGE`).
+const LOOT_RADIUS: f32 = 5.0;
+/// Player bolts are a soft glow whose bright core is about half its size, so
+/// it is drawn larger than `SPRITE_SCALE` to read at ~1.2x the hit circle.
+const BOLT_GLOW_SCALE: f32 = 2.0;
+
+/// Battle camera zoom (orthographic scale): world px per screen px. 1.265 ≈
+/// √1.6 shows 1.6x the field area of the old 1:1 view. HUD text is UI and
+/// keeps its screen size.
+pub const BATTLE_ZOOM: f32 = 1.265;
 
 /// Per-player colour: bolts, hull-bar outline, move marker.
 const PLAYER_COLORS: [Color; 4] = [
@@ -225,8 +238,8 @@ fn draw_ship_fx(gizmos: &mut Gizmos, ship: &Ship, me: usize) {
     let p = to_world(ship.pos);
     let r = ship.stats.radius as f32;
     if ship.shield > 0 {
-        gizmos.circle_2d(p, r + 12.0, Color::srgb(0.5, 0.8, 1.0));
-        gizmos.circle_2d(p, r + 14.0, Color::srgba(0.5, 0.8, 1.0, 0.4));
+        gizmos.circle_2d(p, r + 6.0, Color::srgb(0.5, 0.8, 1.0));
+        gizmos.circle_2d(p, r + 8.0, Color::srgba(0.5, 0.8, 1.0, 0.4));
     }
     if ship.kind == ShipKind::Bulwark && ship.w_cooldown + 12 > SHOCKWAVE_COOLDOWN {
         // Shockwave: a ring that expands over the first 12 ticks.
@@ -243,7 +256,7 @@ fn draw_ship_fx(gizmos: &mut Gizmos, ship: &Ship, me: usize) {
     }
     bar(
         gizmos,
-        p + Vec2::new(0.0, r * 2.4 + 4.0),
+        p + Vec2::new(0.0, r * SPRITE_SCALE + 6.0),
         2.0 * r + 8.0,
         ship.hull as f32 / ship.stats.max_hull as f32,
         Color::srgb(0.3, 1.0, 0.4),
@@ -275,7 +288,7 @@ fn draw_world(mut gizmos: Gizmos, world: Option<Res<SimWorld>>, local: Option<Re
             let r = e.kind.radius() as f32;
             bar(
                 &mut gizmos,
-                c + Vec2::new(0.0, r * 2.6 + 4.0),
+                c + Vec2::new(0.0, r * SPRITE_SCALE + 6.0),
                 2.0 * r,
                 e.hp as f32 / e.kind.hp() as f32,
                 Color::srgb(1.0, 0.4, 0.4),
@@ -373,7 +386,7 @@ fn draw_sprites(
             push(
                 loot_id(p.kind),
                 to_world(p.pos),
-                LOOT_RADIUS * 0.5,
+                LOOT_RADIUS,
                 0.0,
                 Color::WHITE,
                 0.1,
@@ -473,6 +486,23 @@ fn draw_sprites(
             }
         }
     }
+}
+
+/// Zoom out while a battle world exists, back to 1:1 when it goes (the
+/// Carrier sets its own zoom on entry).
+fn battle_zoom(world: Option<Res<SimWorld>>, mut camera: Query<&mut Projection, With<Camera2d>>) {
+    let Ok(mut projection) = camera.single_mut() else {
+        return;
+    };
+    let Projection::Orthographic(ortho) = &mut *projection else {
+        return;
+    };
+    let want = match world {
+        Some(w) if w.is_added() => BATTLE_ZOOM,
+        None if ortho.scale == BATTLE_ZOOM => 1.0,
+        _ => return,
+    };
+    ortho.scale = want;
 }
 
 /// Camera follows our ship with a damped spring.
