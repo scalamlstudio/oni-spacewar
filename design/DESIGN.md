@@ -48,14 +48,16 @@ segment (see § Missions, § Ship Modules).
 - Progression: earn credits via faction missions and resource-gathering, spend on
   growing/upgrading the carrier (see § Hub, § Economy).
 - **Aboard the carrier (outside missions):** the player walks the main
-  character around the carrier interior — side view, ONI-style cross-section —
-  talks to crew and walks up to a module to use it (A / D to walk, E to
-  interact). Launching a mission is one of those modules: the Dock, i.e. the
-  Docking Module (see § Missions). The click-to-move/ability scheme above is
-  only for piloting the battleship in a mission. How the player places
-  buildings and assigns crew tasks is left for when manufacturing and companion
-  jobs come back into scope (see design/OPEN_QUESTIONS.md); the First Playable
-  Demo has neither.
+  character around the carrier interior — a 3/4 top-down (2.5D) view of a
+  grid of rooms and corridors — talks to crew and walks up to a module to use
+  it (WASD to walk in 8 directions, E to interact). Launching a mission is one
+  of those modules: the Dock, i.e. the Docking Module (see § Missions). The
+  player grows the carrier by building rooms and corridors at the Workshop
+  (see § Carrier). The click-to-move/ability scheme above is only for piloting
+  the battleship in a mission. How the player places manufacturing buildings
+  and assigns crew tasks is left for when manufacturing and companion jobs
+  come back into scope (see design/OPEN_QUESTIONS.md); the First Playable Demo
+  has neither.
 
 ## Crew / Companions
 
@@ -231,6 +233,67 @@ Numbers (wave plan, kill target, drop rates): design/READINESS.md § Demo Spec.
   crew leveling unlocks, or both? What other modules exist besides Docking,
   Manufacturing, and Lab? (see design/OPEN_QUESTIONS.md)
 
+## Carrier
+
+_Decided 2026-10-04 (TAKOAI-52, Revision 1 of the First Playable Demo).
+Replaces the one-deck side-view corridor. Numbers, the starting layout, the
+art list and the build scope: design/READINESS.md § Demo Spec › Carrier._
+
+The carrier interior is a **dungeon-builder layout**: a grid of cells inside
+the carrier's hull, filled with **rooms** and **corridors**. The player starts
+with four connected rooms and grows the carrier by building more rooms and
+corridors between missions. Rooms are a layout plus an effect; they are not a
+production chain (manufacturing and conveyors stay out of scope).
+
+- **View:** 3/4 top-down (2.5D), as in Zelda or Stardew Valley — square grid
+  cells seen from above, with each wall's front face visible. Orthographic,
+  axis-aligned (no diamond isometric), lit from the top left. North (back)
+  walls show their face; south (front) walls are cut away to a thin lip so
+  the room's inside stays visible; side walls show only their top. Sprites
+  are drawn in order of their feet's y, so the Pilot walks behind furniture
+  further south.
+- **Camera:** follows the Pilot, clamped to the hull. The mouse wheel steps
+  through three zoom levels (Overview, Normal, Close). Build mode switches to
+  Overview and lets the player pan.
+- **Walking:** free movement in 8 directions (WASD or arrow keys, diagonals
+  normalised), with collision against walls. The Pilot can only stand on
+  room floors and corridors and passes between them only through doors.
+  E uses the nearest hotspot in reach (crew, a bench, a ship in its berth).
+- **Layout model:** each hull cell is empty, a corridor cell or part of a
+  room. A room has a fixed rectangular footprint and a fixed list of **door
+  sockets** (a cell on its edge plus a side). Rooms do not rotate. A corridor
+  is a 1×1 piece whose shape (end, straight, corner, T, crossroad) is picked
+  automatically from its neighbours: it opens toward every adjacent corridor
+  cell and every room socket that faces it. A room socket with a corridor in
+  front of it becomes a door; an unused socket stays a plain wall. Rooms never
+  connect directly to each other, only through corridors.
+- **Connectivity:** the Bridge is the root. Every room and corridor must be
+  reachable from the Bridge through corridors and doors. A new piece is legal
+  only if it fits inside the hull, covers only empty cells and touches the
+  existing network: a corridor next to an existing corridor or a free room
+  socket, or a room with one of its sockets facing an existing corridor.
+- **Building:** done at the Workshop bench, which gets a Build tab next to the
+  upgrades. The player picks a piece, the game switches to Build mode, a
+  ghost of the piece follows the mouse snapped to the grid (tinted green if
+  legal, red with a one-line reason if not), and a click pays the cost and
+  places it. Corridors stay selected for repeated placement; rooms place
+  once. Pieces the player built can be **demolished for a full refund**, as
+  long as removing them leaves everything else connected; the starting rooms
+  and corridors are fixed. "Moving" a room is demolish, then build.
+- **Room effects:** a built room's effect is on as long as the room exists
+  (every room is connected by construction). Each buildable room type can be
+  built once in the demo; effects do not stack. Effects that change battle
+  numbers reach the battle through the battleship's `Loadout`, so they stay
+  inside the deterministic `sim`; economy effects stay in `client`.
+- **Dock and berths:** each berth holds exactly one battleship, drawn with its
+  combat sprite. Walking up to a ship and pressing E (or clicking it) selects
+  it and opens the briefing and launch. The Dock has as many berths as the
+  player has battleships (two in the demo). More berths come from a future
+  Hangar Bay room when the battleship roster grows; the demo has no third
+  ship, so no Hangar Bay.
+- **Hull:** the hull is a fixed-size grid in the demo. Growing the hull itself
+  (the "ship size extension" question) stays deferred.
+
 ## Enemies / Opposition
 
 - Opposition comes from the **void monsters** occupying space segments (see
@@ -251,7 +314,7 @@ Numbers (wave plan, kill target, drop rates): design/READINESS.md § Demo Spec.
 
 - **Carrier interior:** the player's persistent base — modules, rooms, and
   systems to fix, build out, and upgrade over the course of the game (see
-  § Ship Modules).
+  § Carrier, § Ship Modules).
 - **Hub:** dev-managed MMO social/trade space; not player-buildable.
 - **Space / missions:** discrete, self-contained mission instances (see
   § Missions), reached by teleporting a selected battleship + crew there. This

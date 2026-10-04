@@ -198,3 +198,25 @@ _Running log of what's decided and what's built. Newest entries on top._
 - design/OPEN_QUESTIONS.md: no question blocks the first playable any more.
   Carrier control, enemies and level design are answered for the demo; the
   rest are re-tagged `Deferred`.
+
+## 2026-10-04
+
+- **2.5D expandable carrier** (TAKOAI-52, First Playable Demo Revision 1):
+  the one-deck side-view corridor is replaced by a 3/4 top-down grid of rooms
+  and corridors that the player expands at the Workshop, dungeon-builder
+  style. Wei approved the 3/4 view and building at the Workshop; Mika chose
+  the rest as defaults. New DESIGN.md § Carrier; § Player updated (WASD,
+  8 directions).
+- Layout model: 12 × 8-cell hull, 128 px cells; rooms with fixed footprints
+  and door sockets (no rotation); corridors shape themselves from their
+  neighbours; everything must connect to the Bridge. Player-built pieces can
+  be demolished for a full refund if nothing gets cut off.
+- Starting carrier: Bridge, Crew Quarters, Workshop and Dock joined by 7
+  corridor cells. Buildable: **Salvage Bay** (+25% mission haul on success,
+  120 cr + 3 VC), **Training Room** (−15% Q/W cooldowns, 200 cr + 6 VC),
+  corridors (10 cr).
+- Dock: one battleship per berth, drawn with its combat sprite; two berths in
+  the demo. More berths come later from a Hangar Bay when there are more ships.
+- Save version 3 adds the carrier layout; v1/v2 saves get the starting
+  layout. design/READINESS.md § Demo Spec › Carrier holds the numbers, the
+  Stage 7 art list and the Stage 8 engineer scope.

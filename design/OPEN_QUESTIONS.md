@@ -43,9 +43,11 @@ level design), and the rest left scope with manufacturing and the research loop
   `Deferred` · TAKOAI-8 — the First Playable Demo has no research loop; loot
   is spent at the Workshop instead.
 - **Carrier building placement & crew task assignment:** the main character
-  walks around the carrier between missions (decided 2026-10-03). Still open:
-  how the player places buildings, how they assign companions their jobs, and
-  whether/how the carrier itself "moves". _(§ Player, § Crew / Companions)_
+  walks around the carrier between missions (decided 2026-10-03), and builds
+  rooms and corridors on a grid at the Workshop (decided 2026-10-04, DESIGN.md
+  § Carrier). Still open: how the player places manufacturing buildings inside
+  rooms, how they assign companions their jobs, and whether/how the carrier
+  itself "moves". _(§ Player, § Crew / Companions, § Carrier)_
   `Deferred` · TAKOAI-2 — the First Playable Demo has neither manufacturing
   nor companion jobs.
 - **Key-resource trading target:** does trading for key resources unlock ship
@@ -59,7 +61,9 @@ level design), and the rest left scope with manufacturing and the research loop
 - **Ship size extension:** mechanically, how does adding a module grow the
   carrier's buildable space — new rooms/tiles attached to the existing layout, a
   pre-designed set of expansion shapes, something else? _(§ Ship Modules)_
-  `Deferred` · TAKOAI-4 — the carrier is fixed-size in the first playable.
+  `Deferred` · TAKOAI-4 — the first playable builds rooms and corridors
+  inside a fixed 12 × 8-cell hull (DESIGN.md § Carrier); growing the hull
+  itself is still open.
 - **Resource categories:** raw/refined/key-trade breakdown feeding ship
   progression. _(§ Ship Modules)_
   `Deferred` · TAKOAI-8 — the First Playable Demo has only Credits and Void
