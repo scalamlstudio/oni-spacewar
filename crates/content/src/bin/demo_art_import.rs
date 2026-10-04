@@ -93,16 +93,10 @@ const CARRIER_2_5D: [(&str, &str, u32, u32); 27] = [
 ];
 
 /// Full-frame images (no background to key): stem, output, max size.
-const BACKDROPS: [(&str, &str, u32, u32); 2] = [
-    ("demo/title-key-art-v1", "title/key_art", 1440, 540),
-    // Seamless tile, drawn repeated behind the battle.
-    (
-        "demo-v2/battle-background-tile-v1",
-        "battle/env/background_tile",
-        512,
-        512,
-    ),
-];
+/// (The battle background tile was dropped for the procedural nebula sky,
+/// TAKOAI-58.)
+const BACKDROPS: [(&str, &str, u32, u32); 1] =
+    [("demo/title-key-art-v1", "title/key_art", 1440, 540)];
 
 /// Row sheets: stem, output directory, frame names left to right, max frame
 /// size. A later sheet overwrites frames of the same name (the v2 loot icons

@@ -39,13 +39,14 @@ Carrier, result, menus and save live in `client`.
   cooldowns) and **Bulwark** (slow, tanky, stronger basic attack). Each has 2
   skills (Q, W).
 - **Battle scene:** the existing top-down click-to-move battleship, auto-firing
-  its basic attack. One mission type, **Elimination** (kill 20 enemies), in one
-  hand-built arena, with 2 void-monster types (**Void Swarmer**, **Void
-  Spitter**) pouring continuously out of 1–2 void fissures.
+  its basic attack. One mission type, **Elimination** (kill 40 enemies), in
+  open space with no edge, over a procedural "magical night sky with nebula"
+  background, with 2 void-monster types (**Void Swarmer**, **Void Spitter**)
+  pouring continuously out of 1–2 void fissures.
 - **Loot:** enemies drop **Credits** and **Void Crystal**, collected by flying
   over them.
 - **Battle HUD:** hull bar, skill cooldowns, kill counter, mission time and
-  live enemies, loot collected this mission, and an edge arrow to the nearest
+  live enemies, loot collected this mission, and an edge arrow for every
   off-screen fissure.
 - **Result scene:** Success or Failed, kills, and the loot kept or lost. On
   failure the mission's loot is lost, following each reward's "survives
@@ -97,7 +98,7 @@ everything else below is a default Mika chose and Wei can tune._
 | Draw order | by feet y (larger y drawn later) |
 | Zoom (screen px per world px) | Overview 0.65 (the whole hull fits 1280 × 720) · **Normal 1.0** (default; about 10 × 5.6 cells on screen) · Close 1.5. Mouse wheel steps between them |
 | Camera | follows the Pilot, clamped so it never shows more than 1 cell past the hull. Build mode: Overview, pan with WASD / arrows at 600 screen px/s |
-| Behind the hull | the battle space background from TAKOAI-51 |
+| Behind the hull | the procedural nebula sky shared with the battle (TAKOAI-58) |
 
 #### Walking and interaction
 
@@ -334,39 +335,44 @@ Basic attacks fire at the nearest enemy in range (design/DESIGN.md § Player).
 |---|---|---|
 | Behavior | rushes the nearest battleship | keeps 200–320 px from the nearest battleship; fires when it's within 360 px |
 | HP | 10 | 36 |
-| Move speed | 110 px/s | 60 px/s |
+| Move speed | 132 px/s | 72 px/s |
 | Radius | 10 px | 14 px |
 | Attack | contact: 5 dmg, then 1 s cooldown per swarmer | slow projectile: 8 dmg, 160 px/s, radius 5 px, 3 s life, every 2.5 s |
 
 ### Elimination mission
 
-- **Arena:** one hand-built rectangle, 2000 × 1160 px, edges block movement.
-  The starting view (1000 × 580 window at the 1.265 battle zoom, ≈ 1265 × 734
-  px) covers about 40% of it.
-- **Kill target:** 20. The HUD shows "Kills x/20". Reaching 20 is Success
+- **Battlefield:** no edge (TAKOAI-58). Nothing clamps battleships, enemies
+  or shots; shots end by their lifetime. The starting view is the 1000 × 580
+  window at the 1.265 battle zoom, ≈ 1265 × 734 px. The background is a
+  procedural "magical night sky with nebula" (deep blue-violet, drifting
+  magenta / teal / violet clouds, twinkling stars at 3 parallax depths), kept
+  dark so ships and shots read.
+- **Kill target:** 40. The HUD shows "Kills x/40". Reaching 40 is Success
   immediately: remaining enemies vanish and every pickup still on the field is
   collected.
 - **Failed:** every battleship in the mission is destroyed (solo: yours). Quit
   Mission from the pause menu also counts as Failed.
 - **No time limit.**
 
-Spawn plan (Revision 1, TAKOAI-53; replaces the 3 fixed waves):
+Spawn plan (Revision 2, TAKOAI-58: 3× the enemies, 20% faster; Revision 1,
+TAKOAI-53, replaced the 3 fixed waves):
 
-- **Void fissures:** 1 or 2 per mission (seeded), placed inside the arena
-  (≥ 60 px from the edge) but outside the starting view (centre ≥ 130 px past
-  its edge), ≥ 600 px apart. They can't be hit or destroyed. While none is on
-  screen, an arrow at the screen edge points to the nearest one.
+- **Void fissures:** 1 or 2 per mission (seeded), on a ring 900–1300 px from
+  the start at seeded angles, outside the starting view (centre ≥ 130 px past
+  its edge), ≥ 600 px apart. They can't be hit or destroyed, and don't
+  rotate (a gentle pulse only). Every off-screen fissure has its own arrow at
+  the screen edge pointing at it; the arrow goes while it's on screen.
 - **Spawn director:** one enemy at a time out of a random fissure, on a ring
   60 px from its centre. First spawn 2 s in. The gap between spawns falls
-  from 4 s to 1.5 s and the Spitter share rises from 10% to 40%, both
-  linearly over the first 120 s, then stay. At most 12 enemies alive at once
+  from 1.33 s to 0.5 s and the Spitter share rises from 10% to 40%, both
+  linearly over the first 120 s, then stay. At most 36 enemies alive at once
   (the director waits while the field is full). It keeps spawning until the
   kill target, so the player never has to hunt the last one.
 - **Moving enemies:** Swarmers chase the nearest battleship. Spitters close to
   their 200–320 px band, then strafe around the battleship inside it (a random
-  way round, reversing at the arena edge) while shooting.
+  way round) while shooting.
 - Tuned so a Kite or Bulwark with no upgrades wins in about 1–1.5 minutes
-  (65–85 s over 12 seeds with the scripted QA pilot).
+  (52–74 s over 12 seeds with the scripted QA pilot, TAKOAI-58).
 
 ### Loot
 
@@ -408,7 +414,7 @@ sleepy).
 
 | Crew | Lines (expression) |
 |---|---|
-| **Pilot** (main character) — Dock briefing | "Elimination run. Void monsters are nesting in the next segment." (serious) · "Twenty kills clears it. They keep pouring out of void fissures." (normal) · "Grab whatever they drop — the Workshop runs on it." (excited) |
+| **Pilot** (main character) — Dock briefing | "Elimination run. Void monsters are nesting in the next segment." (serious) · "Forty kills clears it. They keep pouring out of void fissures." (normal) · "Grab whatever they drop — the Workshop runs on it." (excited) |
 | **Gunner** — Bridge | "Swarmers rush you. Keep moving and let the guns work." (serious) · "Spitters hang back. Their shots are slow — sidestep them." (normal) · Reaction — success: "Clean shooting out there." (happy) / failed: "We lost the hull, not the crew. Again." (angry) |
 | **Researcher** — Crew Quarters | "Void Crystal hums when you hold it. I'd love a proper lab." (excited) · "Kite or Bulwark? Speed or armor — both are valid." (confused) · Reaction — success: "Fascinating samples! Well, crystals." (happy) / failed: "We'll learn from it… next time." (sad) |
 | **Engineer** — Workshop | "Bring me credits and crystals and I'll make her sing." (happy) · "Plating, weapons, thrusters — pick one." (normal) · Reaction — success: "Haul's in. Let's upgrade." (excited) / failed: "Nothing came back with you. Not even scrap." (sleepy) |

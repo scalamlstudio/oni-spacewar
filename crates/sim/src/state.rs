@@ -63,32 +63,25 @@ fn ship_spawn(handle: usize, n: usize) -> FxVec2 {
     FxVec2::new(x, 0)
 }
 
-/// Keep a circle of `radius` px inside the arena.
-fn clamp_to_arena(p: FxVec2, radius: i32) -> FxVec2 {
-    let (hw, hh) = (px(ARENA_HALF_W - radius), px(ARENA_HALF_H - radius));
-    FxVec2::new(p.x.clamp(-hw, hw), p.y.clamp(-hh, hh))
-}
-
-/// Is a fissure at `p` (px) out of the starting view, with margin?
+/// Is a fissure at `p` out of the starting view, with margin?
 fn offscreen_at_start(p: FxVec2) -> bool {
     p.x.abs() > px(INITIAL_VIEW_HALF_W + FISSURE_OFFSCREEN_MARGIN)
         || p.y.abs() > px(INITIAL_VIEW_HALF_H + FISSURE_OFFSCREEN_MARGIN)
 }
 
-/// Place 1-2 fissures at seeded positions inside the arena but outside the
-/// starting view, apart from each other. Rejection sampling with a bounded
-/// number of tries (all from `rng`, so every peer gets the same result).
+/// Place 1-2 fissures on a ring `FISSURE_RING_MIN..=FISSURE_RING_MAX` px
+/// around the ships' start (the origin), at seeded angles and apart from
+/// each other, outside the starting view. Rejection sampling with a bounded number of tries, all from
+/// `rng`, so every peer gets the same result.
 fn place_fissures(rng: &mut SimRng) -> Vec<Fissure> {
     let count = rng.range(FISSURES_MIN, FISSURES_MAX);
-    let (hw, hh) = (
-        ARENA_HALF_W - FISSURE_EDGE_MARGIN,
-        ARENA_HALF_H - FISSURE_EDGE_MARGIN,
-    );
     let gap = px(FISSURE_MIN_GAP) as i64;
     let mut fissures: Vec<Fissure> = Vec::new();
     for _ in 0..count {
         for _ in 0..256 {
-            let p = FxVec2::from_px(rng.range(-hw, hw), rng.range(-hh, hh));
+            let angle = rng.range(0, ANGLE_STEPS - 1);
+            let r = px(rng.range(FISSURE_RING_MIN, FISSURE_RING_MAX));
+            let p = FxVec2::new(mul_q16(r, cos_q16(angle)), mul_q16(r, sin_q16(angle)));
             let apart = fissures
                 .iter()
                 .all(|f| (f.pos - p).length_squared() >= gap * gap);
@@ -101,7 +94,7 @@ fn place_fissures(rng: &mut SimRng) -> Vec<Fissure> {
     if fissures.is_empty() {
         // Unreachable with the shipped tuning; never start without a source.
         fissures.push(Fissure {
-            pos: FxVec2::from_px(hw, 0),
+            pos: FxVec2::from_px(FISSURE_RING_MAX, 0),
         });
     }
     fissures
@@ -216,14 +209,14 @@ impl SimState {
     }
 
     /// Spawn one enemy on the spawn ring of a random fissure, at a random
-    /// angle, clamped into the arena. Spitters strafe a random way round.
+    /// angle. Spitters strafe a random way round.
     fn spawn_at_fissure(&mut self, kind: EnemyKind) {
         let f = self.rng.range(0, self.fissures.len() as i32 - 1) as usize;
         let angle = self.rng.range(0, ANGLE_STEPS - 1);
         let r = px(FISSURE_SPAWN_RING);
         let pos = self.fissures[f].pos
             + FxVec2::new(mul_q16(r, cos_q16(angle)), mul_q16(r, sin_q16(angle)));
-        let mut e = Enemy::new(kind, clamp_to_arena(pos, kind.radius()));
+        let mut e = Enemy::new(kind, pos);
         if self.rng.range(0, 1) == 0 {
             e.orbit = -1;
         }
@@ -253,7 +246,7 @@ impl SimState {
             ship.prev_buttons = input.buttons;
             let aim = FxVec2::from_px(input.target_x, input.target_y);
             if input.pressed(INPUT_MOVE) {
-                ship.target = clamp_to_arena(aim, ship.stats.radius);
+                ship.target = aim;
             }
             if down & INPUT_SKILL_Q != 0 && ship.q_cooldown == 0 {
                 self.skill_q(i, aim);
@@ -325,7 +318,7 @@ impl SimState {
                     } else {
                         d.scale_to(px(SHOCKWAVE_PUSH))
                     };
-                    e.pos = clamp_to_arena(e.pos + push, e.kind.radius());
+                    e.pos = e.pos + push;
                 }
                 self.ships[i].w_cooldown = self.ships[i].stats.w_cooldown;
             }
@@ -334,9 +327,8 @@ impl SimState {
 
     fn move_ships(&mut self) {
         for ship in self.ships.iter_mut().filter(|s| s.alive()) {
-            let r = ship.stats.radius;
             if ship.dash_ticks > 0 {
-                ship.pos = clamp_to_arena(ship.pos + ship.dash_vel, r);
+                ship.pos = ship.pos + ship.dash_vel;
                 ship.dash_ticks -= 1;
                 if ship.dash_ticks == 0 {
                     // Stop where the dash ends instead of walking back.
@@ -349,7 +341,7 @@ impl SimState {
             ship.pos = if d.length() <= speed as i64 {
                 ship.target
             } else {
-                clamp_to_arena(ship.pos + d.scale_to(speed), r)
+                ship.pos + d.scale_to(speed)
             };
         }
     }
@@ -420,12 +412,7 @@ impl SimState {
                         // In the band: strafe along the circle round the ship.
                         FxVec2::new(-to_ship.y * e.orbit, to_ship.x * e.orbit).scale_to(speed)
                     };
-                    let moved = e.pos + step;
-                    e.pos = clamp_to_arena(moved, e.kind.radius());
-                    if e.pos != moved {
-                        // Hit the arena edge: strafe back the other way.
-                        e.orbit = -e.orbit;
-                    }
+                    e.pos = e.pos + step;
                     let vel = to_ship.scale_to(px_per_tick(SPIT_SPEED));
                     if e.cooldown == 0 && d <= px(SPITTER_FIRE_RANGE) as i64 && vel != FxVec2::ZERO
                     {
@@ -495,7 +482,7 @@ impl SimState {
                 };
                 let ship_share =
                     FxVec2::new(push.x * ENEMY_MASS / total, push.y * ENEMY_MASS / total);
-                ship.pos = clamp_to_arena(ship.pos + ship_share, ship.stats.radius);
+                ship.pos = ship.pos + ship_share;
                 e.pos = e.pos - (push - ship_share);
             }
         }
@@ -510,9 +497,6 @@ impl SimState {
                 self.enemies[i].pos = self.enemies[i].pos + half;
                 self.enemies[j].pos = self.enemies[j].pos - (push - half);
             }
-        }
-        for e in &mut self.enemies {
-            e.pos = clamp_to_arena(e.pos, e.kind.radius());
         }
     }
 
@@ -785,22 +769,25 @@ mod tests {
     }
 
     #[test]
-    fn arena_edges_block_movement() {
+    fn no_arena_edge_blocks_movement() {
+        // Far past where the old 2000 × 1160 arena ended.
         let mut s = quiet(&[KITE]);
-        s.step(&[input(INPUT_MOVE, 5000, -5000)]);
-        for _ in 0..600 {
+        s.step(&[input(INPUT_MOVE, 3000, -2000)]);
+        for _ in 0..ticks(20, 1) {
             s.step(&idle(1));
         }
-        assert_eq!(
-            s.ships[0].pos,
-            FxVec2::from_px(ARENA_HALF_W - KITE_RADIUS, -(ARENA_HALF_H - KITE_RADIUS))
-        );
+        assert_eq!(s.ships[0].pos, FxVec2::from_px(3000, -2000));
+        // Enemies spawned out there aren't pulled in either.
+        s.enemies.push(enemy(EnemyKind::Spitter, -5000, 4000));
+        s.step(&idle(1));
+        assert!(s.enemies[0].pos.x < px(-4900) && s.enemies[0].pos.y > px(3900));
     }
 
     #[test]
     fn basic_attack_auto_fires_at_nearest_enemy_in_range() {
         let mut s = quiet(&[BULWARK]);
-        s.enemies.push(enemy(EnemyKind::Spitter, 230, 0));
+        // A Swarmer flies straight in, so the bolt can't miss it.
+        s.enemies.push(enemy(EnemyKind::Swarmer, 230, 0));
         s.enemies.push(enemy(EnemyKind::Spitter, 0, 500)); // out of range
         s.step(&idle(1));
         assert_eq!(s.projectiles.len(), 1);
@@ -809,7 +796,7 @@ mod tests {
         for _ in 0..BULWARK_BASIC_INTERVAL - 1 {
             s.step(&idle(1));
         }
-        assert!(s.enemies[0].hp < SPITTER_HP);
+        assert!(s.enemies[0].hp < SWARMER_HP);
         let fired_before = s.enemies[0].hp;
         s.step(&idle(1));
         assert!(s.projectiles.len() == 1 || s.enemies[0].hp < fired_before);
@@ -974,7 +961,7 @@ mod tests {
     }
 
     #[test]
-    fn fissures_start_off_screen_inside_the_arena() {
+    fn fissures_start_off_screen_on_a_ring() {
         let mut counts = [0; 3];
         for seed in 0..500 {
             let s = SimState::with_loadouts(seed, &mixed(1 + seed as usize % MAX_PLAYERS));
@@ -988,8 +975,12 @@ mod tests {
                         || p.y.abs() >= INITIAL_VIEW_HALF_H + FISSURE_RADIUS + 90,
                     "seed {seed}: {p:?}"
                 );
-                assert!(p.x.abs() <= ARENA_HALF_W - FISSURE_EDGE_MARGIN, "{p:?}");
-                assert!(p.y.abs() <= ARENA_HALF_H - FISSURE_EDGE_MARGIN, "{p:?}");
+                // On the ring around the start (1 px of rounding).
+                let d = f.pos.length() / SUB as i64;
+                assert!(
+                    (FISSURE_RING_MIN as i64 - 1..=FISSURE_RING_MAX as i64 + 1).contains(&d),
+                    "seed {seed}: {d}"
+                );
             }
             if let [a, b] = &s.fissures[..] {
                 assert!((a.pos - b.pos).length() >= px(FISSURE_MIN_GAP) as i64);
@@ -1029,18 +1020,6 @@ mod tests {
             }
         }
         assert!(seen > 10, "{seen}");
-        // Ring spawns stay inside the arena even for a fissure at the edge.
-        let mut s = quiet(&[KITE]);
-        s.fissures = vec![Fissure {
-            pos: FxVec2::from_px(ARENA_HALF_W, ARENA_HALF_H),
-        }];
-        for _ in 0..50 {
-            s.spawn_at_fissure(EnemyKind::Spitter);
-        }
-        for e in &s.enemies {
-            let r = px(e.kind.radius());
-            assert!(e.pos.x.abs() <= px(ARENA_HALF_W) - r && e.pos.y.abs() <= px(ARENA_HALF_H) - r);
-        }
     }
 
     #[test]

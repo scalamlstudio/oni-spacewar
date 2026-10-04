@@ -182,7 +182,8 @@ The first mission type, and the only one in the First Playable Demo.
 - **Failed:** every battleship in the instance is destroyed (solo: the
   player's), or the player quits the mission. Mission loot is then lost unless
   its reward type's "survives failure" flag is on.
-- **Level:** one hand-built, bounded arena. No time limit.
+- **Level:** open space with no edge (TAKOAI-58); enemies pour out of void
+  fissures placed around the start. No time limit.
 - **Loot:** enemies drop pickups (Credits, Void Crystal) that a battleship
   collects by flying over them.
 
