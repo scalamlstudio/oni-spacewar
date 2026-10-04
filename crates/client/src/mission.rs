@@ -91,8 +91,13 @@ pub fn ship_kind(battleship_id: &str) -> ShipKind {
     }
 }
 
+/// Upgrade ID prefix a built Training Room adds to the mission
+/// (`training_room_1`, design/READINESS.md § Carrier › Engineer scope).
+const TRAINING_ROOM_PREFIX: &str = "training_room";
+
 /// Upgrade levels from purchased upgrade IDs `<upgrade>_<level>`, e.g.
-/// `hull_plating_2`. The highest level bought wins.
+/// `hull_plating_2`, plus `training_room_1` for a built Training Room. The
+/// highest level wins.
 pub fn upgrade_levels<'a>(ids: impl IntoIterator<Item = &'a String>) -> Upgrades {
     let mut up = Upgrades::default();
     for id in ids {
@@ -102,14 +107,14 @@ pub fn upgrade_levels<'a>(ids: impl IntoIterator<Item = &'a String>) -> Upgrades
         let Ok(level) = level.parse::<u8>() else {
             continue;
         };
-        let level = level.min(sim::tuning::MAX_UPGRADE_LEVEL);
-        let slot = match name {
-            "hull_plating" => &mut up.hull,
-            "weapon_tuning" => &mut up.weapon,
-            "thruster_tuning" => &mut up.thruster,
+        let (slot, max) = match name {
+            "hull_plating" => (&mut up.hull, sim::tuning::MAX_UPGRADE_LEVEL),
+            "weapon_tuning" => (&mut up.weapon, sim::tuning::MAX_UPGRADE_LEVEL),
+            "thruster_tuning" => (&mut up.thruster, sim::tuning::MAX_UPGRADE_LEVEL),
+            TRAINING_ROOM_PREFIX => (&mut up.training, sim::tuning::MAX_TRAINING_LEVEL),
             _ => continue,
         };
-        *slot = (*slot).max(level);
+        *slot = (*slot).max(level.min(max));
     }
     up
 }
@@ -121,13 +126,24 @@ pub struct MissionRequest {
     pub battleship_id: String,
 }
 
+/// Everything in the save that changes a battleship: Workshop purchases
+/// plus `training_room_1` once the Training Room is built. The battle, the
+/// Dock card and the Workshop preview all read this list.
+pub fn upgrade_ids(save: &SaveGame) -> Vec<String> {
+    let mut ids: Vec<String> = save.purchased_upgrades.iter().cloned().collect();
+    if save.carrier.has_room(crate::layout::RoomId::TrainingRoom) {
+        ids.push(format!("{TRAINING_ROOM_PREFIX}_1"));
+    }
+    ids
+}
+
 pub fn config_from_save(save: &SaveGame) -> MissionConfig {
     MissionConfig {
         mission_type: MissionType::Elimination,
         ship_loadouts: vec![ShipLoadout {
             player_handle: 0,
             battleship_id: save.selected_battleship.clone(),
-            upgrade_ids: save.purchased_upgrades.iter().cloned().collect(),
+            upgrade_ids: upgrade_ids(save),
         }],
         seed: 10_000 + save.mission_count as u64,
     }
@@ -240,7 +256,8 @@ mod tests {
             Upgrades {
                 hull: 2,
                 weapon: 1,
-                thruster: 0
+                thruster: 0,
+                training: 0,
             }
         );
         assert_eq!(
@@ -249,6 +266,22 @@ mod tests {
         );
         let sim = launch_sim(&config(BULWARK_ID, &["hull_plating_1"]));
         assert_eq!(sim.ships[0].hull, 175);
+    }
+
+    #[test]
+    fn training_room_reaches_the_sim_through_the_upgrade_ids() {
+        use crate::layout::{Piece, RoomId};
+        let mut save = SaveGame::default();
+        assert!(upgrade_ids(&save).is_empty());
+        save.carrier.place(Piece::Corridor, 6, 1);
+        save.carrier.place(Piece::Room(RoomId::TrainingRoom), 7, 0);
+        let config = config_from_save(&save);
+        assert_eq!(config.ship_loadouts[0].upgrade_ids, ["training_room_1"]);
+        assert_eq!(sim_loadouts(&config)[0].upgrades.training, 1);
+        let sim = launch_sim(&config);
+        assert_eq!(sim.ships[0].q_cooldown_max(), 204);
+        // Clamped to the one level the room has.
+        assert_eq!(upgrade_levels(&["training_room_3".to_string()]).training, 1);
     }
 
     #[test]

@@ -36,13 +36,14 @@ crates/
     src/bin/content_manifest_diff.rs   compare manifests and list packs/assets a patch needs
     src/cutouts.rs                     background keying, sheet slicing, single-sprite crop, resize
     src/bin/sprite_sheet_cutouts.rs    expression sheets -> portraits
-    src/bin/demo_art_import.rs         design/art/demo (+ demo-v2 battle art) -> battle / carrier / title / icon sources
+    src/bin/demo_art_import.rs         design/art/demo (+ demo-v2 battle art, carrier-2_5d pieces) -> battle / carrier / title / icon sources
   client/             package `oni-client`, bin `oni-spacewar` — everything else
     src/main.rs         CLI (synctest / p2p modes), app + GGRS session setup, ICE (STUN/TURN) config
     src/art.rs          ContentImages: shipped images by stable content ID (manifest -> processed PNG), cached
     src/flow.rs         first-playable scene state machine, Title / Result UI, --autoplay QA driver: Title → Carrier → Battle → Result
-    src/carrier.rs      Carrier scene: walkable one-deck cross-section, crew dialogue, Dock berths (board a ship → briefing → launch), Workshop shop panel
-    src/workshop.rs     Workshop upgrade rules: costs, levels, buy() writing the purchase IDs the battle reads
+    src/layout.rs       2.5D carrier layout rules, no Bevy: hull grid, room catalogue, corridor masks, connectivity, can_place / can_demolish, walkable rects, save validation
+    src/carrier.rs      Carrier scene: draws the layout, 8-direction walking, crew dialogue, Dock berths (board a ship → briefing → launch), camera / zoom, Workshop panel (Upgrades + Build tabs), Build mode
+    src/workshop.rs     Workshop rules: upgrade costs / levels / buy(), and Build: build_lock / can_build / build / demolish (full refund)
     src/hints.rs        one-time tutorial hints: triggers, display queue, seen IDs in the save
     src/save.rs         versioned JSON save data in the OS data directory (override: ONI_SAVE_DIR) + migration
     src/mission.rs      typed client mission config/result handoff into `sim::SimState`; reward rules (survives_failure)
@@ -219,7 +220,14 @@ has a transparent background is only cropped), cuts the Pilot walk sheet
 sheet slicer as the portraits, scales everything down to its in-game size
 and writes `assets/source/core/{battle,carrier,title,ui/icon}/...`. Restyled
 pieces from `design/art/demo-v2/` are rows in its `V2_SPRITES` table (so far
-the ship-free Dock berth, `core.carrier.dock.berth`). It also
+the ship-free Dock berth, `core.carrier.dock.berth`, no longer drawn since
+the 2.5D Dock room has its own pads). The 2.5D carrier's modular pieces
+(`design/art/carrier-2_5d/`, TAKOAI-55) are rows in `CARRIER_2_5D`: they are
+already transparent and authored at 2× on a 256 px-per-cell grid, so they are
+copied unchanged after a size check, as `core.carrier.room.<id>`,
+`core.carrier.door.<n|e|s|w>`, `core.carrier.corridor.<mask>`,
+`core.carrier.hull_floor` and `core.carrier.build_slot` (drawn at 1×, 128 px
+per cell). It also
 writes `target/demo-art-contact-sheet.png` for a visual check. The file
 names and target sizes are tables at the top of the tool; a new art file
 means a new table row.
@@ -241,33 +249,60 @@ means a new table row.
   when that list currently has one entry. The demo battle path steps the same
   `SimWorld` resource at a fixed rate without opening a network session; the
   `synctest` and `p2p` modes still use `RollbackPlugin` and GGRS.
-- The Carrier (`carrier.rs`) is plain Bevy in `Update`, gated on
-  `GameScreen::Carrier`; it owns no sim state. Each room is its art
-  (`core.carrier.room.*`) fitted to the room width, crew stand as their
-  `normal` portrait, and the Pilot animates through `core.carrier.pilot.*`
-  (a frame per 12 px walked, mirrored when walking left). Characters are
-  scaled by their visible pixels (`standing` measures the empty canvas
-  rows), so the Pilot and the crew are the same height on screen
-  (`CHARACTER_H`) whatever padding their art has. The camera zooms
-  in (`CAMERA_ZOOM`) while on the Carrier and resets on leaving. Every image
-  comes from `art::ContentImages` by stable ID. Pure helpers
-  (`walk`, `nearest_hotspot`, `interact_with`, `ship_at`, `crew_lines`,
-  `ship_card`, `upgrade_preview`)
-  hold the rules and are unit tested. The Dock's Launch writes a
-  `mission::MissionRequest` message; the flow stores the picked battleship in
-  the save and enters Battle, where `config_from_save` builds the
-  `MissionConfig`.
-- **Dock berths.** The Dock is one berth per entry in `carrier::SHIPS`
-  (`BERTH_W` wide each, so the deck grows with the roster). `carrier::berth()`
-  spawns one berth: the empty berth art (`Berth { ship }`) and the ship's
-  battle sprite on it (`DockedShip`), nose up, sized from
-  `ShipInfo::berth_len` on a 256 px pad (design/READINESS.md § Dock and
-  berths); the 2.5D carrier reuses it. The ship is the interaction: E near it
-  (`Hotspot::Berth`, `BERTH_REACH`) or a click on it (`click_ship`) calls
-  `interact_with`, which writes it to `selected_battleship`, plays the
-  Pilot's briefing and ends in the launch confirm panel for that ship. The
-  selected ship gets a highlight ring and a "Selected" tag; the other is
-  dimmed.
+- **The 2.5D carrier** (`layout.rs` rules, `carrier.rs` scene; design/READINESS.md
+  § Carrier). Plain Bevy in `Update`, gated on `GameScreen::Carrier`; it owns
+  no sim state. `layout::CarrierLayout` (in the save) is rooms (id + anchor
+  cell) and corridor cells on a 12 × 8 hull of 128 px cells; grid y grows
+  south and the scene flips it (`carrier::world` / `grid`). Corridors shape
+  themselves from a 4-bit mask (`mask`, which picks the corridor art); a
+  socket with a corridor in front is a door (door overlay art). Everything
+  must stay connected to the Bridge (`connected`, a flood fill over rooms and
+  corridors). `can_place` / `can_demolish` return the spec's reasons, which the
+  build ghost shows. `walkable()` turns the layout into rectangles (room
+  interiors, door gaps, corridor lanes); `can_stand` checks the Pilot's 12 px
+  circle (centre + 8 rim points, each inside some rectangle) and `walk`
+  slides along walls. `sync_layout` redraws the scene whenever the saved
+  layout changes, recomputing the walkable rects and the hotspots (crew, the
+  Workshop bench, one per berth). Characters and docked ships are y-sorted
+  by their feet (`depth`); floors, doors, slots and the ghost are fixed
+  layers. Characters are scaled by their visible pixels (`standing`), so the
+  Pilot and the crew are the same height (`CHARACTER_H`). The Pilot keeps the
+  side-view walk sheet (flipped for west, facing kept for north / south). The
+  camera follows the Pilot, clamped to one cell past the hull
+  (`clamp_camera`), with three zoom levels on the mouse wheel (`ZOOMS`); Build
+  mode switches to Overview and pans with WASD instead. Pure helpers
+  (`hotspots`, `nearest_hotspot`, `clicked_hotspot`, `interact_with`,
+  `ship_at`, `apply_build_click`, `ghost`, `crew_lines`, `ship_card`,
+  `upgrade_preview`) hold the rules and are unit tested. The Dock's Launch
+  writes a `mission::MissionRequest` message; the flow stores the picked
+  battleship in the save and enters Battle, where `config_from_save` builds
+  the `MissionConfig`.
+- **Building** (Workshop bench → Build tab → `Overlay::Build`). The Build tab
+  lists `BUILD_TOOLS` (Corridor, Salvage Bay, Training Room, Demolish) with
+  `workshop::build_lock` (already built / can't afford). In Build mode the
+  ghost (the piece's art, green or red, plus one line) follows `BuildCursor`;
+  a left click runs `apply_build_click` → `workshop::build` (pays and places)
+  or `workshop::demolish` (full refund) and saves. Right click / Esc go back
+  to the tab (Esc on the Carrier closes panels before it opens the pause
+  menu: `flow::toggle_pause_menu` skips while an overlay is open).
+- **Room effects.** Training Room: `mission::upgrade_ids` adds
+  `training_room_1` to the mission's upgrade IDs, which `upgrade_levels`
+  maps to `sim::Upgrades::training`; `ShipSheet::new` applies × 85 / 100
+  (integer) to the Q / W cooldowns (`tuning::trained`), the ship keeps them
+  in `ShipStats`, and the Dock card / Workshop preview read the same sheet.
+  The determinism gate's fleet gives handles 2–3 the Training Room. Salvage
+  Bay: `SaveGame::salvage_bonus` (+25% of what a successful mission kept,
+  rounded down) is added in `record_mission_return` and shown as its own
+  Result line.
+- **Dock berths.** The Dock room art has the pads; `carrier::berth()` places
+  one `Berth { ship }` per entry in `carrier::SHIPS` (2 × 2-cell pads, left to
+  right) and the ship's battle sprite on it (`DockedShip`), nose north, its
+  longest side `ShipInfo::berth_len` (design/READINESS.md § Dock and
+  berths). The ship is the interaction: E near the pad's front edge
+  (`Hotspot::Berth`) or a click on the ship calls `interact_with`, which
+  writes it to `selected_battleship`, plays the Pilot's briefing and ends in
+  the launch confirm panel for that ship. The selected ship gets a highlight
+  ring and a "Selected" tag; the other is dimmed.
 - **Ship numbers have one source.** `sim::ShipSheet::new(loadout)` gives a
   battleship's stats after upgrades in human units; `ShipStats` (what the
   battle uses) is derived from it, and the Dock card and Workshop preview
@@ -280,7 +315,8 @@ means a new table row.
   `sim::Upgrades` in the `Loadout`, so upgrades change the sim only through
   its deterministic launch input (identical on every peer).
 - **Result scene** (`flow.rs`): banner, kills, mission time (sim ticks),
-  collected / bonus / kept / lost loot and the wallet before → after.
+  collected / bonus / kept / Salvage Bay / lost loot and the wallet before →
+  after.
   Continue goes to the Carrier, whose `enter_carrier` books the result into
   the save (`record_mission_return`) and stores it.
 - **Tutorial hints** (`hints.rs`): `Hints::trigger(save, hint)` queues a hint
@@ -318,20 +354,28 @@ means a new table row.
 - `oni-spacewar --autoplay [--ship kite|bulwark] [--missions N] [--continue]
   [--abandon] [--shots DIR]` is a QA mode for the whole demo loop: New Game
   (or Continue the existing save), fly N battles (default 1) with a scripted
-  pilot (input only, like a player), buy the first affordable Workshop
-  upgrade between them, return to the Carrier after the last one and quit
+  pilot (input only, like a player); between them, build the corridor at
+  (8,6) and the Salvage Bay at (9,5) if they're affordable and not built yet,
+  else buy the first affordable Workshop upgrade; return to the Carrier
+  after the last one and quit
   (saving). `--abandon` quits the last mission from the pause menu 20 s in;
   `--shots` saves a screenshot of every scene. Use a scratch `ONI_SAVE_DIR`.
   The acceptance loop is `--missions 2` followed by `--continue --missions 0`.
   On macOS, wrap it in `caffeinate -d`: if the display sleeps the window stops
   presenting and screenshots come out black.
-- Save data is client-only JSON with an explicit schema version (now 2). It
+- Save data is client-only JSON with an explicit schema version (now 3). It
   stores credits, resources, purchased upgrades, selected battleship, tutorial
-  hints seen, missions played and won, and the last result, and is never read
-  by `sim`; the client converts it into a deterministic mission config before
-  launch. Older versions load through `save::migrate` (every field added since
-  v1 has a serde default); newer versions are refused. Saved on New Game,
-  every return to the Carrier, every Workshop purchase, Launch, the first
+  hints seen, missions played and won, the last result and the carrier
+  layout, and is never read by `sim`; the client converts it into a
+  deterministic mission config before launch. Older versions load through
+  `save::migrate` (every field added since v1 has a serde default; v1 / v2
+  get the starting layout); newer versions are refused. `migrate` then
+  validates the layout (`CarrierLayout::validate`: known rooms, inside the
+  hull, no overlaps, the starting pieces in place, each buildable room at
+  most once, connected); a broken one resets to the starting layout and
+  refunds every non-starting piece, with a warning. Rooms are written sorted
+  by id and corridors by (x, y). Saved on New Game, every return to the
+  Carrier, every Workshop purchase, build and demolish, Launch, the first
   showing of each hint, and Quit.
 
 ### Simulation structure

@@ -3,6 +3,7 @@
 //! the battle reads those IDs through `mission::upgrade_levels` into the sim
 //! `Loadout`, so the effect itself lives in `sim` and stays deterministic.
 
+use crate::layout::{DemolishError, Piece, PlaceError};
 use crate::mission::VOID_CRYSTAL_ID;
 use crate::save::SaveGame;
 use sim::tuning::MAX_UPGRADE_LEVEL;
@@ -89,8 +90,10 @@ impl Upgrade {
     }
 }
 
+/// Every battleship modifier in the save: Workshop levels and the Training
+/// Room.
 pub fn levels(save: &SaveGame) -> Upgrades {
-    crate::mission::upgrade_levels(&save.purchased_upgrades)
+    crate::mission::upgrade_levels(&crate::mission::upgrade_ids(save))
 }
 
 /// The next level of `upgrade` and its price, or `None` when it's maxed.
@@ -120,13 +123,65 @@ pub fn buy(save: &mut SaveGame, upgrade: Upgrade) -> Result<u8, BuyError> {
     if !can_afford(save, cost) {
         return Err(BuyError::TooExpensive(cost));
     }
+    spend(save, cost);
+    save.purchased_upgrades.insert(upgrade.purchase_id(level));
+    Ok(level)
+}
+
+fn spend(save: &mut SaveGame, cost: Cost) {
     save.credits -= cost.credits;
     *save
         .resources
         .entry(VOID_CRYSTAL_ID.to_string())
         .or_default() -= cost.void_crystal;
-    save.purchased_upgrades.insert(upgrade.purchase_id(level));
-    Ok(level)
+}
+
+fn refund(save: &mut SaveGame, cost: Cost) {
+    save.credits = save.credits.saturating_add(cost.credits);
+    let vc = save
+        .resources
+        .entry(VOID_CRYSTAL_ID.to_string())
+        .or_default();
+    *vc = vc.saturating_add(cost.void_crystal);
+}
+
+/// Why the Build tab can't offer `piece` right now (already built, can't
+/// afford), or `None` when it can.
+pub fn build_lock(save: &SaveGame, piece: Piece) -> Option<PlaceError> {
+    if let Piece::Room(id) = piece {
+        if save.carrier.has_room(id) {
+            return Some(PlaceError::AlreadyBuilt);
+        }
+    }
+    let cost = piece.cost();
+    (!can_afford(save, cost)).then_some(PlaceError::CantAfford(cost))
+}
+
+/// Whether `piece` can be built at (x, y) now: the layout rules, then the
+/// wallet.
+pub fn can_build(save: &SaveGame, piece: Piece, x: i32, y: i32) -> Result<(), PlaceError> {
+    save.carrier.can_place(piece, x, y)?;
+    match build_lock(save, piece) {
+        Some(e) => Err(e),
+        None => Ok(()),
+    }
+}
+
+/// Build `piece` at (x, y): pays its cost and places it. The caller saves.
+pub fn build(save: &mut SaveGame, piece: Piece, x: i32, y: i32) -> Result<(), PlaceError> {
+    can_build(save, piece, x, y)?;
+    spend(save, piece.cost());
+    save.carrier.place(piece, x, y);
+    Ok(())
+}
+
+/// Demolish the player-built piece on cell (x, y) for a full refund. The
+/// caller saves.
+pub fn demolish(save: &mut SaveGame, x: i32, y: i32) -> Result<Piece, DemolishError> {
+    save.carrier.can_demolish(x, y)?;
+    let piece = save.carrier.demolish(x, y).ok_or(DemolishError::Nothing)?;
+    refund(save, piece.cost());
+    Ok(piece)
 }
 
 #[cfg(test)]
@@ -177,5 +232,37 @@ mod tests {
         assert_eq!((save.credits, void_crystal(&save)), (0, 0));
         let up = levels(&save);
         assert_eq!((up.hull, up.weapon, up.thruster), (2, 2, 2));
+    }
+
+    #[test]
+    fn building_pays_and_demolishing_refunds_in_full() {
+        use crate::layout::{CarrierLayout, RoomId};
+        let bay = Piece::Room(RoomId::SalvageBay);
+        let mut save = rich(129, 3);
+        assert_eq!(build(&mut save, Piece::Corridor, 8, 6), Ok(()));
+        assert_eq!(save.credits, 119);
+        assert_eq!(
+            can_build(&save, bay, 9, 5),
+            Err(PlaceError::CantAfford(Cost {
+                credits: 120,
+                void_crystal: 3
+            }))
+        );
+        assert_eq!(build_lock(&save, bay), can_build(&save, bay, 9, 5).err());
+        save.credits += 1;
+        // Layout reasons come before the wallet.
+        assert_eq!(can_build(&save, bay, 9, 4), Err(PlaceError::MustConnect));
+        assert_eq!(build(&mut save, bay, 9, 5), Ok(()));
+        assert_eq!((save.credits, void_crystal(&save)), (0, 0));
+        assert_eq!(build_lock(&save, bay), Some(PlaceError::AlreadyBuilt));
+        assert_eq!(
+            demolish(&mut save, 8, 6),
+            Err(DemolishError::WouldDisconnect)
+        );
+        assert_eq!(demolish(&mut save, 9, 5), Ok(bay));
+        assert_eq!(demolish(&mut save, 8, 6), Ok(Piece::Corridor));
+        assert_eq!((save.credits, void_crystal(&save)), (130, 3));
+        assert_eq!(save.carrier, CarrierLayout::starting());
+        assert_eq!(demolish(&mut save, 3, 4), Err(DemolishError::Starting));
     }
 }

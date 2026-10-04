@@ -12,8 +12,12 @@ under [`crates/`](crates/), separate from the design docs — see
 ### Run
 
  - `cargo run --release --bin oni-spacewar` — the demo (Title screen → New Game / Continue)
-   - Carrier: A / D walk, E talk / use (crew, Workshop); in the Dock walk up
-     to a battleship and press E (or click it) to board it, then launch
+   - Carrier: WASD / arrows walk, E talk / use (crew, Workshop bench), mouse
+     wheel zoom; in the Dock walk up to a battleship and press E (or click
+     it) to board it, then launch
+   - Building: Workshop bench → Tab to the Build tab → pick a piece, then
+     left-click a spot (green = legal); X toggles demolish (full refund),
+     right click / Esc goes back
    - Battle: left-click to move, auto-fire, Q / W skills, Esc pause;
      destroy 20 enemies and fly over loot to collect it
    - Save: `~/Library/Application Support/oni-spacewar/save.json` (macOS),
