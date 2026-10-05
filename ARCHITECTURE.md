@@ -36,7 +36,7 @@ crates/
     src/bin/content_manifest_diff.rs   compare manifests and list packs/assets a patch needs
     src/cutouts.rs                     background keying, sheet slicing, single-sprite crop, resize
     src/bin/sprite_sheet_cutouts.rs    expression sheets -> portraits
-    src/bin/demo_art_import.rs         design/art/demo (+ demo-v2 battle art, carrier-2_5d pieces) -> battle / carrier / title / icon sources
+    src/bin/demo_art_import.rs         design/art/demo (+ demo-v2 battle art and backdrops, carrier-2_5d pieces) -> battle / carrier / title / result / icon sources
   client/             package `oni-client`, bin `oni-spacewar` — everything else
     src/main.rs         CLI (synctest / p2p modes), app + GGRS session setup, ICE (STUN/TURN) config
     src/art.rs          ContentImages: shipped images by stable content ID (manifest -> processed PNG), cached
@@ -228,7 +228,11 @@ already transparent and authored at 2× on a 256 px-per-cell grid, so they are
 copied unchanged after a size check, as `core.carrier.room.<id>`,
 `core.carrier.door.<n|e|s|w>`, `core.carrier.corridor.<mask>`,
 `core.carrier.hull_floor` and `core.carrier.build_slot` (drawn at 1×, 128 px
-per cell). It also
+per cell). The full-screen backdrops (`BACKDROPS`) are the demo-v2 title key
+art and Result backdrop (`core.title.key_art`, `core.result.backdrop`,
+TAKOAI-59), shipped at 2000 × 1160 so they stay crisp up to that window
+size. Their SVG sources live in `design/art/demo-v2/` and are rendered to
+PNG with `design/art/demo-v2/render-svg.sh <name>` (headless Chrome). It also
 writes `target/demo-art-contact-sheet.png` for a visual check. The file
 names and target sizes are tables at the top of the tool; a new art file
 means a new table row.
@@ -337,8 +341,8 @@ means a new table row.
   Ship facing is visual-only client state (from the move target / dash).
   Player bolts are a generated soft glow tinted per player; shields, the
   Shockwave ring, hull bars and the move marker stay gizmo effects. The
-  Title shows `core.title.key_art`, the Result screen a dimmed
-  `core.carrier.interior`, and the Workshop rows, Dock berths and Carrier
+  Title shows `core.title.key_art`, the Result screen a lightly dimmed
+  `core.result.backdrop` (the bridge window), and the Workshop rows, Dock berths and Carrier
   wallet show icons / ship art.
 - **Fissures and the spawn director** (`state.rs`, numbers in `tuning.rs`):
   `SimState::fissures` is placed once in `with_loadouts` from the seeded RNG

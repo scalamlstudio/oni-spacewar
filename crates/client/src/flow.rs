@@ -497,8 +497,8 @@ fn enter_result(
         &mut commands,
         &mut art,
         &mut images,
-        "core.carrier.interior",
-        Color::srgb(0.45, 0.45, 0.5),
+        crate::art::ids::RESULT_BACKDROP,
+        Color::srgb(0.8, 0.8, 0.85),
     );
     let wallet = save
         .game

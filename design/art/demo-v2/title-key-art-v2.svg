@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="1160" viewBox="0 0 2000 1160">
+  <!-- Oni Spacewar title key art, demo-v2 flat style (TAKOAI-59).
+       Left ~800 px stay quiet for the title panel and menu buttons. -->
+  <defs>
+    <g id="ear-l"><path d="M-52 -20 L-46 -78 L-8 -50 Z" stroke="#241032" stroke-width="10" stroke-linejoin="round"/></g>
+    <g id="ear-r"><path d="M52 -20 L46 -78 L8 -50 Z" stroke="#241032" stroke-width="10" stroke-linejoin="round"/></g>
+    <g id="face">
+      <circle cx="-22" cy="2" r="13" fill="#241032"/><circle cx="22" cy="2" r="13" fill="#241032"/>
+      <circle cx="-18" cy="-3" r="5" fill="#ffffff"/><circle cx="26" cy="-3" r="5" fill="#ffffff"/>
+      <path d="M-6 20 L6 20 L0 27 Z" fill="#f2718e" stroke="#241032" stroke-width="4" stroke-linejoin="round"/>
+      <ellipse cx="-38" cy="24" rx="10" ry="6" fill="#ff8fa8"/><ellipse cx="38" cy="24" rx="10" ry="6" fill="#ff8fa8"/>
+    </g>
+    <!-- pilot: orange cat, teal goggles on the forehead -->
+    <g id="cat-pilot">
+      <use href="#ear-l" fill="#f28a2e"/><use href="#ear-r" fill="#f28a2e"/>
+      <ellipse rx="60" ry="50" fill="#f28a2e" stroke="#241032" stroke-width="10"/>
+      <ellipse cx="0" cy="22" rx="30" ry="18" fill="#fff1dc"/>
+      <use href="#face"/>
+      <rect x="-50" y="-44" width="100" height="18" rx="9" fill="#1a8f9a" stroke="#241032" stroke-width="8"/>
+      <circle cx="-22" cy="-35" r="13" fill="#7ff5f0" stroke="#241032" stroke-width="7"/>
+      <circle cx="22" cy="-35" r="13" fill="#7ff5f0" stroke="#241032" stroke-width="7"/>
+    </g>
+    <!-- engineer: black cat, yellow hard hat -->
+    <g id="cat-engineer">
+      <use href="#ear-l" fill="#2e2638"/><use href="#ear-r" fill="#2e2638"/>
+      <ellipse rx="60" ry="50" fill="#2e2638" stroke="#241032" stroke-width="10"/>
+      <circle cx="-22" cy="2" r="15" fill="#5ee07a"/><circle cx="22" cy="2" r="15" fill="#5ee07a"/>
+      <use href="#face"/>
+      <path d="M-56 -26 C-50 -80, 50 -80, 56 -26 Z" fill="#ffc432" stroke="#241032" stroke-width="9" stroke-linejoin="round"/>
+      <rect x="-66" y="-32" width="132" height="14" rx="7" fill="#f5a030" stroke="#241032" stroke-width="8"/>
+    </g>
+    <!-- gunner: grey tabby, red headband -->
+    <g id="cat-gunner">
+      <use href="#ear-l" fill="#9a9aa8"/><use href="#ear-r" fill="#9a9aa8"/>
+      <ellipse rx="60" ry="50" fill="#9a9aa8" stroke="#241032" stroke-width="10"/>
+      <path d="M-14 -46 L-10 -30 M0 -48 L0 -30 M14 -46 L10 -30" stroke="#5c5c6c" stroke-width="7" stroke-linecap="round"/>
+      <ellipse cx="0" cy="22" rx="30" ry="18" fill="#e9e9f0"/>
+      <use href="#face"/>
+      <rect x="-58" y="-34" width="116" height="15" rx="7" fill="#e8323c" stroke="#241032" stroke-width="8"/>
+    </g>
+    <!-- researcher: cream cat, round glasses -->
+    <g id="cat-researcher">
+      <use href="#ear-l" fill="#fbe9cf"/><use href="#ear-r" fill="#fbe9cf"/>
+      <ellipse rx="60" ry="50" fill="#fbe9cf" stroke="#241032" stroke-width="10"/>
+      <circle cx="-22" cy="2" r="15" fill="#3ea8f5"/><circle cx="22" cy="2" r="15" fill="#3ea8f5"/>
+      <use href="#face"/>
+      <circle cx="-22" cy="2" r="20" fill="none" stroke="#241032" stroke-width="6"/>
+      <circle cx="22" cy="2" r="20" fill="none" stroke="#241032" stroke-width="6"/>
+      <path d="M-2 2 L2 2" stroke="#241032" stroke-width="6"/>
+    </g>
+    <g id="star"><path d="M0 -14 L4 -4 L14 0 L4 4 L0 14 L-4 4 L-14 0 L-4 -4 Z"/></g>
+  </defs>
+
+  <!-- sky: flat bands, no gradients -->
+  <rect width="2000" height="1160" fill="#1b0d2e"/>
+  <path d="M900 0 L2000 0 L2000 700 C1820 560, 1620 640, 1420 520 C1220 400, 1100 260, 900 0 Z" fill="#2c1550"/>
+  <path d="M1250 0 L2000 0 L2000 380 C1860 300, 1720 340, 1600 250 C1480 160, 1400 90, 1250 0 Z" fill="#3d1d6e"/>
+  <path d="M0 980 C260 900, 520 960, 760 900 C900 866, 1000 900, 1100 1160 L0 1160 Z" fill="#241040"/>
+  <!-- void rift, lower right -->
+  <ellipse cx="1800" cy="1030" rx="210" ry="96" fill="#5b27a3" stroke="#241032" stroke-width="18"/>
+  <ellipse cx="1800" cy="1030" rx="140" ry="60" fill="#8b3fe1" stroke="#241032" stroke-width="14"/>
+  <ellipse cx="1800" cy="1030" rx="70" ry="28" fill="#f238df" stroke="#241032" stroke-width="12"/>
+  <!-- stars -->
+  <g fill="#fff6d8">
+    <use href="#star" x="120" y="420"/><use href="#star" x="610" y="360"/><use href="#star" x="380" y="760"/>
+    <use href="#star" x="980" y="90"/><use href="#star" x="1300" y="300"/><use href="#star" x="1880" y="420"/>
+    <use href="#star" x="700" y="980"/><use href="#star" x="200" y="1060"/>
+  </g>
+  <g fill="#bfa8ff">
+    <circle cx="80" cy="640" r="5"/><circle cx="260" cy="560" r="4"/><circle cx="520" cy="620" r="5"/>
+    <circle cx="700" cy="520" r="4"/><circle cx="450" cy="900" r="5"/><circle cx="760" cy="760" r="4"/>
+    <circle cx="840" cy="200" r="5"/><circle cx="1120" cy="200" r="4"/><circle cx="1480" cy="420" r="5"/>
+    <circle cx="1960" cy="620" r="4"/><circle cx="1100" cy="1100" r="5"/><circle cx="60" cy="860" r="4"/>
+  </g>
+  <!-- planet, bottom centre -->
+  <circle cx="1060" cy="1220" r="260" fill="#2b9fd0" stroke="#241032" stroke-width="20"/>
+  <path d="M820 1110 C900 1080, 1000 1120, 1090 1090 C1180 1060, 1260 1080, 1310 1110" fill="none" stroke="#7ff5f0" stroke-width="26" stroke-linecap="round"/>
+  <path d="M860 1030 C940 1010, 1040 1040, 1120 1010" fill="none" stroke="#1d6f99" stroke-width="22" stroke-linecap="round"/>
+
+  <!-- carrier: nose points left, hull runs off the right edge -->
+  <g stroke="#241032" stroke-linejoin="round">
+    <rect x="1240" y="250" width="22" height="90" fill="#5d6772" stroke-width="10"/>
+    <rect x="1700" y="230" width="22" height="110" fill="#5d6772" stroke-width="10"/>
+    <circle cx="1251" cy="244" r="14" fill="#f5a030" stroke-width="8"/>
+    <path d="M1180 340 L2060 340 L2060 860 L1180 860 L1120 800 L1120 400 Z" fill="#1a8f9a" stroke-width="20"/>
+    <path d="M1000 380 L1180 340 L1180 600 L1000 560 C960 540, 960 400, 1000 380 Z" fill="#14727b" stroke-width="20"/>
+    <!-- bridge window with the crew -->
+    <path d="M1040 410 L1170 386 L1170 548 L1040 526 Z" fill="#7ff5f0" stroke-width="16"/>
+    <!-- hangar bay -->
+    <rect x="1250" y="580" width="560" height="220" rx="14" fill="#2f3742" stroke-width="18"/>
+    <rect x="1280" y="610" width="500" height="160" rx="10" fill="#3d4652" stroke-width="10"/>
+    <path d="M1300 770 L1760 770" stroke="#f5a030" stroke-width="12"/>
+    <!-- armour plates and stripes -->
+    <rect x="1240" y="390" width="300" height="130" rx="14" fill="#22a9b5" stroke-width="14"/>
+    <rect x="1580" y="390" width="300" height="130" rx="14" fill="#22a9b5" stroke-width="14"/>
+    <path d="M1120 820 L2060 820" stroke-width="14"/>
+  </g>
+  <g fill="#f5a030" stroke="#241032" stroke-width="8">
+    <rect x="1270" y="420" width="90" height="24" rx="12"/><rect x="1400" y="420" width="110" height="24" rx="12"/>
+    <rect x="1610" y="420" width="90" height="24" rx="12"/><rect x="1740" y="420" width="110" height="24" rx="12"/>
+    <rect x="1140" y="620" width="70" height="22" rx="11"/><rect x="1140" y="690" width="70" height="22" rx="11"/>
+    <rect x="1860" y="620" width="120" height="24" rx="12"/><rect x="1860" y="700" width="120" height="24" rx="12"/>
+  </g>
+  <!-- cat emblem on the hull -->
+  <g transform="translate(1930 465) scale(0.75)" stroke="#241032" stroke-width="10" stroke-linejoin="round">
+    <path d="M-50 -10 L-44 -70 L-10 -44 L10 -44 L44 -70 L50 -10 C56 40, -56 40, -50 -10 Z" fill="#7ff5f0"/>
+    <circle cx="-18" cy="-6" r="8" fill="#241032" stroke="none"/><circle cx="18" cy="-6" r="8" fill="#241032" stroke="none"/>
+  </g>
+  <!-- crew in the bridge window, and two in the hangar -->
+  <use href="#cat-pilot" transform="translate(1080 470) scale(0.44)"/>
+  <use href="#cat-engineer" transform="translate(1134 474) scale(0.4)"/>
+  <use href="#cat-gunner" transform="translate(1420 700) scale(0.6)"/>
+  <use href="#cat-researcher" transform="translate(1560 702) scale(0.6)"/>
+  <!-- crates in the hangar -->
+  <g fill="#d6922a" stroke="#241032" stroke-width="10" stroke-linejoin="round">
+    <rect x="1640" y="690" width="70" height="70"/><rect x="1700" y="710" width="56" height="50"/>
+  </g>
+
+  <!-- Kite battleship launching left: orange / white / teal -->
+  <g transform="translate(980 790) rotate(-8)" stroke="#241032" stroke-linejoin="round">
+    <path d="M200 -10 L330 -40 L360 0 L330 40 L200 10 Z" fill="#7ff5f0" stroke-width="14"/>
+    <path d="M250 -14 L310 -26 L325 0 L310 26 L250 14 Z" fill="#ffffff" stroke="none"/>
+    <path d="M40 -40 L130 -110 L190 -110 L150 -40 Z" fill="#f28a2e" stroke-width="16"/>
+    <path d="M40 40 L130 110 L190 110 L150 40 Z" fill="#f28a2e" stroke-width="16"/>
+    <path d="M-160 0 C-120 -50, -40 -60, 60 -52 L200 -44 L220 0 L200 44 L60 52 C-40 60, -120 50, -160 0 Z" fill="#f4f1ea" stroke-width="18"/>
+    <path d="M-30 -56 L20 -56 L20 56 L-30 56 Z" fill="#f28a2e" stroke-width="12"/>
+    <path d="M90 -50 L130 -48 L130 48 L90 50 Z" fill="#1a8f9a" stroke-width="12"/>
+    <path d="M-120 -12 C-100 -36, -60 -40, -40 -30 L-40 0 L-110 4 Z" fill="#2b9fd0" stroke-width="12"/>
+    <path d="M-160 0 L-200 0" stroke-width="14" stroke-linecap="round"/>
+  </g>
+
+  <!-- logo, top right above the carrier -->
+  <g font-family="Arial Black, Arial, Helvetica, sans-serif" font-weight="900" text-anchor="middle">
+    <text x="1490" y="170" font-size="132" fill="#ffc432" stroke="#241032" stroke-width="22" paint-order="stroke" letter-spacing="6">ONI</text>
+    <text x="1490" y="270" font-size="92" fill="#7ff5f0" stroke="#241032" stroke-width="18" paint-order="stroke" letter-spacing="10">SPACEWAR</text>
+  </g>
+</svg>
