@@ -256,8 +256,10 @@ production chain (manufacturing and conveyors stay out of scope).
 - **Camera:** follows the Pilot, clamped to the hull. The mouse wheel steps
   through three zoom levels (Overview, Normal, Close). Build mode switches to
   Overview and lets the player pan.
-- **Walking:** free movement in 8 directions (WASD or arrow keys, diagonals
-  normalised), with collision against walls. The Pilot can only stand on
+- **Walking:** the same controls as in battle: left-click the floor and the
+  Pilot walks there along the rooms and corridors; left-click a crew member,
+  a bench or a ship to walk up and use it. WASD / arrow keys also walk, in 8
+  directions (diagonals normalised), with collision against walls. The Pilot can only stand on
   room floors and corridors and passes between them only through doors.
   E uses the nearest hotspot in reach (crew, a bench, a ship in its berth).
 - **Layout model:** each hull cell is empty, a corridor cell or part of a
@@ -288,8 +290,8 @@ production chain (manufacturing and conveyors stay out of scope).
   inside the deterministic `sim`; economy effects stay in `client`.
 - **Dock and berths:** each berth holds exactly one battleship, drawn with its
   combat sprite. Walking up to a ship and pressing E (or clicking it) selects
-  it and opens the briefing and launch. The Dock has as many berths as the
-  player has battleships (two in the demo). More berths come from a future
+  it and opens the briefing and launch. Each Dock room has one berth, and
+  the carrier has one Dock per battleship (two in the demo). More berths come from a future
   Hangar Bay room when the battleship roster grows; the demo has no third
   ship, so no Hangar Bay.
 - **Hull:** the hull is a fixed-size grid in the demo. Growing the hull itself

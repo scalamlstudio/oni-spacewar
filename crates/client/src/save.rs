@@ -10,11 +10,13 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::layout::{CarrierLayout, RoomId};
+use crate::workshop::Cost;
 
 /// v2 (TAKOAI-42): adds `last_result` and `missions_won`. v3 (TAKOAI-56):
-/// adds `carrier`, the 2.5D carrier layout. Older saves load through
+/// adds `carrier`, the 2.5D carrier layout. v4 (TAKOAI-60): the Dock is a
+/// one-berth room and the carrier has two. Older saves load through
 /// [`migrate`]; every added field defaults (the layout to the starting one).
-pub const SAVE_VERSION: u32 = 3;
+pub const SAVE_VERSION: u32 = 4;
 const OLDEST_SUPPORTED_VERSION: u32 = 1;
 const SAVE_FILE_NAME: &str = "save.json";
 
@@ -198,16 +200,23 @@ pub fn load(path: &Path) -> Result<SaveGame, SaveError> {
 
 /// Brings an older save up to [`SAVE_VERSION`]. Every field added since v1
 /// has a serde default (v1 / v2 saves get the starting carrier), so
-/// upgrading is stamping the new version; the next store writes it back in
-/// the current format. Newer saves are refused. The carrier layout is then
-/// checked: a broken one resets to the starting layout and refunds every
-/// non-starting piece (unknown rooms refund nothing), with a warning.
+/// upgrading is mostly stamping the new version; the next store writes it
+/// back in the current format. A v3 layout's two-berth Dock is split into
+/// two one-berth Docks in its place (`CarrierLayout::split_v3_dock`; a
+/// player corridor that became a starting one is refunded). Newer saves
+/// are refused. The carrier layout is then checked: a broken one resets to
+/// the starting layout and refunds every non-starting piece (unknown rooms
+/// refund nothing), with a warning.
 pub fn migrate(mut save: SaveGame) -> Result<SaveGame, SaveError> {
     if !(OLDEST_SUPPORTED_VERSION..=SAVE_VERSION).contains(&save.version) {
         return Err(SaveError::VersionMismatch {
             found: save.version,
             expected: SAVE_VERSION,
         });
+    }
+    if save.version == 3 {
+        let refund = save.carrier.split_v3_dock();
+        add_refund(&mut save, refund);
     }
     save.version = SAVE_VERSION;
     save.carrier.normalize();
@@ -217,15 +226,19 @@ pub fn migrate(mut save: SaveGame) -> Result<SaveGame, SaveError> {
             "warning: saved carrier layout is invalid ({e:?}); reset to the starting layout, refunded {} cr + {} VC",
             refund.credits, refund.void_crystal
         );
-        save.credits = save.credits.saturating_add(refund.credits);
-        let vc = save
-            .resources
-            .entry(crate::mission::VOID_CRYSTAL_ID.to_string())
-            .or_default();
-        *vc = vc.saturating_add(refund.void_crystal);
+        add_refund(&mut save, refund);
         save.carrier = CarrierLayout::starting();
     }
     Ok(save)
+}
+
+fn add_refund(save: &mut SaveGame, refund: Cost) {
+    save.credits = save.credits.saturating_add(refund.credits);
+    let vc = save
+        .resources
+        .entry(crate::mission::VOID_CRYSTAL_ID.to_string())
+        .or_default();
+    *vc = vc.saturating_add(refund.void_crystal);
 }
 
 pub fn store(path: &Path, save: &SaveGame) -> Result<(), SaveError> {
@@ -292,16 +305,71 @@ mod tests {
             "last_result":"Success","missions_won":2}"#;
         fs::write(&path, v2).unwrap();
         let save = load(&path).unwrap();
-        assert_eq!(save.version, 3);
+        assert_eq!(save.version, SAVE_VERSION);
         assert_eq!(save.carrier, CarrierLayout::starting());
         assert_eq!((save.credits, save.missions_won), (300, 2));
-        // Written back as v3 with the layout.
+        // Written back as v4 with the layout.
         store(&path, &save).unwrap();
         let text = fs::read_to_string(&path).unwrap();
-        assert!(text.contains(r#""version": 3"#), "{text}");
+        assert!(text.contains(r#""version": 4"#), "{text}");
         assert!(text.contains(r#""id": "crew_quarters""#), "{text}");
         assert_eq!(load(&path).unwrap(), save);
         let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn v3_save_gets_two_one_berth_docks() {
+        // A v3 save with the spec's Salvage Bay off the old Dock's E door
+        // and a player corridor where the new Dock link goes.
+        let path = temp_file("v3");
+        let v3 = r#"{"version":3,"credits":5,"resources":{"void_crystal":1},
+            "purchased_upgrades":[],"selected_battleship":"bulwark",
+            "tutorial_seen":[],"mission_count":4,"last_result":"Success","missions_won":3,
+            "carrier":{"rooms":[{"id":"bridge","x":0,"y":1},{"id":"crew_quarters","x":4,"y":1},
+              {"id":"dock","x":4,"y":4},{"id":"salvage_bay","x":9,"y":5},
+              {"id":"workshop","x":0,"y":4}],
+              "corridors":[[1,3],[2,3],[3,3],[3,4],[3,5],[3,6],[4,3],[5,7],[8,6]]}}"#;
+        fs::write(&path, v3).unwrap();
+        let save = load(&path).unwrap();
+        assert_eq!(save.version, SAVE_VERSION);
+        let mut expect = CarrierLayout::starting();
+        expect.place(crate::layout::Piece::Corridor, 8, 6);
+        expect.place(crate::layout::Piece::Room(RoomId::SalvageBay), 9, 5);
+        assert_eq!(save.carrier, expect);
+        // (5,7) is a starting corridor now: its 10 cr come back.
+        assert_eq!((save.credits, save.resources["void_crystal"]), (15, 1));
+        assert_eq!(save.selected_battleship, "bulwark");
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn v3_dock_that_cant_split_resets_with_a_refund() {
+        // The old Dock moved off its starting spot (a broken v3 layout):
+        // the split can't make a valid layout, so the v3 rule applies.
+        let v3 = SaveGame {
+            version: 3,
+            credits: 0,
+            carrier: CarrierLayout {
+                rooms: vec![
+                    crate::layout::PlacedRoom {
+                        id: RoomId::Bridge,
+                        x: 0,
+                        y: 1,
+                    },
+                    crate::layout::PlacedRoom {
+                        id: RoomId::Dock,
+                        x: 8,
+                        y: 0,
+                    },
+                ],
+                corridors: vec![(1, 3), (2, 3), (8, 3)],
+            },
+            ..Default::default()
+        };
+        let save = migrate(v3).unwrap();
+        assert_eq!(save.carrier, CarrierLayout::starting());
+        // Only the player's own corridor (8,3) is refunded.
+        assert_eq!(save.credits, 10);
     }
 
     #[test]

@@ -283,10 +283,14 @@ fn draw_ship_fx(gizmos: &mut Gizmos, ship: &Ship, me: usize) {
     );
     // Click-to-move destination marker for our own ship.
     if ship.handle == me && ship.target != ship.pos {
-        let t = to_world(ship.target);
-        gizmos.line_2d(t - Vec2::splat(4.0), t + Vec2::splat(4.0), color);
-        gizmos.line_2d(t + Vec2::new(-4.0, 4.0), t + Vec2::new(4.0, -4.0), color);
+        move_marker(gizmos, to_world(ship.target), color);
     }
+}
+
+/// The click-to-move destination marker (battle and Carrier): a small X.
+pub fn move_marker(gizmos: &mut Gizmos, t: Vec2, color: Color) {
+    gizmos.line_2d(t - Vec2::splat(4.0), t + Vec2::splat(4.0), color);
+    gizmos.line_2d(t + Vec2::new(-4.0, 4.0), t + Vec2::new(4.0, -4.0), color);
 }
 
 fn draw_world(mut gizmos: Gizmos, world: Option<Res<SimWorld>>, local: Option<Res<LocalPlayers>>) {

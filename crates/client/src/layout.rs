@@ -150,7 +150,7 @@ impl RoomId {
     pub fn footprint(self) -> (i32, i32) {
         match self {
             RoomId::Bridge | RoomId::Workshop => (3, 2),
-            RoomId::Dock => (4, 3),
+            RoomId::Dock => (2, 3),
             RoomId::CrewQuarters | RoomId::SalvageBay | RoomId::TrainingRoom => (2, 2),
             RoomId::Unknown => (0, 0),
         }
@@ -162,7 +162,7 @@ impl RoomId {
             RoomId::Bridge => &[(1, 1, S), (2, 0, E)],
             RoomId::CrewQuarters => &[(0, 1, S), (0, 0, W), (1, 0, E)],
             RoomId::Workshop => &[(1, 0, N), (2, 1, E)],
-            RoomId::Dock => &[(0, 2, W), (3, 2, E)],
+            RoomId::Dock => &[(0, 2, W), (1, 2, E), (0, 2, S)],
             RoomId::SalvageBay | RoomId::TrainingRoom => {
                 &[(0, 0, N), (1, 0, E), (1, 1, S), (0, 1, W)]
             }
@@ -366,7 +366,10 @@ impl Default for CarrierLayout {
     }
 }
 
-const STARTING_ROOMS: [PlacedRoom; 4] = [
+/// Two one-berth Docks side by side (v4, TAKOAI-60): Dock A (Kite) and
+/// Dock B (Bulwark). They fill the old two-berth Dock's 4 × 3 footprint, so
+/// a v3 layout converts in place ([`CarrierLayout::split_v3_dock`]).
+const STARTING_ROOMS: [PlacedRoom; 5] = [
     PlacedRoom {
         id: RoomId::Bridge,
         x: 0,
@@ -387,10 +390,26 @@ const STARTING_ROOMS: [PlacedRoom; 4] = [
         x: 4,
         y: 4,
     },
+    PlacedRoom {
+        id: RoomId::Dock,
+        x: 6,
+        y: 4,
+    },
 ];
 
-const STARTING_CORRIDORS: [(i32, i32); 7] =
-    [(1, 3), (2, 3), (3, 3), (4, 3), (3, 4), (3, 5), (3, 6)];
+/// The corridor along y = 7 joins the two Docks' S doors.
+const STARTING_CORRIDORS: [(i32, i32); 10] = [
+    (1, 3),
+    (2, 3),
+    (3, 3),
+    (4, 3),
+    (3, 4),
+    (3, 5),
+    (3, 6),
+    (4, 7),
+    (5, 7),
+    (6, 7),
+];
 
 pub fn in_hull(x: i32, y: i32) -> bool {
     (0..HULL_W).contains(&x) && (0..HULL_H).contains(&y)
@@ -447,7 +466,51 @@ impl CarrierLayout {
         self.rooms.iter().find(|r| r.id == id)
     }
 
-    /// Whether any room beyond the starting four has been built.
+    /// The Docks in layout order (west to east); Dock `i` holds battleship
+    /// `i`.
+    pub fn docks(&self) -> impl Iterator<Item = &PlacedRoom> {
+        self.rooms.iter().filter(|r| r.id == RoomId::Dock)
+    }
+
+    /// Save v3 → v4: each old two-berth Dock (4 × 3 at (x, y)) becomes two
+    /// one-berth Docks at (x, y) and (x + 2, y), joined by corridors on the
+    /// row below. Player-built corridors that are now starting pieces are
+    /// refunded (returned). The caller validates the result.
+    pub fn split_v3_dock(&mut self) -> Cost {
+        let mut refund = Cost {
+            credits: 0,
+            void_crystal: 0,
+        };
+        let old: Vec<PlacedRoom> = self.docks().copied().collect();
+        self.rooms.retain(|r| r.id != RoomId::Dock);
+        for PlacedRoom { x, y, .. } in old {
+            for dx in [0, 2] {
+                self.rooms.push(PlacedRoom {
+                    id: RoomId::Dock,
+                    x: x + dx,
+                    y,
+                });
+            }
+            // Only where the starting layout has them: a Dock off its
+            // starting spot fails validation anyway, and corridors added
+            // here must not be refunded by the reset.
+            for dx in 0..3 {
+                let c = (x + dx, y + 3);
+                if !STARTING_CORRIDORS.contains(&c) {
+                    continue;
+                }
+                if self.corridors.contains(&c) {
+                    refund.credits += CORRIDOR_COST.credits;
+                } else {
+                    self.corridors.push(c);
+                }
+            }
+        }
+        self.normalize();
+        refund
+    }
+
+    /// Whether any room beyond the starting ones has been built.
     pub fn has_built_room(&self) -> bool {
         self.rooms.iter().any(|r| r.id.cost().is_some())
     }
@@ -815,6 +878,156 @@ pub fn walk(rects: &[Rect], pos: (f32, f32), delta: (f32, f32)) -> (f32, f32) {
     pos
 }
 
+/// Click-to-move lattice spacing, px.
+const PATH_STEP: f32 = 8.0;
+/// A click off the floor walks to the nearest floor within this many px.
+pub const SNAP_RANGE: f32 = 64.0;
+const LATTICE_W: i32 = (HULL_W as f32 * CELL / PATH_STEP) as i32 + 1;
+const LATTICE_H: i32 = (HULL_H as f32 * CELL / PATH_STEP) as i32 + 1;
+
+/// Whether the Pilot can walk the straight line from `a` to `b` (checked
+/// every 4 px).
+pub fn clear_line(rects: &[Rect], a: (f32, f32), b: (f32, f32)) -> bool {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let n = ((dx * dx + dy * dy).sqrt() / 4.0).ceil().max(1.0) as i32;
+    (0..=n).all(|i| {
+        let t = i as f32 / n as f32;
+        can_stand(rects, a.0 + dx * t, a.1 + dy * t)
+    })
+}
+
+/// The standable lattice node nearest to `p` within `range` px for which
+/// `ok` holds.
+fn nearest_node(
+    rects: &[Rect],
+    p: (f32, f32),
+    range: f32,
+    ok: impl Fn((f32, f32)) -> bool,
+) -> Option<(i32, i32)> {
+    let r = (range / PATH_STEP).ceil() as i32;
+    let (cx, cy) = (
+        (p.0 / PATH_STEP).round() as i32,
+        (p.1 / PATH_STEP).round() as i32,
+    );
+    let mut best: Option<((i32, i32), f32)> = None;
+    for y in cy - r..=cy + r {
+        for x in cx - r..=cx + r {
+            let q = (x as f32 * PATH_STEP, y as f32 * PATH_STEP);
+            let d = (q.0 - p.0).hypot(q.1 - p.1);
+            if d > range || best.is_some_and(|(_, b)| b <= d) {
+                continue;
+            }
+            if can_stand(rects, q.0, q.1) && ok(q) {
+                best = Some(((x, y), d));
+            }
+        }
+    }
+    best.map(|(n, _)| n)
+}
+
+/// Click-to-move: a walkable route from `from` to `to` (grid px), as
+/// waypoints after `from`. A goal off the floor snaps to the nearest floor
+/// within [`SNAP_RANGE`]; `None` if there is none or it can't be reached.
+/// A* over an 8 px lattice (8 directions), then shortened to the corners
+/// that block a straight line.
+pub fn find_path(rects: &[Rect], from: (f32, f32), to: (f32, f32)) -> Option<Vec<(f32, f32)>> {
+    use std::cmp::Reverse;
+    use std::collections::BinaryHeap;
+
+    let px = |(x, y): (i32, i32)| (x as f32 * PATH_STEP, y as f32 * PATH_STEP);
+    let start = nearest_node(rects, from, 2.0 * PATH_STEP, |q| clear_line(rects, from, q))?;
+    let goal = nearest_node(rects, to, SNAP_RANGE, |_| true)?;
+    let end = if can_stand(rects, to.0, to.1) && clear_line(rects, px(goal), to) {
+        to
+    } else {
+        px(goal)
+    };
+    if clear_line(rects, from, end) {
+        return Some(vec![end]);
+    }
+
+    let index = |(x, y): (i32, i32)| (y * LATTICE_W + x) as usize;
+    let inside = |(x, y): (i32, i32)| (0..LATTICE_W).contains(&x) && (0..LATTICE_H).contains(&y);
+    let total = (LATTICE_W * LATTICE_H) as usize;
+    // Octile distance in tenths of a step.
+    let h = |(x, y): (i32, i32)| {
+        let (dx, dy) = ((x - goal.0).unsigned_abs(), (y - goal.1).unsigned_abs());
+        10 * dx.max(dy) + 4 * dx.min(dy)
+    };
+    let mut standable: Vec<Option<bool>> = vec![None; total];
+    let mut cost = vec![u32::MAX; total];
+    let mut came = vec![usize::MAX; total];
+    let mut open = BinaryHeap::new();
+    cost[index(start)] = 0;
+    open.push(Reverse((h(start), index(start))));
+    let mut found = false;
+    while let Some(Reverse((_, i))) = open.pop() {
+        let node = ((i as i32) % LATTICE_W, (i as i32) / LATTICE_W);
+        if node == goal {
+            found = true;
+            break;
+        }
+        for (dx, dy) in [
+            (1, 0),
+            (-1, 0),
+            (0, 1),
+            (0, -1),
+            (1, 1),
+            (1, -1),
+            (-1, 1),
+            (-1, -1),
+        ] {
+            let next = (node.0 + dx, node.1 + dy);
+            if !inside(next) {
+                continue;
+            }
+            let j = index(next);
+            let ok = *standable[j].get_or_insert_with(|| {
+                let q = px(next);
+                can_stand(rects, q.0, q.1)
+            });
+            if !ok {
+                continue;
+            }
+            let c = cost[i] + if dx != 0 && dy != 0 { 14 } else { 10 };
+            if c < cost[j] {
+                cost[j] = c;
+                came[j] = i;
+                open.push(Reverse((c + h(next), j)));
+            }
+        }
+    }
+    if !found {
+        return None;
+    }
+    let mut nodes = vec![goal];
+    let mut i = index(goal);
+    while came[i] != usize::MAX {
+        i = came[i];
+        nodes.push(((i as i32) % LATTICE_W, (i as i32) / LATTICE_W));
+    }
+    nodes.reverse();
+    let mut points: Vec<(f32, f32)> = nodes.into_iter().map(px).collect();
+    if *points.last()? != end {
+        points.push(end);
+    }
+    // String pulling: from each corner, jump to the furthest point still in
+    // a straight line.
+    let mut path = Vec::new();
+    let mut at = from;
+    let mut k = 0;
+    while k < points.len() {
+        let mut far = k;
+        while far + 1 < points.len() && clear_line(rects, at, points[far + 1]) {
+            far += 1;
+        }
+        at = points[far];
+        path.push(at);
+        k = far + 1;
+    }
+    Some(path)
+}
+
 /// The hull cell under grid px (x, y).
 pub fn cell_at(x: f32, y: f32) -> (i32, i32) {
     ((x / CELL).floor() as i32, (y / CELL).floor() as i32)
@@ -857,6 +1070,9 @@ mod tests {
                 ((3, 5), "nsw".to_string()),
                 ((3, 6), "ne".to_string()),
                 ((4, 3), "nw".to_string()),
+                ((4, 7), "ne".to_string()),
+                ((5, 7), "ew".to_string()),
+                ((6, 7), "nw".to_string()),
             ]
         );
         assert!(l.connected());
@@ -873,11 +1089,21 @@ mod tests {
         assert_eq!(doors(RoomId::Bridge), [(1, 2, Side::S)]);
         assert_eq!(doors(RoomId::CrewQuarters), [(4, 2, Side::S)]);
         assert_eq!(doors(RoomId::Workshop), [(1, 4, Side::N), (2, 5, Side::E)]);
-        assert_eq!(doors(RoomId::Dock), [(4, 6, Side::W)]);
+        let docks: Vec<_> = l.docks().copied().collect();
+        assert_eq!(docks.len(), 2);
+        assert_eq!(
+            (docks[0].x, docks[0].y, docks[1].x, docks[1].y),
+            (4, 4, 6, 4)
+        );
+        assert_eq!(
+            l.doors(&docks[0]).collect::<Vec<_>>(),
+            [(4, 6, Side::W), (4, 6, Side::S)]
+        );
+        assert_eq!(l.doors(&docks[1]).collect::<Vec<_>>(), [(6, 6, Side::S)]);
         let slots = l.build_slots();
         // Bridge E and Crew Quarters W both face (3,1); Crew Quarters E
-        // faces (6,1); the Dock's E door faces (8,6).
-        for s in [(3, 1), (6, 1), (8, 6), (3, 7), (0, 3), (3, 2)] {
+        // faces (6,1); Dock B's E socket faces (8,6).
+        for s in [(3, 1), (6, 1), (8, 6), (3, 7), (7, 7), (0, 3), (3, 2)] {
             assert!(slots.contains(&s), "{s:?} in {slots:?}");
         }
         assert!(!slots.contains(&(1, 3)));
@@ -1004,9 +1230,9 @@ mod tests {
     fn a_dead_end_corridor_chain_demolishes_from_the_end() {
         let mut l = CarrierLayout::starting();
         l.place(Piece::Corridor, 3, 7);
-        l.place(Piece::Corridor, 4, 7);
+        l.place(Piece::Corridor, 2, 7);
         assert_eq!(l.can_demolish(3, 7), Err(DemolishError::WouldDisconnect));
-        assert_eq!(l.can_demolish(4, 7), Ok(Piece::Corridor));
+        assert_eq!(l.can_demolish(2, 7), Ok(Piece::Corridor));
     }
 
     #[test]
@@ -1089,7 +1315,7 @@ mod tests {
         let json = serde_json::to_string(&l).unwrap();
         assert_eq!(
             json,
-            r#"{"rooms":[{"id":"bridge","x":0,"y":1},{"id":"crew_quarters","x":4,"y":1},{"id":"dock","x":4,"y":4},{"id":"salvage_bay","x":9,"y":5},{"id":"workshop","x":0,"y":4}],"corridors":[[1,3],[2,3],[3,3],[3,4],[3,5],[3,6],[4,3],[8,6]]}"#
+            r#"{"rooms":[{"id":"bridge","x":0,"y":1},{"id":"crew_quarters","x":4,"y":1},{"id":"dock","x":4,"y":4},{"id":"dock","x":6,"y":4},{"id":"salvage_bay","x":9,"y":5},{"id":"workshop","x":0,"y":4}],"corridors":[[1,3],[2,3],[3,3],[3,4],[3,5],[3,6],[4,3],[4,7],[5,7],[6,7],[8,6]]}"#
         );
         let back: CarrierLayout = serde_json::from_str(&json).unwrap();
         assert_eq!(back, l);
@@ -1131,6 +1357,67 @@ mod tests {
         }
         // Never outside the network.
         assert!(cells.iter().all(|&(x, y)| l.cell(x, y) != Cell::Empty));
+    }
+
+    /// A v3 save's layout: the old 4 × 3 two-berth Dock at (4,4).
+    fn v3_layout(extra_corridors: &[(i32, i32)]) -> CarrierLayout {
+        let mut corridors = vec![(1, 3), (2, 3), (3, 3), (4, 3), (3, 4), (3, 5), (3, 6)];
+        corridors.extend_from_slice(extra_corridors);
+        let mut l = CarrierLayout {
+            rooms: STARTING_ROOMS[..4].to_vec(),
+            corridors,
+        };
+        l.normalize();
+        l
+    }
+
+    #[test]
+    fn a_v3_dock_splits_into_two_connected_docks() {
+        let mut l = v3_layout(&[]);
+        assert_eq!(l.split_v3_dock(), cost(0, 0));
+        assert_eq!(l, CarrierLayout::starting());
+        // The spec's Salvage Bay example still hangs off the east Dock, and
+        // a player corridor where the new one goes is refunded.
+        let mut l = v3_layout(&[(8, 6), (3, 7), (4, 7)]);
+        l.rooms.push(PlacedRoom {
+            id: RoomId::SalvageBay,
+            x: 9,
+            y: 5,
+        });
+        assert_eq!(l.split_v3_dock(), cost(10, 0));
+        assert_eq!(l.validate(), Ok(()));
+        assert_eq!(l.mask(8, 6).name(), "ew");
+        assert_eq!(l.refund(), cost(120 + 10 + 10, 3));
+    }
+
+    #[test]
+    fn click_to_move_paths_around_walls() {
+        let l = CarrierLayout::starting();
+        let rects = l.walkable();
+        // Bridge spawn to Dock B's walkway: out the Bridge's S door, down
+        // the corridor, through Dock A and its S door.
+        let from = (1.5 * CELL, 1.5 * CELL);
+        let to = (7.0 * CELL, 6.5 * CELL);
+        let path = find_path(&rects, from, to).expect("reachable");
+        assert_eq!(*path.last().unwrap(), to);
+        assert!(path.len() >= 4, "{path:?}");
+        let mut at = from;
+        for &p in &path {
+            assert!(clear_line(&rects, at, p), "{at:?} -> {p:?}");
+            at = p;
+        }
+        // In a straight line: one step.
+        assert_eq!(
+            find_path(&rects, from, (2.0 * CELL, 1.6 * CELL))
+                .unwrap()
+                .len(),
+            1
+        );
+        // On a wall: the nearest floor. In deep space: nowhere.
+        let snapped = find_path(&rects, from, (1.5 * CELL, 1.0 * CELL + 10.0)).unwrap();
+        let end = *snapped.last().unwrap();
+        assert!(can_stand(&rects, end.0, end.1));
+        assert_eq!(find_path(&rects, from, (10.5 * CELL, 0.5 * CELL)), None);
     }
 
     #[test]
