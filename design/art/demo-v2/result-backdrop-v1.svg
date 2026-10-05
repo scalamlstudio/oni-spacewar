@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="1160" viewBox="0 0 2000 1160">
+  <!-- Result screen backdrop, demo-v2 flat style (TAKOAI-59): the carrier
+       bridge looking out of its big window. The centre (where the Result
+       panel sits) is calm, dark space; detail lives at the edges. -->
+  <!-- wall -->
+  <rect width="2000" height="1160" fill="#1d2a36"/>
+  <!-- window: low-contrast space -->
+  <path d="M300 90 L1700 90 L1820 230 L1820 760 L1700 860 L300 860 L180 760 L180 230 Z" fill="#1b1430" stroke="#241032" stroke-width="20" stroke-linejoin="round"/>
+  <path d="M190 620 C520 560, 820 640, 1100 590 C1400 540, 1640 600, 1810 560 L1810 756 L1696 850 L304 850 L190 756 Z" fill="#221a3c"/>
+  <circle cx="1530" cy="300" r="110" fill="#33285a" stroke="#241032" stroke-width="16"/>
+  <path d="M1440 280 C1490 262, 1560 300, 1620 286" fill="none" stroke="#3f3470" stroke-width="18" stroke-linecap="round"/>
+  <g fill="#4a4378">
+    <circle cx="360" cy="200" r="5"/><circle cx="520" cy="340" r="4"/><circle cx="760" cy="180" r="5"/>
+    <circle cx="980" cy="260" r="4"/><circle cx="1180" cy="170" r="5"/><circle cx="1340" cy="420" r="4"/>
+    <circle cx="430" cy="520" r="5"/><circle cx="1660" cy="520" r="4"/><circle cx="300" cy="700" r="4"/>
+    <circle cx="1720" cy="200" r="5"/><circle cx="880" cy="480" r="4"/>
+  </g>
+  <!-- window struts -->
+  <g fill="#2f3d4a" stroke="#241032" stroke-width="16" stroke-linejoin="round">
+    <path d="M660 82 L700 82 L700 868 L660 868 Z"/>
+    <path d="M1300 82 L1340 82 L1340 868 L1300 868 Z"/>
+  </g>
+  <!-- side walls with lights -->
+  <g stroke="#241032" stroke-width="18" stroke-linejoin="round">
+    <path d="M-20 -20 L230 -20 L120 160 L120 820 L230 1180 L-20 1180 Z" fill="#1a8f9a"/>
+    <path d="M2020 -20 L1770 -20 L1880 160 L1880 820 L1770 1180 L2020 1180 Z" fill="#1a8f9a"/>
+  </g>
+  <g fill="#f5a030" stroke="#241032" stroke-width="8">
+    <rect x="40" y="260" width="34" height="120" rx="17"/><rect x="40" y="560" width="34" height="120" rx="17"/>
+    <rect x="1926" y="260" width="34" height="120" rx="17"/><rect x="1926" y="560" width="34" height="120" rx="17"/>
+  </g>
+  <!-- console desk along the bottom -->
+  <path d="M100 900 L1900 900 L1960 1180 L40 1180 Z" fill="#2f3742" stroke="#241032" stroke-width="20" stroke-linejoin="round"/>
+  <path d="M100 900 L1900 900 L1910 950 L90 950 Z" fill="#5d6772" stroke="#241032" stroke-width="14" stroke-linejoin="round"/>
+  <g stroke="#241032" stroke-width="10" stroke-linejoin="round">
+    <rect x="200" y="990" width="220" height="110" rx="14" fill="#1f5f6a"/>
+    <rect x="1580" y="990" width="220" height="110" rx="14" fill="#1f5f6a"/>
+    <rect x="620" y="1000" width="760" height="90" rx="14" fill="#262d36"/>
+  </g>
+  <g fill="#7ff5f0" stroke="#241032" stroke-width="6">
+    <rect x="230" y="1020" width="80" height="16" rx="8"/><rect x="230" y="1056" width="140" height="16" rx="8"/>
+    <rect x="1610" y="1020" width="140" height="16" rx="8"/><rect x="1610" y="1056" width="80" height="16" rx="8"/>
+  </g>
+  <g stroke="#241032" stroke-width="6">
+    <circle cx="700" cy="1045" r="16" fill="#f5a030"/><circle cx="760" cy="1045" r="16" fill="#5ee07a"/>
+    <circle cx="1240" cy="1045" r="16" fill="#e8323c"/><circle cx="1300" cy="1045" r="16" fill="#f5a030"/>
+  </g>
+</svg>

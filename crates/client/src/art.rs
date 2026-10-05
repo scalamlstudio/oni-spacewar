@@ -62,6 +62,7 @@ pub mod ids {
     pub const ICON_CREDITS: &str = "core.ui.icon.credits";
     pub const ICON_VOID_CRYSTAL: &str = "core.ui.icon.void_crystal";
     pub const TITLE_KEY_ART: &str = "core.title.key_art";
+    pub const RESULT_BACKDROP: &str = "core.result.backdrop";
 }
 
 /// A small inline icon for UI rows.
@@ -90,6 +91,7 @@ mod tests {
             ids::ICON_CREDITS.into(),
             ids::ICON_VOID_CRYSTAL.into(),
             ids::TITLE_KEY_ART.into(),
+            ids::RESULT_BACKDROP.into(),
         ];
         wanted.extend(crate::render::sprite_ids().iter().map(|s| s.to_string()));
         wanted.extend(crate::carrier::image_ids());

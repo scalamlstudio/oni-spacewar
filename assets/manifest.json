@@ -6,7 +6,7 @@
       "id": "core",
       "version": "0.2.0",
       "gameplay_affecting": false,
-      "content_hash": "a0a37c78d32f4030dacf893f9a8826e9e9394fc9b5485e7c8a9a88e8d33fe393",
+      "content_hash": "7f990b723daf0f9315894a77b3824145aea64bc14bc4eaa494c66dba81236a75",
       "assets": [
         {
           "id": "core.battle.enemy.void_spitter",
@@ -258,15 +258,6 @@
           "processed": "packs/core/processed/carrier/hull_floor.png",
           "compressed": "packs/core/bundles/carrier/hull_floor.png.zst",
           "hash": "474777d075724ed457bb0e20a296ed87d5eddd6fb26b910f9670fd9a60619613",
-          "gameplay_affecting": false
-        },
-        {
-          "id": "core.carrier.interior",
-          "kind": "image/png",
-          "source": "source/core/carrier/interior.png",
-          "processed": "packs/core/processed/carrier/interior.png",
-          "compressed": "packs/core/bundles/carrier/interior.png.zst",
-          "hash": "e9cd071818b3c26f3feeae01f809fcf7123a237a49faa2fd180ba5142ba4e6fe",
           "gameplay_affecting": false
         },
         {
@@ -765,12 +756,21 @@
           "gameplay_affecting": false
         },
         {
+          "id": "core.result.backdrop",
+          "kind": "image/png",
+          "source": "source/core/result/backdrop.png",
+          "processed": "packs/core/processed/result/backdrop.png",
+          "compressed": "packs/core/bundles/result/backdrop.png.zst",
+          "hash": "7d44fa60d14687224534157bdbad278e850c293b226d1368bfca0633d383529d",
+          "gameplay_affecting": false
+        },
+        {
           "id": "core.title.key_art",
           "kind": "image/png",
           "source": "source/core/title/key_art.png",
           "processed": "packs/core/processed/title/key_art.png",
           "compressed": "packs/core/bundles/title/key_art.png.zst",
-          "hash": "02e405918e4e6df24975a7b8dd4de86e3b4df634b6214b0c396fd2d51aaf3f18",
+          "hash": "a8bcdf4ae005278007cf60a92c5b7ee60a38e917cd35ba3632ed2bdeb2f7e086",
           "gameplay_affecting": false
         },
         {

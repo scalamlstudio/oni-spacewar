@@ -12,7 +12,7 @@ use content::cutouts::{extract_expression_cutout_sheet, extract_sprite, fit_with
 use image::RgbaImage;
 
 /// Single sprites: design file stem, pack-relative output, max width/height.
-const SPRITES: [(&str, &str, u32, u32); 8] = [
+const SPRITES: [(&str, &str, u32, u32); 7] = [
     ("demo/battleship-kite-v1", "battle/ship/kite", 256, 256),
     (
         "demo/battleship-bulwark-v1",
@@ -49,12 +49,6 @@ const SPRITES: [(&str, &str, u32, u32); 8] = [
         "carrier/dock/berth",
         480,
         360,
-    ),
-    (
-        "demo/carrier-interior-wide-v1",
-        "carrier/interior",
-        1200,
-        450,
     ),
 ];
 
@@ -94,9 +88,12 @@ const CARRIER_2_5D: [(&str, &str, u32, u32); 27] = [
 
 /// Full-frame images (no background to key): stem, output, max size.
 /// (The battle background tile was dropped for the procedural nebula sky,
-/// TAKOAI-58.)
-const BACKDROPS: [(&str, &str, u32, u32); 1] =
-    [("demo/title-key-art-v1", "title/key_art", 1440, 540)];
+/// TAKOAI-58.) Both are flat demo-v2 renders at 2000 x 1160, the largest
+/// window they have to stay crisp in (TAKOAI-59).
+const BACKDROPS: [(&str, &str, u32, u32); 2] = [
+    ("demo-v2/title-key-art-v2", "title/key_art", 2000, 1160),
+    ("demo-v2/result-backdrop-v1", "result/backdrop", 2000, 1160),
+];
 
 /// Row sheets: stem, output directory, frame names left to right, max frame
 /// size. A later sheet overwrites frames of the same name (the v2 loot icons
