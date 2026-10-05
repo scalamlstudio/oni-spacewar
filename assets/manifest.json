@@ -6,7 +6,7 @@
       "id": "core",
       "version": "0.2.0",
       "gameplay_affecting": false,
-      "content_hash": "7f990b723daf0f9315894a77b3824145aea64bc14bc4eaa494c66dba81236a75",
+      "content_hash": "687bfde25d1393b9eb1135e4be807a35b976c7273e73aed64c2c55cee01d3f1c",
       "assets": [
         {
           "id": "core.battle.enemy.void_spitter",
@@ -329,7 +329,7 @@
           "source": "source/core/carrier/room/dock.png",
           "processed": "packs/core/processed/carrier/room/dock.png",
           "compressed": "packs/core/bundles/carrier/room/dock.png.zst",
-          "hash": "2b3e542452fa1c87922c7298e573bddace1dd23fe32b4f93295fcb377aef864d",
+          "hash": "a3a7a041c24e82376b095b9d78c2f721f9960d657304404b9e806fe3fa399c0b",
           "gameplay_affecting": false
         },
         {

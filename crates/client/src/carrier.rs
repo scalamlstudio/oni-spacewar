@@ -10,6 +10,7 @@
 
 use bevy::input::mouse::AccumulatedMouseScroll;
 use bevy::prelude::*;
+use bevy::sprite::Anchor;
 use bevy::window::PrimaryWindow;
 
 use sim::tuning::{
@@ -435,14 +436,21 @@ const CREW_FEET: (f32, f32) = (64.0, 80.0);
 /// The Workshop bench: cell (2,0), in front of the back wall.
 const BENCH_SPOT: (i32, i32, f32, f32) = (2, 0, 64.0, 72.0);
 
-/// Centre of Dock berth `i`'s pad, room-local px. Pads are 2 × 2 cells on
-/// rows 0–1, left to right.
-fn berth_pad_centre(i: usize) -> (f32, f32) {
-    (BERTH_PAD * (i as f32 + 0.5), BERTH_PAD / 2.0)
+/// Centre of a Dock's berth pad, room-local px: the pad is the 2 × 2 cells
+/// on rows 0–1, the walkway is row 2.
+const BERTH_PAD_CENTRE: (f32, f32) = (BERTH_PAD / 2.0, BERTH_PAD / 2.0);
+
+/// The battleship in each Dock: Dock `i` (west to east) holds `SHIPS[i]`.
+fn docked_ship(layout: &CarrierLayout, room: &PlacedRoom) -> Option<usize> {
+    layout
+        .docks()
+        .position(|d| d == room)
+        .filter(|&i| i < SHIPS.len())
 }
 
 /// Every interactable thing on the carrier and where (grid px; for crew,
-/// their feet). Berth hotspots are the middle of the pad's front edge.
+/// their feet). A Dock's berth hotspot is the middle of its pad's front
+/// edge.
 pub fn hotspots(layout: &CarrierLayout) -> Vec<(Hotspot, Vec2)> {
     let mut out = Vec::new();
     let at = |room: &PlacedRoom, (cx, cy): (i32, i32), (x, y): (f32, f32)| {
@@ -460,9 +468,12 @@ pub fn hotspots(layout: &CarrierLayout) -> Vec<(Hotspot, Vec2)> {
                 out.push((Hotspot::UpgradeBench, at(room, (cx, cy), (x, y))));
             }
             RoomId::Dock => {
-                for i in 0..SHIPS.len() {
-                    let (x, _) = berth_pad_centre(i);
-                    out.push((Hotspot::Berth(i), Vec2::from(room_px(room, (x, BERTH_PAD)))));
+                if let Some(ship) = docked_ship(layout, room) {
+                    let (x, _) = BERTH_PAD_CENTRE;
+                    out.push((
+                        Hotspot::Berth(ship),
+                        Vec2::from(room_px(room, (x, BERTH_PAD))),
+                    ));
                 }
             }
             _ => {}
@@ -609,6 +620,75 @@ impl Default for CarrierView {
 #[derive(Resource, Default)]
 pub struct BuildCursor(pub Option<(i32, i32)>);
 
+/// Click-to-move: the Pilot's remaining waypoints (grid px), where the
+/// move marker is, and what to use on arrival. Empty when standing.
+#[derive(Resource, Default, Clone, PartialEq, Debug)]
+pub struct WalkOrder {
+    pub path: Vec<Vec2>,
+    pub marker: Option<Vec2>,
+    pub interact: Option<Hotspot>,
+}
+
+/// Where the Pilot stands to use a hotspot: in front of (south of) a crew
+/// member or the bench, on the walkway edge of a berth pad.
+const APPROACH: f32 = 24.0;
+
+/// A walk order from the Pilot's feet `from` (grid px) to the floor at
+/// `to`, or up to `hotspot` (using it on arrival). `None` when no floor
+/// can be reached there.
+pub fn order_walk(
+    walkable: &[Rect],
+    hotspots: &[(Hotspot, Vec2)],
+    from: Vec2,
+    to: Vec2,
+    hotspot: Option<Hotspot>,
+) -> Option<WalkOrder> {
+    let goal = match hotspot {
+        Some(h) => hotspots.iter().find(|(x, _)| *x == h)?.1 + Vec2::Y * APPROACH,
+        None => to,
+    };
+    let path: Vec<Vec2> = layout::find_path(walkable, from.into(), goal.into())?
+        .into_iter()
+        .map(Vec2::from)
+        .collect();
+    Some(WalkOrder {
+        marker: path.last().copied(),
+        path,
+        interact: hotspot,
+    })
+}
+
+/// Moves `feet` up to `dist` px along `order`'s path, dropping reached
+/// waypoints. Returns the new feet and whether the path is finished.
+pub fn follow(
+    walkable: &[Rect],
+    order: &mut WalkOrder,
+    mut feet: Vec2,
+    mut dist: f32,
+) -> (Vec2, bool) {
+    while let Some(&next) = order.path.first() {
+        let to = next - feet;
+        let len = to.length();
+        let step = if len <= dist { to } else { to * (dist / len) };
+        let (x, y) = layout::walk(walkable, feet.into(), step.into());
+        let moved = Vec2::new(x, y);
+        if moved == feet && step.length() > 0.01 {
+            // Blocked (the layout changed under the path): give up.
+            order.path.clear();
+            break;
+        }
+        dist -= moved.distance(feet);
+        feet = moved;
+        if feet.distance(next) < 0.5 {
+            order.path.remove(0);
+        }
+        if dist <= 0.01 {
+            break;
+        }
+    }
+    (feet, order.path.is_empty())
+}
+
 /// The player character. `walked` (px since it last stood still) drives
 /// the walk cycle.
 #[derive(Component, Default)]
@@ -721,6 +801,7 @@ impl Plugin for CarrierPlugin {
             .init_resource::<CarrierScene>()
             .init_resource::<CarrierView>()
             .init_resource::<BuildCursor>()
+            .init_resource::<WalkOrder>()
             .add_systems(
                 OnEnter(GameScreen::Carrier),
                 spawn_carrier.after(flow::enter_carrier),
@@ -730,7 +811,7 @@ impl Plugin for CarrierPlugin {
                 Update,
                 (
                     sync_layout,
-                    click_hotspot,
+                    click_to_move,
                     carrier_input,
                     build_click,
                     zoom_wheel,
@@ -739,6 +820,7 @@ impl Plugin for CarrierPlugin {
                     track_build_cursor,
                     build_preview,
                     animate_pilot,
+                    draw_walk_marker,
                     update_prompt,
                     update_hud,
                     show_selected_ship,
@@ -786,7 +868,9 @@ fn empty_rows(image: Option<&Image>) -> (f32, f32) {
 
 /// A character `height` px tall from head to feet, feet at `pos`. The
 /// sprite is scaled by its visible pixels, so empty canvas above or below
-/// the character doesn't change how big it looks.
+/// the character doesn't change how big it looks, and anchored at its
+/// visible feet, so the entity's translation is where it stands (walking
+/// and collision read the Pilot's translation as its feet).
 fn standing(
     art: &mut ContentImages,
     images: &mut Assets<Image>,
@@ -805,7 +889,8 @@ fn standing(
             custom_size: Some(Vec2::new(px.x * canvas_h / px.y, canvas_h)),
             ..default()
         },
-        Transform::from_translation(pos + Vec3::Y * (canvas_h / 2.0 - bottom * canvas_h)),
+        Anchor(Vec2::new(0.0, bottom - 0.5)),
+        Transform::from_translation(pos),
     )
 }
 
@@ -868,16 +953,19 @@ fn floor(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_carrier(
     mut commands: Commands,
     arrival: Res<CarrierArrival>,
     mut overlay: ResMut<Overlay>,
     mut scene: ResMut<CarrierScene>,
     mut view: ResMut<CarrierView>,
+    mut order: ResMut<WalkOrder>,
     mut art: ResMut<ContentImages>,
     mut images: ResMut<Assets<Image>>,
 ) {
     *overlay = Overlay::None;
+    *order = WalkOrder::default();
     // Drawn from the save by `sync_layout`.
     scene.drawn = None;
     *view = CarrierView::default();
@@ -976,9 +1064,14 @@ fn spawn_layout(
             floor(art, images, &room.id.content_id(), centre, size, Z_FLOOR),
             LayoutSprite,
         ));
+        let ship = docked_ship(layout, room);
+        let name = match ship {
+            Some(i) => format!("{} Dock", SHIPS[i].name),
+            None => room.id.name().to_string(),
+        };
         commands.spawn((
             label(
-                room.id.name(),
+                &name,
                 15.0,
                 Color::srgb(0.8, 0.88, 0.95),
                 Vec3::new(centre.x, centre.y + size.y / 2.0 - 16.0, Z_LABEL),
@@ -999,11 +1092,9 @@ fn spawn_layout(
                 LayoutSprite,
             ));
         }
-        if room.id == RoomId::Dock {
-            for i in 0..SHIPS.len() {
-                let pad = Vec2::from(room_px(room, berth_pad_centre(i)));
-                berth(commands, art, images, pad, i);
-            }
+        if let Some(ship) = ship {
+            let pad = Vec2::from(room_px(room, BERTH_PAD_CENTRE));
+            berth(commands, art, images, pad, ship);
             commands.spawn((
                 label(
                     "Next: Elimination",
@@ -1085,11 +1176,13 @@ fn sync_layout(
 
 fn leave_carrier(
     mut overlay: ResMut<Overlay>,
+    mut order: ResMut<WalkOrder>,
     mut arrival: ResMut<CarrierArrival>,
     mut scene: ResMut<CarrierScene>,
     mut camera: Query<(&mut Transform, &mut Projection), With<Camera2d>>,
 ) {
     *overlay = Overlay::None;
+    *order = WalkOrder::default();
     arrival.from_mission = false;
     scene.drawn = None;
     if let Ok((mut cam, mut projection)) = camera.single_mut() {
@@ -1133,6 +1226,7 @@ fn carrier_input(
     mut view: ResMut<CarrierView>,
     mut save: ResMut<SaveSlot>,
     mut overlay: ResMut<Overlay>,
+    mut order: ResMut<WalkOrder>,
     mut pilot: Query<&mut Transform, With<Pilot>>,
     mut launch: MessageWriter<MissionRequest>,
 ) {
@@ -1155,11 +1249,37 @@ fn carrier_input(
     match &mut current {
         Overlay::None => {
             let feet = grid(tf.translation.truncate());
-            let step = wasd(&keys) * WALK_SPEED * dt;
-            let (x, y) = layout::walk(&scene.walkable, (feet.x, feet.y), (step.x, step.y));
-            let feet = Vec2::new(x, y);
+            let dir = wasd(&keys);
+            let feet = if dir != Vec2::ZERO || order.path.is_empty() {
+                // WASD walks directly and cancels a click-to-move.
+                if *order != WalkOrder::default() {
+                    *order = WalkOrder::default();
+                }
+                let step = dir * WALK_SPEED * dt;
+                let (x, y) = layout::walk(&scene.walkable, (feet.x, feet.y), (step.x, step.y));
+                Vec2::new(x, y)
+            } else {
+                let (feet, done) = follow(&scene.walkable, &mut order, feet, WALK_SPEED * dt);
+                if done {
+                    // Arrived: use what was clicked, if it is in reach.
+                    let target = order.interact.and_then(|h| {
+                        scene
+                            .hotspots
+                            .iter()
+                            .find(|(x, at)| *x == h && at.distance(feet) <= INTERACT_RANGE)
+                    });
+                    if let Some(&(hotspot, _)) = target {
+                        let mut o = Overlay::None;
+                        interact_with(hotspot, save.game.as_mut(), &mut o);
+                        next = Some(o);
+                    }
+                    *order = WalkOrder::default();
+                }
+                feet
+            };
             tf.translation = world(feet).extend(depth(feet.y));
             if interact {
+                *order = WalkOrder::default();
                 if let Some((hotspot, _)) = nearest_hotspot(&scene.hotspots, feet) {
                     let mut o = Overlay::None;
                     interact_with(hotspot, save.game.as_mut(), &mut o);
@@ -1415,23 +1535,26 @@ fn cursor_world(
         .and_then(|c| camera.viewport_to_world_2d(cam_tf, c).ok())
 }
 
-/// Clicking a docked battleship boards it, and clicking a crew member or
-/// the bench uses it, like walking up and pressing E.
+/// Left click, the same as in battle: on the floor, the Pilot walks there
+/// along the corridors and rooms; on a docked battleship, a crew member or
+/// the bench, it walks up and uses it on arrival (like walking up and
+/// pressing E). Build mode handles its own clicks (`build_click`).
 #[allow(clippy::too_many_arguments)]
-fn click_hotspot(
+fn click_to_move(
     mouse: Res<ButtonInput<MouseButton>>,
     pause: Res<PauseMenu>,
+    overlay: Res<Overlay>,
     scene: Res<CarrierScene>,
     windows: Query<&Window, With<PrimaryWindow>>,
     camera: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
     ships: Query<(&GlobalTransform, &DockedShip)>,
-    mut save: ResMut<SaveSlot>,
-    mut overlay: ResMut<Overlay>,
+    pilot: Query<&Transform, With<Pilot>>,
+    mut order: ResMut<WalkOrder>,
 ) {
     if pause.open || *overlay != Overlay::None || !mouse.just_pressed(MouseButton::Left) {
         return;
     }
-    let Some(p) = cursor_world(&windows, &camera) else {
+    let (Some(p), Ok(pilot)) = (cursor_world(&windows, &camera), pilot.single()) else {
         return;
     };
     let docked = ships
@@ -1440,8 +1563,16 @@ fn click_hotspot(
     let hotspot = ship_at(p, docked)
         .map(Hotspot::Berth)
         .or_else(|| clicked_hotspot(&scene.hotspots, grid(p)));
-    if let Some(hotspot) = hotspot {
-        interact_with(hotspot, save.game.as_mut(), &mut overlay);
+    let feet = grid(pilot.translation.truncate());
+    if let Some(o) = order_walk(&scene.walkable, &scene.hotspots, feet, grid(p), hotspot) {
+        *order = o;
+    }
+}
+
+/// The click-to-move destination marker, the same one the battle draws.
+fn draw_walk_marker(order: Res<WalkOrder>, mut gizmos: Gizmos) {
+    if let Some(at) = order.marker {
+        crate::render::move_marker(&mut gizmos, world(at), Crew::Pilot.color());
     }
 }
 
@@ -1836,7 +1967,7 @@ fn update_prompt(
             // Over the crew member or bench; for a docked ship, under the
             // Pilot's feet (the ship fills the pad above the hotspot).
             let pos = match hotspot {
-                Hotspot::Berth(_) => pilot.translation.truncate() - Vec2::Y * 34.0,
+                Hotspot::Berth(_) => pilot.translation.truncate() - Vec2::Y * 16.0,
                 Hotspot::UpgradeBench => world(at) + Vec2::Y * 40.0,
                 Hotspot::Crew(_) => world(at) + Vec2::Y * (CHARACTER_H + 28.0),
             };
@@ -2326,12 +2457,44 @@ mod tests {
             });
             assert!(reachable, "{h:?} at {at}");
         }
-        // Berth hotspots: the middle of each pad's front edge.
-        let dock = l.room(RoomId::Dock).unwrap();
+        // One ship per Dock, west to east; the hotspot is the middle of the
+        // pad's front edge.
+        for (i, dock) in l.docks().enumerate() {
+            assert_eq!(
+                spots.iter().find(|s| s.0 == Hotspot::Berth(i)).unwrap().1,
+                Vec2::from(room_px(dock, (128.0, 256.0)))
+            );
+        }
+    }
+
+    #[test]
+    fn clicking_a_ship_walks_there_and_boards_it() {
+        let l = CarrierLayout::starting();
+        let rects = l.walkable();
+        let spots = hotspots(&l);
+        let start = cell_centre(SPAWN_NEW_GAME);
+        let mut order = order_walk(&rects, &spots, start, Vec2::ZERO, Some(Hotspot::Berth(1)))
+            .expect("Bulwark's Dock is reachable");
+        assert_eq!(order.marker, order.path.last().copied());
+        // Walk it at 60 fps.
+        let mut feet = start;
+        let mut done = false;
+        for _ in 0..60 * 30 {
+            (feet, done) = follow(&rects, &mut order, feet, WALK_SPEED / 60.0);
+            assert!(layout::can_stand(&rects, feet.x, feet.y), "{feet}");
+            if done {
+                break;
+            }
+        }
+        assert!(done);
         assert_eq!(
-            spots.iter().find(|s| s.0 == Hotspot::Berth(1)).unwrap().1,
-            Vec2::from(room_px(dock, (384.0, 256.0)))
+            nearest_hotspot(&spots, feet).map(|h| h.0),
+            Some(Hotspot::Berth(1))
         );
+        // A floor click has no hotspot; deep space is not a destination.
+        let floor = order_walk(&rects, &spots, start, cell_centre((3, 4)), None).unwrap();
+        assert_eq!(floor.interact, None);
+        assert!(order_walk(&rects, &spots, start, cell_centre((10, 0)), None).is_none());
     }
 
     #[test]

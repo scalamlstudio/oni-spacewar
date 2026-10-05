@@ -56,11 +56,10 @@ const SPRITES: [(&str, &str, u32, u32); 7] = [
 /// already transparent and authored at 2× on a shared 256 px-per-cell grid,
 /// so they are copied as they are (the size is checked). Design file stem,
 /// pack-relative output, expected width × height.
-const CARRIER_2_5D: [(&str, &str, u32, u32); 27] = [
+const CARRIER_2_5D: [(&str, &str, u32, u32); 26] = [
     ("room-bridge", "carrier/room/bridge", 768, 512),
     ("room-crew-quarters", "carrier/room/crew_quarters", 512, 512),
     ("room-workshop", "carrier/room/workshop", 768, 512),
-    ("room-dock", "carrier/room/dock", 1024, 768),
     ("room-salvage-bay", "carrier/room/salvage_bay", 512, 512),
     ("room-training", "carrier/room/training_room", 512, 512),
     ("door-n", "carrier/door/n", 256, 96),
@@ -85,6 +84,13 @@ const CARRIER_2_5D: [(&str, &str, u32, u32); 27] = [
     ("hull-floor", "carrier/hull_floor", 256, 256),
     ("build-slot", "carrier/build_slot", 256, 256),
 ];
+
+/// The one-berth Dock (TAKOAI-60) from the two-berth `room-dock.png`
+/// (1024 × 768): its left half (the west wall, half a pad, half the
+/// walkway) plus that half mirrored, so the 512 × 768 room has both side
+/// walls, one centred pad and no half bay door. The carrier art is a
+/// placeholder; a clean crop is enough until it is redrawn.
+const DOCK: (&str, &str, u32, u32) = ("room-dock", "carrier/room/dock", 1024, 768);
 
 /// Full-frame images (no background to key): stem, output, max size.
 /// (The battle background tile was dropped for the procedural nebula sky,
@@ -156,6 +162,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         write(&root, out, image, &mut contact)?;
     }
+    {
+        let (stem, out, w, h) = DOCK;
+        let image = open(&root, &format!("carrier-2_5d/{stem}"))?;
+        if image.dimensions() != (w, h) {
+            return Err(format!(
+                "carrier-2_5d/{stem}: {:?}, expected {w}x{h}",
+                image.dimensions()
+            )
+            .into());
+        }
+        write(&root, out, mirror_left_half(&image, w / 4), &mut contact)?;
+    }
     for (stem, dir, names, max_w, max_h) in SHEETS {
         let sheet = open(&root, stem)?;
         let cut = extract_expression_cutout_sheet(&sheet, names, None)
@@ -182,6 +200,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     sheet.save(&path)?;
     println!("wrote {}", path.display());
     Ok(())
+}
+
+/// The image's leftmost `half` columns, then the same columns mirrored.
+fn mirror_left_half(image: &RgbaImage, half: u32) -> RgbaImage {
+    RgbaImage::from_fn(2 * half, image.height(), |x, y| {
+        let sx = if x < half { x } else { 2 * half - 1 - x };
+        *image.get_pixel(sx, y)
+    })
 }
 
 fn open(root: &Path, stem: &str) -> Result<RgbaImage, Box<dyn std::error::Error>> {

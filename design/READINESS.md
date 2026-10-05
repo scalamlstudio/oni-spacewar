@@ -104,15 +104,15 @@ everything else below is a default Mika chose and Wei can tune._
 
 | Item | Value |
 |---|---|
-| Keys | WASD or arrow keys walk in 8 directions (diagonals normalised); E interacts; mouse wheel zooms; Esc pauses |
+| Keys | **left click** on the floor walks there (the same control as in battle, TAKOAI-60), pathing along rooms, doors and corridors; a click off the floor goes to the nearest floor within 64 px; the battle's move marker shows the destination. Left click on a crew member, the Workshop bench or a docked ship walks up to it (24 px in front) and uses it on arrival. WASD or arrow keys also walk in 8 directions (diagonals normalised) and cancel a click-to-move; E interacts; mouse wheel zooms; Esc pauses. Build mode keeps its own clicks |
 | Speed | 160 px/s |
 | Pilot collider | circle, radius 12 px, at the sprite's feet |
 | Pilot size | same on-screen height as the crew (TAKOAI-54), about 70 px |
 | Walkable in a room | its footprint minus the 48 px back-wall band, the 12 px side walls and the 12 px front lip, plus a door gap at each connected socket |
 | Walkable in a corridor | a 64 × 68 px centre square (cell-local x 32–96, y 48–116) plus a lane to each open side: north x 32–96, y 0–48 · south x 32–96, y 116–128 · east x 96–128, y 48–116 · west x 0–32, y 48–116 |
 | Interact | the nearest hotspot within 56 px of the Pilot's feet, shown as an "E Talk" / "E Use" / "E Board" prompt; a hotspot can also be clicked |
-| Spawn | new game: Bridge cell (1,1) · after a mission: Dock walkway cell (5,6) |
-| Pilot art | the demo keeps the side-view walk sheet: flipped for west, the last facing kept for north and south. A 4-direction sheet is a later art task |
+| Spawn | new game: Bridge cell (1,1) · after a mission: Kite Dock walkway cell (5,6) |
+| Pilot art | the demo keeps the side-view walk sheet for all 8 directions: flipped for anything with a west component, the last facing kept for straight north and south. A 4-direction sheet is a later art task |
 
 #### Layout model
 
@@ -157,7 +157,7 @@ are fixed; the two buildable rooms can each be built once.
 | **Bridge** (start) | 3 × 2 | (1,1) S · (2,0) E | Gunner at (0,1); star-map screen on the back wall above (1,0) | — | — |
 | **Crew Quarters** (start) | 2 × 2 | (0,1) S · (0,0) W · (1,0) E | Researcher at (1,1); bunks along the back wall | — | — |
 | **Workshop** (start) | 3 × 2 | (1,0) N · (2,1) E | Engineer at (0,1); Workshop bench at (2,0) (hotspot: Upgrades + Build) | — | — |
-| **Dock** (start) | 4 × 3 | (0,2) W · (3,2) E | berth A (Kite) on cells (0–1, 0–1); berth B (Bulwark) on cells (2–3, 0–1); walkway row y = 2 | launches missions | — |
+| **Dock** (start, × 2) | 2 × 3 | (0,2) W · (1,2) E · (0,2) S | one berth on cells (0–1, 0–1); walkway row y = 2. The west Dock holds Kite, the east one Bulwark (TAKOAI-60) | launches missions | — |
 | **Salvage Bay** | 2 × 2 | (0,0) N · (1,0) E · (1,1) S · (0,1) W | scrap bins, a magnet crane | **+25% Credits and Void Crystal** from every successful mission, success bonus included (rounded down; nothing on failure). ~180 cr + 6 VC → ~225 cr + 7 VC | 120 cr + 3 VC |
 | **Training Room** | 2 × 2 | (0,0) N · (1,0) E · (1,1) S · (0,1) W | a simulator pod, a target hologram | **−15% Q and W cooldowns** on every battleship (ticks × 85 / 100, rounded down). Kite Q 4 → 3.4 s, W 6 → 5.1 s; Bulwark Q 12 → 10.2 s, W 9 → 7.65 s | 200 cr + 6 VC |
 | **Corridor** | 1 × 1 | shaped by neighbours | — | connects | 10 cr |
@@ -173,8 +173,10 @@ are fixed; the two buildable rooms can each be built once.
 #### Starting layout
 
 Rooms (anchor = north-west cell): Bridge (0,1), Crew Quarters (4,1),
-Workshop (0,4), Dock (4,4). Corridors: (1,3), (2,3), (3,3), (4,3), (3,4),
-(3,5), (3,6).
+Workshop (0,4), Dock A / Kite (4,4), Dock B / Bulwark (6,4). Corridors:
+(1,3), (2,3), (3,3), (4,3), (3,4), (3,5), (3,6), (4,7), (5,7), (6,7). The
+two Docks fill the old two-berth Dock's footprint; the row below joins
+their S doors.
 
 ```
 x →   0  1  2  3  4  5  6  7  8  9 10 11
@@ -182,11 +184,11 @@ y0    .  .  .  .  .  .  .  .  .  .  .  .
 y1    B  B  B  .  Q  Q  .  .  .  .  .  .
 y2    B  B  B  .  Q  Q  .  .  .  .  .  .
 y3    .  ├  ─  ┬  ┘  .  .  .  .  .  .  .
-y4    W  W  W  │  D  D  D  D  .  .  .  .
-y5    W  W  W  ┤  D  D  D  D  .  .  .  .
-y6    .  .  .  └  D  D  D  D  .  .  .  .
-y7    .  .  .  .  .  .  .  .  .  .  .  .
-B Bridge · Q Crew Quarters · W Workshop · D Dock
+y4    W  W  W  │  A  A  K  K  .  .  .  .
+y5    W  W  W  ┤  A  A  K  K  .  .  .  .
+y6    .  .  .  └  A  A  K  K  .  .  .  .
+y7    .  .  .  .  └  ─  ┘  .  .  .  .  .
+B Bridge · Q Crew Quarters · W Workshop · A Dock A (Kite) · K Dock B (Bulwark)
 ```
 
 | Corridor | Opens to | Shape |
@@ -197,26 +199,32 @@ B Bridge · Q Crew Quarters · W Workshop · D Dock
 | (4,3) | N Crew Quarters door · W | corner (`nw`) |
 | (3,4) | N · S | straight (`ns`) |
 | (3,5) | N · S · W Workshop door | T (`nsw`) |
-| (3,6) | N · E Dock door | corner (`ne`) |
+| (3,6) | N · E Dock A door | corner (`ne`) |
+| (4,7) | N Dock A door · E | corner (`ne`) |
+| (5,7) | E · W | straight (`ew`) |
+| (6,7) | N Dock B door · W | corner (`nw`) |
 
 Free sockets to build from: Bridge E and Crew Quarters W (both face (3,1)),
-Crew Quarters E (faces (6,1)), Dock E (faces (8,6)), plus the open sides of
-every corridor.
+Crew Quarters E (faces (6,1)), Dock B E (faces (8,6)), plus the open sides
+of every corridor. (Dock A's E and Dock B's W sockets face each other and
+stay walls.)
 
 #### Dock and berths
 
-- One berth per battleship; the demo has two (Kite left, Bulwark right).
-  Each berth is a 2 × 2-cell pad (256 × 256 px).
+- One Dock room per battleship, one berth each (TAKOAI-60); the demo has
+  two (Kite west, Bulwark east). Docks are matched to ships in layout order
+  (west to east), so the save stores no ship per Dock. Each berth is a
+  2 × 2-cell pad (256 × 256 px) and each Dock shows only its own ship.
 - The ship is drawn with its combat sprite (`core.battle.ship.kite` /
   `bulwark`), centred on the pad, nose north, scaled so its longest side is
   **150 px (Kite)** and **210 px (Bulwark)**.
-- Hotspot: the middle of the pad's front edge (room-local px (128, 256) and
-  (384, 256)); E or a click on the ship selects it and opens briefing →
-  launch (TAKOAI-54). The selected ship gets a highlight ring on its pad.
-- More berths: a future **Hangar Bay** room adds one berth when the
-  battleship roster grows past two. Not in the demo (no third ship).
+- Hotspot: the middle of the pad's front edge (room-local px (128, 256));
+  E, or a click on the ship (the Pilot walks up first), selects it and
+  opens briefing → launch (TAKOAI-54). The selected ship gets a highlight ring on its pad.
+- More berths: a future battleship gets its own Dock (or a **Hangar Bay**)
+  when the roster grows past two. Not in the demo (no third ship).
 
-#### Save (version 3)
+#### Save (version 4)
 
 The save gains one field. Starting pieces are not flagged; they are
 recognised by matching the starting layout.
@@ -228,9 +236,10 @@ recognised by matching the starting layout.
     {"id": "crew_quarters", "x": 4, "y": 1},
     {"id": "workshop", "x": 0, "y": 4},
     {"id": "dock", "x": 4, "y": 4},
+    {"id": "dock", "x": 6, "y": 4},
     {"id": "salvage_bay", "x": 9, "y": 5}
   ],
-  "corridors": [[1,3],[2,3],[3,3],[4,3],[3,4],[3,5],[3,6],[8,6]]
+  "corridors": [[1,3],[2,3],[3,3],[4,3],[3,4],[3,5],[3,6],[4,7],[5,7],[6,7],[8,6]]
 }
 ```
 
@@ -238,8 +247,14 @@ recognised by matching the starting layout.
   `training_room`. Coordinates are the anchor cell. Rooms are sorted by id and
   corridors by (x, y), so the same layout always writes the same bytes.
 - **Migration:** v1 and v2 saves have no `carrier` field; it defaults to the
-  starting layout (serde default), and the version is stamped to 3. Nothing
-  else changes.
+  starting layout (serde default). In a v3 save (TAKOAI-56) the Dock is the
+  old 4 × 3 two-berth room; v4 (TAKOAI-60) replaces it in place with two
+  one-berth Docks at (x, y) and (x + 2, y) and adds the starting corridors
+  on the row below that join them. A player-built corridor already on one
+  of those cells becomes a starting piece and is refunded (10 cr). The
+  layout is then validated as below; if the two Docks don't fit or don't
+  connect, the v3 rule applies (reset + refund). The version is stamped to
+  4. Nothing else changes.
 - **Validation on load:** the layout must have only known IDs, fit the hull,
   have no overlaps, contain every starting room and corridor in place, have at
   most one of each buildable room and be fully connected. If any check fails,
@@ -261,7 +276,7 @@ socket **closed** (solid wall); the door overlays open them.
 | `room-bridge.png` | 768 × 512 | star-map screen on the back wall above cell (1,0), captain's console in the middle, two side consoles. Leave cell (0,1) clear for the Gunner |
 | `room-crew-quarters.png` | 512 × 512 | two bunks along the back wall, a small table, a locker. Leave cell (1,1) clear for the Researcher |
 | `room-workshop.png` | 768 × 512 | the bench with tools and a build-planning screen against the back wall at cell (2,0), a tool wall, parts crates. Leave cell (0,1) clear for the Engineer |
-| `room-dock.png` | 1024 × 768 | two **empty** berth pads (512 × 512 each, landing markings) on rows 0–1, a big bay door in the back wall, walkway row 2. No ships |
+| `room-dock.png` | 1024 × 768 | two **empty** berth pads (512 × 512 each, landing markings) on rows 0–1, a big bay door in the back wall, walkway row 2. No ships. Since TAKOAI-60 the shipped one-berth Dock (512 × 768) is its left half plus that half mirrored (`demo-art-import`), until the Art agent draws a one-berth Dock |
 | `room-salvage-bay.png` | 512 × 512 | scrap bins, a magnet crane, a sorting belt stub (decor only) |
 | `room-training.png` | 512 × 512 | a simulator pod, a target hologram |
 | `door-n.png` | 256 × 96 | a 128 px opening (x 64–192) in the back-wall face, with a door frame and floor threshold |

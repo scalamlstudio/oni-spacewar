@@ -11,7 +11,8 @@ use sim::{FxVec2, NetInput, SimState, SUB};
 
 use crate::art::ContentImages;
 use crate::carrier::{
-    self, BuildCursor, CarrierArrival, CarrierView, Hotspot, Overlay, Pilot, Tool, WorkshopTab,
+    self, BuildCursor, CarrierArrival, CarrierScene, CarrierView, Hotspot, Overlay, Pilot, Tool,
+    WalkOrder, WorkshopTab,
 };
 use crate::hints::{Hint, Hints};
 use crate::layout::{Piece, RoomId};
@@ -103,7 +104,11 @@ impl Plugin for FlowPlugin {
 /// them, returns to the Carrier after the last one and quits (saving, like
 /// the pause menu's Quit). With `shots`, saves a window screenshot of every
 /// scene to that directory. With `abandon`, the last mission is quit from
-/// the pause menu 20 s in (Failed, loot lost). Prints `autoplay:` lines.
+/// the pause menu 20 s in (Failed, loot lost). Before each mission the
+/// Pilot is sent to the ship's Dock with click-to-move and boards it on
+/// arrival. After the last mission it quits to the Title, reloads the save
+/// from disk and Continues once (a restart inside the same process) before
+/// quitting. Prints `autoplay:` lines.
 #[derive(Resource, Clone, Default)]
 pub struct Autoplay {
     pub ship: String,
@@ -115,6 +120,10 @@ pub struct Autoplay {
     pub flown: u32,
     /// This Carrier visit builds the Salvage Bay (decided on arrival).
     pub building: bool,
+    /// When (scene seconds) the Pilot boarded the ship this Carrier visit.
+    pub boarded: Option<f32>,
+    /// Already quit to the Title and Continued from the reloaded save.
+    pub reloaded: bool,
 }
 
 impl Autoplay {
@@ -165,6 +174,11 @@ impl SaveSlot {
                 status: format!("Save unavailable: {e}"),
             },
         }
+    }
+
+    /// Reads the save back from disk, as a restart would.
+    pub(crate) fn reload(&mut self) {
+        *self = Self::load();
     }
 
     pub(crate) fn store(&mut self) {
@@ -983,8 +997,13 @@ fn autoplay_flow(
     mut save: ResMut<SaveSlot>,
     mut next: ResMut<NextState<GameScreen>>,
     mut overlay: ResMut<Overlay>,
-    (mut view, mut cursor): (ResMut<CarrierView>, ResMut<BuildCursor>),
-    mut pilot: Query<&mut Transform, With<Pilot>>,
+    (mut view, mut cursor, mut walk, scene): (
+        ResMut<CarrierView>,
+        ResMut<BuildCursor>,
+        ResMut<WalkOrder>,
+        Res<CarrierScene>,
+    ),
+    pilot: Query<&Transform, With<Pilot>>,
     mut launch: MessageWriter<MissionRequest>,
     mut exit: MessageWriter<AppExit>,
     world: Option<Res<SimWorld>>,
@@ -1005,7 +1024,9 @@ fn autoplay_flow(
             if at(1.0) {
                 autoplay.shoot(
                     &mut commands,
-                    if autoplay.resume {
+                    if autoplay.reloaded {
+                        "90-title-reloaded"
+                    } else if autoplay.resume {
                         "01-title-continue"
                     } else {
                         "01-title"
@@ -1013,7 +1034,7 @@ fn autoplay_flow(
                 );
             }
             if at(1.5) {
-                if autoplay.resume {
+                if autoplay.resume || autoplay.reloaded {
                     println!("autoplay: continue ({})", save.status);
                     next.set(transition(
                         GameScreen::Title,
@@ -1032,7 +1053,13 @@ fn autoplay_flow(
             }
         }
         GameScreen::Carrier => {
-            let tag = if autoplay.resume { "continue" } else { "run" };
+            let tag = if autoplay.reloaded {
+                "reloaded"
+            } else if autoplay.resume {
+                "continue"
+            } else {
+                "run"
+            };
             if at(1.0) {
                 autoplay.shoot(
                     &mut commands,
@@ -1076,8 +1103,21 @@ fn autoplay_flow(
             if n >= autoplay.missions {
                 if at(2.5) {
                     save.store();
-                    println!("autoplay: quit");
-                    exit.write(AppExit::Success);
+                    if autoplay.reloaded {
+                        println!("autoplay: quit");
+                        exit.write(AppExit::Success);
+                    } else {
+                        // Quit to the Title and Continue from what is on
+                        // disk, like a restart, without a second launch.
+                        autoplay.reloaded = true;
+                        save.reload();
+                        println!("autoplay: quit to title, reloaded ({})", save.status);
+                        next.set(transition(
+                            GameScreen::Carrier,
+                            FlowEvent::QuitToTitle,
+                            true,
+                        ));
+                    }
                 }
                 return;
             }
@@ -1200,34 +1240,71 @@ fn autoplay_flow(
             }
             let berth = carrier::ship_index(&autoplay.ship);
             if at(7.5) {
-                // Walk-free: put the Pilot at the ship's berth and board it
-                // (selects it and starts the briefing).
-                let layout = save
-                    .game
-                    .as_ref()
-                    .map(|g| g.carrier.clone())
-                    .unwrap_or_default();
-                let spot = carrier::hotspots(&layout)
-                    .into_iter()
-                    .find(|(h, _)| *h == Hotspot::Berth(berth))
-                    .map(|(_, at)| at);
-                if let (Ok(mut tf), Some(at)) = (pilot.single_mut(), spot) {
-                    let feet = at + Vec2::new(0.0, 30.0);
-                    tf.translation = carrier::world(feet).extend(tf.translation.z);
+                // Click the ship: the Pilot walks to its Dock and boards it
+                // on arrival (selects it and starts the briefing).
+                autoplay.boarded = None;
+                let order = pilot.single().ok().and_then(|tf| {
+                    carrier::order_walk(
+                        &scene.walkable,
+                        &scene.hotspots,
+                        carrier::grid(tf.translation.truncate()),
+                        Vec2::ZERO,
+                        Some(Hotspot::Berth(berth)),
+                    )
+                });
+                match order {
+                    Some(o) => {
+                        println!(
+                            "autoplay: click {}: walk {} waypoints",
+                            carrier::SHIPS[berth].name,
+                            o.path.len()
+                        );
+                        *walk = o;
+                    }
+                    None => println!("autoplay: no path to berth {berth}"),
                 }
-                carrier::interact_with(Hotspot::Berth(berth), save.game.as_mut(), &mut overlay);
+            }
+            if at(8.7) {
+                autoplay.shoot(&mut commands, &format!("{:02}e-walk-to-dock", 12 + n * 10));
+            }
+            if *since >= 7.5 && autoplay.boarded.is_none() {
+                if matches!(
+                    *overlay,
+                    Overlay::Dialogue {
+                        launch: Some(_),
+                        ..
+                    }
+                ) {
+                    println!("autoplay: boarded after a {:.1} s walk", *since - 7.5);
+                    autoplay.boarded = Some(*since);
+                } else if *since >= 27.5 {
+                    // Never arrived: board in place so the run goes on.
+                    println!("autoplay: WARNING walk to berth {berth} timed out");
+                    *walk = WalkOrder::default();
+                    carrier::interact_with(Hotspot::Berth(berth), save.game.as_mut(), &mut overlay);
+                    autoplay.boarded = Some(*since);
+                }
+            }
+            let Some(boarded) = autoplay.boarded else {
+                return;
+            };
+            let after = |t: f32| before < boarded + t && *since >= boarded + t;
+            if after(0.4) {
+                autoplay.shoot(&mut commands, &format!("{:02}a-dock-briefing", 13 + n * 10));
+            }
+            if after(0.8) {
                 *overlay = Overlay::None;
             }
-            if at(8.5) {
+            if after(1.3) {
                 autoplay.shoot(&mut commands, &format!("{:02}-dock-berths", 13 + n * 10));
             }
-            if at(9.0) {
+            if after(1.8) {
                 *overlay = Overlay::Launch { index: berth };
             }
-            if at(9.5) {
+            if after(2.3) {
                 autoplay.shoot(&mut commands, &format!("{:02}-dock-launch", 14 + n * 10));
             }
-            if at(10.0) {
+            if after(2.8) {
                 launch.write(MissionRequest {
                     battleship_id: autoplay.ship.clone(),
                 });

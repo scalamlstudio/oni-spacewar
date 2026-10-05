@@ -41,8 +41,8 @@ crates/
     src/main.rs         CLI (synctest / p2p modes), app + GGRS session setup, ICE (STUN/TURN) config
     src/art.rs          ContentImages: shipped images by stable content ID (manifest -> processed PNG), cached
     src/flow.rs         first-playable scene state machine, Title / Result UI, --autoplay QA driver: Title → Carrier → Battle → Result
-    src/layout.rs       2.5D carrier layout rules, no Bevy: hull grid, room catalogue, corridor masks, connectivity, can_place / can_demolish, walkable rects, save validation
-    src/carrier.rs      Carrier scene: draws the layout, 8-direction walking, crew dialogue, Dock berths (board a ship → briefing → launch), camera / zoom, Workshop panel (Upgrades + Build tabs), Build mode
+    src/layout.rs       2.5D carrier layout rules, no Bevy: hull grid, room catalogue, corridor masks, connectivity, can_place / can_demolish, walkable rects, click-to-move pathing, save validation + v3 Dock split
+    src/carrier.rs      Carrier scene: draws the layout, click-to-move + 8-direction WASD walking, crew dialogue, one-berth Docks (board a ship → briefing → launch), camera / zoom, Workshop panel (Upgrades + Build tabs), Build mode
     src/workshop.rs     Workshop rules: upgrade costs / levels / buy(), and Build: build_lock / can_build / build / demolish (full refund)
     src/hints.rs        one-time tutorial hints: triggers, display queue, seen IDs in the save
     src/save.rs         versioned JSON save data in the OS data directory (override: ONI_SAVE_DIR) + migration
@@ -266,13 +266,26 @@ means a new table row.
   build ghost shows. `walkable()` turns the layout into rectangles (room
   interiors, door gaps, corridor lanes); `can_stand` checks the Pilot's 12 px
   circle (centre + 8 rim points, each inside some rectangle) and `walk`
-  slides along walls. `sync_layout` redraws the scene whenever the saved
+  slides along walls. **Click-to-move** (TAKOAI-60, same control as the
+  battle): `find_path` runs A* over an 8 px lattice of standable points (8
+  directions, octile costs), snaps a goal off the floor to the nearest floor
+  within `SNAP_RANGE` (64 px), then string-pulls the route to the corners
+  that block a straight line (`clear_line`). `carrier::click_to_move` turns
+  a left click into a `WalkOrder` (`order_walk`: the floor point, or the
+  `APPROACH` spot in front of a clicked ship / crew member / bench with the
+  hotspot to use on arrival); `carrier_input` follows it (`follow`, still
+  through `walk`) and interacts on arrival when in reach. WASD cancels the
+  order; Build mode keeps its own clicks (`build_click`). The destination is
+  drawn with the battle's move marker (`render::move_marker`). `sync_layout` redraws the scene whenever the saved
   layout changes, recomputing the walkable rects and the hotspots (crew, the
-  Workshop bench, one per berth). Characters and docked ships are y-sorted
+  Workshop bench, one per Dock). Characters and docked ships are y-sorted
   by their feet (`depth`); floors, doors, slots and the ghost are fixed
   layers. Characters are scaled by their visible pixels (`standing`), so the
-  Pilot and the crew are the same height (`CHARACTER_H`). The Pilot keeps the
-  side-view walk sheet (flipped for west, facing kept for north / south). The
+  Pilot and the crew are the same height (`CHARACTER_H`), and anchored at
+  their visible feet (`Anchor`), so the Pilot's translation is the point
+  walking and collision use. The Pilot keeps the
+  side-view walk sheet in all 8 directions (flipped for west, the facing
+  kept for straight north / south). The
   camera follows the Pilot, clamped to one cell past the hull
   (`clamp_camera`), with three zoom levels on the mouse wheel (`ZOOMS`); Build
   mode switches to Overview and pans with WASD instead. Pure helpers
@@ -299,9 +312,12 @@ means a new table row.
   Bay: `SaveGame::salvage_bonus` (+25% of what a successful mission kept,
   rounded down) is added in `record_mission_return` and shown as its own
   Result line.
-- **Dock berths.** The Dock room art has the pads; `carrier::berth()` places
-  one `Berth { ship }` per entry in `carrier::SHIPS` (2 × 2-cell pads, left to
-  right) and the ship's battle sprite on it (`DockedShip`), nose north, its
+- **Dock berths.** A Dock is a 2 × 3 room with one berth (TAKOAI-60); the
+  starting carrier has two, side by side. `CarrierLayout::docks()` lists
+  them west to east and Dock `i` holds `SHIPS[i]` (`docked_ship`), so the
+  save needs no ship field. `carrier::berth()` places the Dock's
+  `Berth { ship }` on its 2 × 2-cell pad and the ship's battle sprite on it
+  (`DockedShip`), nose north, its
   longest side `ShipInfo::berth_len` (design/READINESS.md § Dock and
   berths). The ship is the interaction: E near the pad's front edge
   (`Hotspot::Berth`) or a click on the ship calls `interact_with`, which
@@ -371,20 +387,24 @@ means a new table row.
   (or Continue the existing save), fly N battles (default 1) with a scripted
   pilot (input only, like a player); between them, build the corridor at
   (8,6) and the Salvage Bay at (9,5) if they're affordable and not built yet,
-  else buy the first affordable Workshop upgrade; return to the Carrier
-  after the last one and quit
-  (saving). `--abandon` quits the last mission from the pause menu 20 s in;
+  else buy the first affordable Workshop upgrade, then click-to-move to the
+  ship's Dock and board it on arrival; return to the Carrier after the last
+  one, quit to the Title, reload the save from disk and Continue (a restart
+  inside the same process), then quit (saving). `--abandon` quits the last mission from the pause menu 20 s in;
   `--shots` saves a screenshot of every scene. Use a scratch `ONI_SAVE_DIR`.
   The acceptance loop is `--missions 2` followed by `--continue --missions 0`.
   On macOS, wrap it in `caffeinate -d`: if the display sleeps the window stops
   presenting and screenshots come out black.
-- Save data is client-only JSON with an explicit schema version (now 3). It
+- Save data is client-only JSON with an explicit schema version (now 4). It
   stores credits, resources, purchased upgrades, selected battleship, tutorial
   hints seen, missions played and won, the last result and the carrier
   layout, and is never read by `sim`; the client converts it into a
   deterministic mission config before launch. Older versions load through
   `save::migrate` (every field added since v1 has a serde default; v1 / v2
-  get the starting layout); newer versions are refused. `migrate` then
+  get the starting layout; a v3 layout's two-berth Dock is split in place
+  into two one-berth Docks plus the corridors that join them,
+  `CarrierLayout::split_v3_dock`, refunding any player corridor that became
+  a starting one); newer versions are refused. `migrate` then
   validates the layout (`CarrierLayout::validate`: known rooms, inside the
   hull, no overlaps, the starting pieces in place, each buildable room at
   most once, connected); a broken one resets to the starting layout and
