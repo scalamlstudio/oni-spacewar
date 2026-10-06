@@ -103,15 +103,11 @@ const BACKDROPS: [(&str, &str, u32, u32); 2] = [
 
 /// Row sheets: stem, output directory, frame names left to right, max frame
 /// size. A later sheet overwrites frames of the same name (the v2 loot icons
-/// replace the v1 credits / Void Crystal icons).
-const SHEETS: [(&str, &str, &[&str], u32, u32); 3] = [
-    (
-        "demo/oni-pilot-walk-sheet-v1",
-        "carrier/pilot",
-        &["idle", "walk_1", "walk_2", "walk_3", "walk_4"],
-        192,
-        192,
-    ),
+/// replace the v1 credits / Void Crystal icons). The v1 side-view Pilot walk
+/// sheet is gone: the 8-direction Pilot (`core.carrier.pilot.<dir>.*`,
+/// TAKOAI-63) is exported straight into `assets/source/` by
+/// `design/art/demo-v2/pilot-8dir/make-pilot-8dir.mjs`.
+const SHEETS: [(&str, &str, &[&str], u32, u32); 2] = [
     (
         "demo/demo-icons-sheet-v1",
         "ui/icon",

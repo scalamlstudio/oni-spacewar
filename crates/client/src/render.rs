@@ -156,8 +156,10 @@ const PLAYER_COLORS: [Color; 4] = [
     Color::srgb(0.5, 1.0, 0.4),
     Color::srgb(1.0, 0.4, 0.9),
 ];
-/// Off-screen fissure pointer (the fissure art's magenta).
-const POINTER_COLOR: Color = Color::srgb(0.95, 0.24, 0.88);
+/// Off-screen fissure pointer, in the v2 fissure art's rim colours
+/// (TAKOAI-64): bright violet-magenta with a teal inner accent.
+const POINTER_COLOR: Color = Color::srgb(0.78, 0.36, 1.0);
+const POINTER_ACCENT: Color = Color::srgb(0.25, 0.92, 0.88);
 
 /// Fixed-point sim position -> Bevy world units (1 unit = 1 px). The only
 /// place floats meet sim state, and it is one-way.
@@ -565,15 +567,21 @@ fn draw_fissure_pointers(
     let half = window.size() / 2.0 * scale;
     let fissures: Vec<Vec2> = world.fissures.iter().map(|f| to_world(f.pos)).collect();
     for (tip, dir) in fissure_pointers(cam.translation.truncate(), half, 24.0 * scale, &fissures) {
-        // A solid-looking chevron: nested outlines shrinking toward the tip.
+        // A solid-looking chevron: nested outlines shrinking toward the tip,
+        // the innermost ones teal.
         let side = dir.perp();
         let size = 22.0 * scale;
         for k in 0..6 {
             let s = size * (1.0 - k as f32 * 0.15);
             let base = tip - dir * s;
+            let color = if k >= 4 {
+                POINTER_ACCENT
+            } else {
+                POINTER_COLOR
+            };
             gizmos.linestrip_2d(
                 [tip, base + side * s * 0.6, base - side * s * 0.6, tip],
-                POINTER_COLOR,
+                color,
             );
         }
     }

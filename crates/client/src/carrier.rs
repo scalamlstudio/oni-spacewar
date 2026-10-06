@@ -11,6 +11,7 @@
 use bevy::input::mouse::AccumulatedMouseScroll;
 use bevy::prelude::*;
 use bevy::sprite::Anchor;
+use bevy::ui::FocusPolicy;
 use bevy::window::PrimaryWindow;
 
 use sim::tuning::{
@@ -54,20 +55,29 @@ const CHARACTER_H: f32 = 70.0;
 pub const BERTH_PAD: f32 = 2.0 * CELL;
 /// Pilot walk cycle: a new frame every this many px walked.
 const STRIDE: f32 = 12.0;
-const PILOT_FRAMES: [&str; 4] = [
-    "core.carrier.pilot.walk_1",
-    "core.carrier.pilot.walk_2",
-    "core.carrier.pilot.walk_3",
-    "core.carrier.pilot.walk_4",
-];
-const PILOT_IDLE: &str = "core.carrier.pilot.idle";
+/// Walk-cycle frames after the idle one, per drawn direction.
+const PILOT_WALK: [&str; 4] = ["walk_1", "walk_2", "walk_3", "walk_4"];
 const HULL_FLOOR: &str = "core.carrier.hull_floor";
 const BUILD_SLOT: &str = "core.carrier.build_slot";
+/// The builder UI kit (design/art/demo-v2/builder-ui, TAKOAI-65), with the
+/// 9-slice insets its README gives.
+const UI_PANEL: (&str, f32) = ("core.ui.builder.panel.outer_panel", 24.0);
+/// The cards slice at 28 px, not the README's 18: the selected card's
+/// corner brackets reach past 18 px and stretched along the edges.
+const UI_CARD: (&str, f32) = ("core.ui.builder.panel.card", 28.0);
+const UI_CARD_SELECTED: (&str, f32) = ("core.ui.builder.panel.selected_card", 28.0);
+const UI_CARD_DISABLED: (&str, f32) = ("core.ui.builder.panel.disabled_card", 28.0);
+const UI_TOOLTIP: (&str, f32) = ("core.ui.builder.panel.tooltip", 22.0);
+const UI_COST_CHIP: (&str, f32) = ("core.ui.builder.cost_chip_bg", 18.0);
+const GHOST_VALID: &str = "core.ui.builder.ghost.valid";
+const GHOST_INVALID: &str = "core.ui.builder.ghost.invalid";
+const GRID_OVERLAY: &str = "core.ui.builder.grid_cell_overlay";
 /// Draw layers. Floors are flat; characters and docked ships are sorted by
 /// their feet (`depth`).
 const Z_HULL: f32 = -30.0;
 const Z_FLOOR: f32 = -20.0;
 const Z_DOOR: f32 = -19.0;
+const Z_GRID: f32 = -18.5;
 const Z_SLOT: f32 = -18.0;
 const Z_GHOST: f32 = -17.0;
 const Z_LABEL: f32 = 5.0;
@@ -521,15 +531,6 @@ pub enum Tool {
     Demolish,
 }
 
-impl Tool {
-    fn label(self) -> String {
-        match self {
-            Tool::Place(p) => format!("{} ({})", p.name(), cost_text(p.cost())),
-            Tool::Demolish => "Demolish (full refund)".into(),
-        }
-    }
-}
-
 /// The Build tab's rows: every piece, then Demolish.
 pub const BUILD_TOOLS: [Tool; 4] = [
     Tool::Place(Piece::BUILDABLE[0]),
@@ -537,6 +538,140 @@ pub const BUILD_TOOLS: [Tool; 4] = [
     Tool::Place(Piece::BUILDABLE[2]),
     Tool::Demolish,
 ];
+
+/// Build mode's category bar: rooms, corridors, demolish.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum BuildCategory {
+    Rooms,
+    Corridors,
+    Demolish,
+}
+
+impl BuildCategory {
+    pub const ALL: [BuildCategory; 3] = [
+        BuildCategory::Rooms,
+        BuildCategory::Corridors,
+        BuildCategory::Demolish,
+    ];
+
+    pub fn of(tool: Tool) -> Self {
+        match tool {
+            Tool::Place(Piece::Room(_)) => BuildCategory::Rooms,
+            Tool::Place(Piece::Corridor) => BuildCategory::Corridors,
+            Tool::Demolish => BuildCategory::Demolish,
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            BuildCategory::Rooms => "Rooms",
+            BuildCategory::Corridors => "Corridors",
+            BuildCategory::Demolish => "Demolish",
+        }
+    }
+
+    fn icon_id(self) -> String {
+        format!("core.ui.builder.category.{}", self.name().to_lowercase())
+    }
+}
+
+/// Why `tool`'s card is greyed out (already built, can't afford), if it is.
+pub fn tool_lock(game: &SaveGame, tool: Tool) -> Option<PlaceError> {
+    match tool {
+        Tool::Place(piece) => workshop::build_lock(game, piece),
+        Tool::Demolish => None,
+    }
+}
+
+/// Picking `tool` (a Build-tab row, a build card, a number key): the tool,
+/// or the feedback line when its card is greyed out.
+pub fn pick_tool(game: &SaveGame, tool: Tool) -> Result<Tool, String> {
+    match tool_lock(game, tool) {
+        Some(e) => Err(format!("{}: {e}.", tool_name(tool))),
+        None => Ok(tool),
+    }
+}
+
+/// The tool a category button picks: its first card that isn't greyed
+/// out, else its first card (which then explains why).
+pub fn category_tool(game: &SaveGame, category: BuildCategory) -> Tool {
+    let mut tools = BUILD_TOOLS
+        .iter()
+        .copied()
+        .filter(|&t| BuildCategory::of(t) == category);
+    let first = tools.clone().next().unwrap_or(Tool::Demolish);
+    tools
+        .find(|&t| tool_lock(game, t).is_none())
+        .unwrap_or(first)
+}
+
+/// What a build card and the detail panel show for a tool, from the real
+/// build data.
+#[derive(Clone, PartialEq, Debug)]
+pub struct ToolCard {
+    pub name: &'static str,
+    pub icon_id: String,
+    /// `None` for Demolish (it refunds instead).
+    pub cost: Option<workshop::Cost>,
+    pub effect: String,
+    pub size: String,
+    pub doors: String,
+    /// Why the card is greyed out.
+    pub lock: Option<&'static str>,
+}
+
+pub fn tool_card(game: &SaveGame, tool: Tool) -> ToolCard {
+    let lock = tool_lock(game, tool).map(|e| match e {
+        PlaceError::AlreadyBuilt => "Already built",
+        _ => "Can't afford",
+    });
+    let cells = |(w, d): (i32, i32)| {
+        let plural = if w * d == 1 { "cell" } else { "cells" };
+        format!("{w} x {d} {plural}")
+    };
+    match tool {
+        Tool::Place(Piece::Room(id)) => {
+            let mut sides: Vec<Side> = Vec::new();
+            for side in Side::ALL {
+                if id.sockets().iter().any(|s| s.2 == side) {
+                    sides.push(side);
+                }
+            }
+            ToolCard {
+                name: id.name(),
+                icon_id: format!("core.ui.builder.module.{}", id.id()),
+                cost: Some(Piece::Room(id).cost()),
+                effect: id.effect().to_string(),
+                size: cells(id.footprint()),
+                doors: sides
+                    .iter()
+                    .map(|s| s.letter().to_ascii_uppercase().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                lock,
+            }
+        }
+        Tool::Place(Piece::Corridor) => ToolCard {
+            name: Piece::Corridor.name(),
+            icon_id: "core.ui.builder.module.corridor".into(),
+            cost: Some(Piece::Corridor.cost()),
+            effect: "Connects rooms; shapes itself to its neighbours".into(),
+            size: cells(Piece::Corridor.footprint()),
+            doors: "opens toward every neighbouring corridor or door".into(),
+            lock,
+        },
+        Tool::Demolish => ToolCard {
+            name: "Demolish",
+            icon_id: "core.ui.builder.module.demolish".into(),
+            cost: None,
+            effect: "Removes a piece you built for a full refund. The original carrier stays"
+                .into(),
+            size: String::new(),
+            doors: String::new(),
+            lock,
+        },
+    }
+}
 
 pub fn cost_text(c: workshop::Cost) -> String {
     if c.void_crystal > 0 {
@@ -689,12 +824,66 @@ pub fn follow(
     (feet, order.path.is_empty())
 }
 
+/// Which way the Pilot faces, snapped to 8 directions. S, SE, E, NE and N
+/// are drawn; SW, W and NW are SE, E and NE mirrored.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Facing {
+    #[default]
+    S,
+    SE,
+    E,
+    NE,
+    N,
+    NW,
+    W,
+    SW,
+}
+
+impl Facing {
+    /// By angle in grid space (y south), clockwise from east.
+    const BY_ANGLE: [Facing; 8] = [
+        Facing::E,
+        Facing::SE,
+        Facing::S,
+        Facing::SW,
+        Facing::W,
+        Facing::NW,
+        Facing::N,
+        Facing::NE,
+    ];
+
+    /// The facing for a movement `d` in grid px (y south); `None` when
+    /// standing still. Client-only, so a float angle is fine.
+    pub fn of(d: Vec2) -> Option<Facing> {
+        if d.length_squared() < 1e-6 {
+            return None;
+        }
+        let octant = (d.y.atan2(d.x) / std::f32::consts::FRAC_PI_4).round() as i32;
+        Some(Self::BY_ANGLE[octant.rem_euclid(8) as usize])
+    }
+
+    /// The drawn direction's ID part and whether to mirror it.
+    pub fn art(self) -> (&'static str, bool) {
+        match self {
+            Facing::S => ("s", false),
+            Facing::SE => ("se", false),
+            Facing::E => ("e", false),
+            Facing::NE => ("ne", false),
+            Facing::N => ("n", false),
+            Facing::NW => ("ne", true),
+            Facing::W => ("e", true),
+            Facing::SW => ("se", true),
+        }
+    }
+}
+
 /// The player character. `walked` (px since it last stood still) drives
-/// the walk cycle.
+/// the walk cycle; `facing` is kept while standing.
 #[derive(Component, Default)]
 pub(crate) struct Pilot {
     walked: f32,
     last: Option<Vec2>,
+    pub facing: Facing,
 }
 
 #[derive(Component)]
@@ -742,6 +931,56 @@ enum HudField {
 #[derive(Component)]
 struct OverlayUi;
 
+/// A [`text_button`] that lights up under the mouse.
+#[derive(Component)]
+struct Hoverable;
+
+const BUTTON_BG: Color = Color::srgb(0.08, 0.16, 0.2);
+const BUTTON_HOVER: Color = Color::srgb(0.14, 0.3, 0.36);
+/// Build mode's screen layout (screen px, from the left edge; the 1280 px
+/// window fits it all) and its heading gold.
+const BUILD_CATEGORY_BUTTON: f32 = 46.0;
+const BUILD_CARD_W: f32 = 138.0;
+const BUILD_CARD_H: f32 = 86.0;
+const BUILD_DETAIL_W: f32 = 270.0;
+/// How much of the screen bottom the build panels cover; the Build-mode
+/// camera may pan that much further south so the last hull row clears them.
+const BUILD_UI_H: f32 = 200.0;
+const BUILD_GOLD: Color = Color::srgb(1.0, 0.86, 0.55);
+
+/// A clickable part of a Carrier panel: the same action as its key, so the
+/// Carrier plays with the mouse alone (TAKOAI-66).
+#[derive(Component, Clone, Copy, PartialEq, Debug)]
+enum Click {
+    /// Dialogue: next line / launch prep / close (E).
+    Next,
+    /// Leave / Back / Close (X).
+    Leave,
+    /// The launch confirm's Launch (E).
+    Launch,
+    /// A Workshop tab (Tab).
+    Tab(WorkshopTab),
+    /// A Workshop row: buy the upgrade or pick the piece (E on that row).
+    Row(usize),
+    /// A build card (1-4 in Build mode).
+    Tool(Tool),
+    /// A category button in Build mode.
+    Category(BuildCategory),
+}
+
+/// `image` 9-sliced with `inset` px corners (the builder kit's panels).
+fn sliced(image: Handle<Image>, inset: f32) -> ImageNode {
+    ImageNode::new(image).with_mode(NodeImageMode::Sliced(TextureSlicer {
+        border: BorderRect::all(inset),
+        ..default()
+    }))
+}
+
+/// A builder-kit 9-slice by `(id, inset)`.
+fn kit(art: &mut ContentImages, images: &mut Assets<Image>, (id, inset): (&str, f32)) -> ImageNode {
+    sliced(art.get(images, id).unwrap_or_default(), inset)
+}
+
 fn portrait(
     art: &mut ContentImages,
     images: &mut Assets<Image>,
@@ -786,9 +1025,27 @@ pub fn image_ids() -> Vec<String> {
     }
     ids.extend(layout::Side::ALL.iter().map(|s| door_id(*s)));
     ids.extend([HULL_FLOOR.into(), BUILD_SLOT.into()]);
-    ids.extend(PILOT_FRAMES.iter().map(|f| f.to_string()));
-    ids.push(PILOT_IDLE.into());
+    for facing in Facing::BY_ANGLE {
+        ids.push(pilot_frame(facing, false, 0.0).0);
+        for i in 0..PILOT_WALK.len() {
+            ids.push(pilot_frame(facing, true, i as f32 * STRIDE).0);
+        }
+    }
     ids.extend(SHIPS.iter().map(|s| s.image_id.to_string()));
+    for (id, _) in [
+        UI_PANEL,
+        UI_CARD,
+        UI_CARD_SELECTED,
+        UI_CARD_DISABLED,
+        UI_TOOLTIP,
+        UI_COST_CHIP,
+    ] {
+        ids.push(id.into());
+    }
+    ids.extend([GHOST_VALID, GHOST_INVALID, GRID_OVERLAY].map(String::from));
+    ids.extend(BuildCategory::ALL.iter().map(|c| c.icon_id()));
+    let game = SaveGame::default();
+    ids.extend(BUILD_TOOLS.iter().map(|&t| tool_card(&game, t).icon_id));
     for crew in [Crew::Gunner, Crew::Researcher, Crew::Engineer] {
         ids.push(crew.sprite_id());
     }
@@ -829,6 +1086,7 @@ impl Plugin for CarrierPlugin {
                     show_selected_ship,
                     carrier_hints,
                     sync_overlay,
+                    hover_buttons,
                 )
                     .chain()
                     // Esc closes an open panel instead of pausing.
@@ -985,7 +1243,7 @@ fn spawn_carrier(
         standing(
             &mut art,
             &mut images,
-            PILOT_IDLE,
+            &pilot_frame(Facing::default(), false, 0.0).0,
             CHARACTER_H,
             world(feet).extend(depth(feet.y)),
         ),
@@ -1224,6 +1482,7 @@ fn tool_row(tool: Tool) -> usize {
 #[allow(clippy::too_many_arguments)]
 fn carrier_input(
     keys: Res<ButtonInput<KeyCode>>,
+    clicks: Query<(&Interaction, &Click), Changed<Interaction>>,
     time: Res<Time>,
     pause: Res<PauseMenu>,
     scene: Res<CarrierScene>,
@@ -1246,6 +1505,19 @@ fn carrier_input(
     let esc = keys.just_pressed(KeyCode::Escape);
     let back = esc || keys.just_pressed(KeyCode::KeyX) || keys.just_pressed(KeyCode::Backspace);
     let dt = time.delta_secs();
+    let clicked = clicks
+        .iter()
+        .find(|(i, _)| **i == Interaction::Pressed)
+        .map(|(_, c)| *c);
+    let leave = clicked == Some(Click::Leave);
+    let digit = [
+        KeyCode::Digit1,
+        KeyCode::Digit2,
+        KeyCode::Digit3,
+        KeyCode::Digit4,
+    ]
+    .iter()
+    .position(|k| keys.just_pressed(*k));
 
     // Edit a copy so the overlay only reads as changed when it did.
     let mut current = overlay.clone();
@@ -1296,9 +1568,9 @@ fn carrier_input(
             index,
             launch,
         } => {
-            if back {
+            if back || leave {
                 next = Some(Overlay::None);
-            } else if confirm {
+            } else if confirm || clicked == Some(Click::Next) {
                 if *index + 1 < lines.len() {
                     *index += 1;
                 } else if let Some(ship) = *launch {
@@ -1309,9 +1581,9 @@ fn carrier_input(
             }
         }
         Overlay::Launch { index } => {
-            if back {
+            if back || leave {
                 next = Some(Overlay::None);
-            } else if confirm {
+            } else if confirm || clicked == Some(Click::Launch) {
                 launch.write(MissionRequest {
                     battleship_id: SHIPS[*index].id.to_string(),
                 });
@@ -1328,23 +1600,26 @@ fn carrier_input(
             };
             let up = keys.any_just_pressed([KeyCode::KeyW, KeyCode::ArrowUp]);
             let down = keys.any_just_pressed([KeyCode::KeyS, KeyCode::ArrowDown]);
-            let digit = [
-                KeyCode::Digit1,
-                KeyCode::Digit2,
-                KeyCode::Digit3,
-                KeyCode::Digit4,
-            ]
-            .iter()
-            .position(|k| keys.just_pressed(*k))
-            .filter(|&i| i < rows);
-            if keys.just_pressed(KeyCode::Tab) {
-                *tab = match tab {
+            let digit = digit.filter(|&i| i < rows);
+            let row = match clicked {
+                Some(Click::Row(i)) if i < rows => Some(i),
+                _ => None,
+            };
+            let to_tab = match clicked {
+                Some(Click::Tab(t)) => Some(t),
+                _ if keys.just_pressed(KeyCode::Tab) => Some(match tab {
                     WorkshopTab::Upgrades => WorkshopTab::Build,
                     WorkshopTab::Build => WorkshopTab::Upgrades,
-                };
-                *index = 0;
-                message.clear();
-            } else if back {
+                }),
+                _ => None,
+            };
+            if let Some(t) = to_tab {
+                if t != *tab {
+                    *tab = t;
+                    *index = 0;
+                    message.clear();
+                }
+            } else if back || leave {
                 next = Some(Overlay::None);
             } else if let Some(i) = digit {
                 *index = i;
@@ -1352,7 +1627,10 @@ fn carrier_input(
                 *index = (*index + rows - 1) % rows;
             } else if down {
                 *index = (*index + 1) % rows;
-            } else if confirm {
+            } else if confirm || row.is_some() {
+                if let Some(i) = row {
+                    *index = i;
+                }
                 let Some(game) = &mut save.game else {
                     return;
                 };
@@ -1374,22 +1652,15 @@ fn carrier_input(
                         // Spec § Save file: saved on every Workshop purchase.
                         save.store();
                     }
-                    WorkshopTab::Build => {
-                        let tool = BUILD_TOOLS[*index];
-                        let lock = match tool {
-                            Tool::Place(piece) => workshop::build_lock(game, piece),
-                            Tool::Demolish => None,
-                        };
-                        match lock {
-                            Some(e) => *message = format!("{}: {e}.", tool_name(tool)),
-                            None => {
-                                next = Some(Overlay::Build {
-                                    tool,
-                                    message: String::new(),
-                                })
-                            }
+                    WorkshopTab::Build => match pick_tool(game, BUILD_TOOLS[*index]) {
+                        Err(e) => *message = e,
+                        Ok(tool) => {
+                            next = Some(Overlay::Build {
+                                tool,
+                                message: String::new(),
+                            })
                         }
-                    }
+                    },
                 }
             }
         }
@@ -1397,13 +1668,27 @@ fn carrier_input(
             // The Pilot waits; WASD pans the view.
             let zoom = ZOOMS[view.zoom];
             view.pan += world(wasd(&keys)) * PAN_SPEED * dt / zoom;
-            if keys.just_pressed(KeyCode::KeyX) {
+            let game = save.game.clone().unwrap_or_default();
+            let pick = match clicked {
+                Some(Click::Tool(t)) => Some(t),
+                Some(Click::Category(c)) => Some(category_tool(&game, c)),
+                _ => digit.map(|i| BUILD_TOOLS[i]),
+            };
+            if let Some(t) = pick {
+                match pick_tool(&game, t) {
+                    Ok(t) => {
+                        *tool = t;
+                        message.clear();
+                    }
+                    Err(e) => *message = e,
+                }
+            } else if keys.just_pressed(KeyCode::KeyX) {
                 *tool = match tool {
                     Tool::Demolish => Tool::Place(Piece::Corridor),
                     Tool::Place(_) => Tool::Demolish,
                 };
                 message.clear();
-            } else if esc {
+            } else if esc || leave {
                 next = Some(Overlay::workshop(
                     WorkshopTab::Build,
                     tool_row(*tool),
@@ -1459,6 +1744,7 @@ fn build_click(
     mouse: Res<ButtonInput<MouseButton>>,
     pause: Res<PauseMenu>,
     cursor: Res<BuildCursor>,
+    ui: Query<&Interaction>,
     mut save: ResMut<SaveSlot>,
     mut overlay: ResMut<Overlay>,
 ) {
@@ -1473,7 +1759,8 @@ fn build_click(
         *overlay = back;
         return;
     }
-    if !mouse.just_pressed(MouseButton::Left) {
+    // A click on the build panels is theirs (`carrier_input`), not the deck's.
+    if !mouse.just_pressed(MouseButton::Left) || ui.iter().any(|i| *i != Interaction::None) {
         return;
     }
     let (Some(cell), Some(game)) = (cursor.0, save.game.as_mut()) else {
@@ -1620,10 +1907,11 @@ fn build_mode_camera(
     }
 }
 
-/// Keeps the camera centre within one cell past the hull on each side, or
-/// centred on the hull when the view is bigger than that.
-pub fn clamp_camera(target: Vec2, half_view: Vec2) -> Vec2 {
-    let min = Vec2::new(-CELL, -(HULL_H as f32 + 1.0) * CELL);
+/// Keeps the camera centre within one cell past the hull on each side
+/// (plus `below` world px to the south, which Build mode's panels cover),
+/// or centred on that area when the view is bigger than it.
+pub fn clamp_camera(target: Vec2, half_view: Vec2, below: f32) -> Vec2 {
+    let min = Vec2::new(-CELL, -(HULL_H as f32 + 1.0) * CELL - below);
     let max = Vec2::new((HULL_W as f32 + 1.0) * CELL, CELL);
     let axis = |t: f32, lo: f32, hi: f32, half: f32| {
         if hi - lo <= 2.0 * half {
@@ -1663,7 +1951,12 @@ fn carrier_camera(
     } else {
         pilot.translation.truncate()
     };
-    let centre = clamp_camera(target, half);
+    let below = if view.building.is_some() {
+        BUILD_UI_H * scale
+    } else {
+        0.0
+    };
+    let centre = clamp_camera(target, half, below);
     if view.building.is_some() && view.pan != centre {
         view.pan = centre;
     }
@@ -1671,24 +1964,28 @@ fn carrier_camera(
     cam.translation.y = centre.y;
 }
 
-/// In Build mode, the hull cell under the mouse.
+/// In Build mode, the hull cell under the mouse; none over the panels.
 fn track_build_cursor(
     overlay: Res<Overlay>,
     autoplay: Option<Res<flow::Autoplay>>,
     windows: Query<&Window, With<PrimaryWindow>>,
     camera: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
+    ui: Query<&Interaction>,
     mut cursor: ResMut<BuildCursor>,
 ) {
     // Autoplay points the cursor itself.
     if autoplay.is_some() || !matches!(*overlay, Overlay::Build { .. }) {
         return;
     }
-    if let Some(p) = cursor_world(&windows, &camera) {
-        let g = grid(p);
-        let cell = Some(layout::cell_at(g.x, g.y));
-        if cursor.0 != cell {
-            cursor.0 = cell;
-        }
+    let over_ui = ui.iter().any(|i| *i != Interaction::None);
+    let cell = cursor_world(&windows, &camera)
+        .filter(|_| !over_ui)
+        .map(|p| {
+            let g = grid(p);
+            layout::cell_at(g.x, g.y)
+        });
+    if cursor.0 != cell {
+        cursor.0 = cell;
     }
 }
 
@@ -1751,8 +2048,9 @@ fn ghost(game: &SaveGame, tool: Tool, (x, y): (i32, i32)) -> Option<Ghost> {
     }
 }
 
-/// Build mode visuals: a slot marker on every empty cell next to the
-/// network, and the ghost at the cursor (green = legal, red + why).
+/// Build mode visuals: the grid overlay on every hull cell, a slot marker
+/// on every empty cell next to the network, and the ghost at the cursor
+/// (blue-white = a click works, red + why, also in the error tooltip).
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn build_preview(
     mut commands: Commands,
@@ -1776,6 +2074,15 @@ fn build_preview(
     let Overlay::Build { tool, .. } = &*overlay else {
         return;
     };
+    for y in 0..HULL_H {
+        for x in 0..HULL_W {
+            let (centre, size) = piece_rect(x, y, (1, 1));
+            commands.spawn((
+                floor(&mut art, &mut images, GRID_OVERLAY, centre, size, Z_GRID),
+                BuildUi,
+            ));
+        }
+    }
     let preview = cursor.0.and_then(|cell| ghost(&game, *tool, cell));
     let under_ghost = |x: i32, y: i32| {
         preview.as_ref().is_some_and(|g| {
@@ -1807,10 +2114,11 @@ fn build_preview(
         return;
     };
     let (centre, size) = piece_rect(x, y, footprint);
-    let tint = match (ok, tool) {
-        (true, Tool::Place(_)) => Color::srgba(0.55, 1.0, 0.55, 0.5),
-        (true, Tool::Demolish) => Color::srgba(1.0, 0.8, 0.3, 0.6),
-        (false, _) => Color::srgba(1.0, 0.35, 0.35, 0.5),
+    // The piece's real art, then the kit's tint swatch over its footprint.
+    let (tint, swatch) = if ok {
+        (Color::srgba(0.85, 0.95, 1.0, 0.75), GHOST_VALID)
+    } else {
+        (Color::srgba(1.0, 0.55, 0.55, 0.6), GHOST_INVALID)
     };
     commands.spawn((
         ScreenEntity,
@@ -1823,10 +2131,14 @@ fn build_preview(
         },
         Transform::from_translation(centre.extend(Z_GHOST)),
     ));
+    commands.spawn((
+        floor(&mut art, &mut images, swatch, centre, size, Z_GHOST + 0.5),
+        BuildUi,
+    ));
     let color = if ok {
-        Color::srgb(0.6, 1.0, 0.6)
+        Color::srgb(0.88, 0.96, 1.0)
     } else {
-        Color::srgb(1.0, 0.5, 0.45)
+        Color::srgb(1.0, 0.55, 0.5)
     };
     commands.spawn((
         label(
@@ -1837,6 +2149,49 @@ fn build_preview(
         ),
         BuildUi,
     ));
+    if !ok {
+        // The kit's error tooltip.
+        let title = match tool {
+            Tool::Place(_) => "Can't build here",
+            Tool::Demolish => "Can't demolish",
+        };
+        commands
+            .spawn((
+                ScreenEntity,
+                BuildUi,
+                kit(&mut art, &mut images, UI_TOOLTIP),
+                // Top right, under the wallet, clear of the panels.
+                Node {
+                    position_type: PositionType::Absolute,
+                    right: px(16),
+                    top: px(112),
+                    max_width: px(220),
+                    flex_direction: FlexDirection::Column,
+                    padding: UiRect::all(px(14)),
+                    row_gap: px(4),
+                    ..default()
+                },
+                GlobalZIndex(6),
+            ))
+            .with_children(|p| {
+                p.spawn((
+                    Text::new(title),
+                    TextFont {
+                        font_size: FontSize::Px(16.0),
+                        ..default()
+                    },
+                    TextColor(BUILD_GOLD),
+                ));
+                p.spawn((
+                    Text::new(text),
+                    TextFont {
+                        font_size: FontSize::Px(14.0),
+                        ..default()
+                    },
+                    TextColor(Color::srgb(1.0, 0.75, 0.7)),
+                ));
+            });
+    }
 }
 
 /// Marks the docked ship the save has selected: a highlight ring and
@@ -1921,16 +2276,21 @@ fn room_under(save: &SaveSlot, p: Vec2) -> Option<RoomId> {
     }
 }
 
-/// Walk-cycle frame for the Pilot after `walked` px; idle when standing.
-fn pilot_frame(moving: bool, walked: f32) -> &'static str {
-    if !moving {
-        return PILOT_IDLE;
-    }
-    PILOT_FRAMES[(walked / STRIDE) as usize % PILOT_FRAMES.len()]
+/// The Pilot's frame facing `facing` after `walked` px (idle when
+/// standing), and whether to mirror it.
+fn pilot_frame(facing: Facing, moving: bool, walked: f32) -> (String, bool) {
+    let (dir, flip) = facing.art();
+    let frame = if moving {
+        PILOT_WALK[(walked / STRIDE) as usize % PILOT_WALK.len()]
+    } else {
+        "idle"
+    };
+    (format!("core.carrier.pilot.{dir}.{frame}"), flip)
 }
 
-/// The side-view walk sheet: flipped when walking west, the last facing
-/// kept for north and south (§ Walking and interaction › Pilot art).
+/// Picks the Pilot's frame from how it moved this frame (click-to-move and
+/// WASD alike), snapped to 8 directions; standing keeps the last facing
+/// (§ Walking and interaction › Pilot art).
 fn animate_pilot(
     mut art: ResMut<ContentImages>,
     mut images: ResMut<Assets<Image>>,
@@ -1945,14 +2305,17 @@ fn animate_pilot(
     let moving = d.length() > 0.01;
     if moving {
         pilot.walked += d.length();
-        // The art faces right.
-        if d.x.abs() > 0.01 {
-            sprite.flip_x = d.x < 0.0;
+        if let Some(facing) = Facing::of(grid(d)) {
+            pilot.facing = facing;
         }
     } else {
         pilot.walked = 0.0;
     }
-    if let Some(image) = art.get(&mut images, pilot_frame(moving, pilot.walked)) {
+    let (id, flip) = pilot_frame(pilot.facing, moving, pilot.walked);
+    if sprite.flip_x != flip {
+        sprite.flip_x = flip;
+    }
+    if let Some(image) = art.get(&mut images, &id) {
         if sprite.image != image {
             sprite.image = image;
         }
@@ -2068,16 +2431,19 @@ fn sync_overlay(
             let line = lines[*index];
             let portrait = portrait(&mut art, &mut images, line.speaker, line.expression);
             let more = if *index + 1 < lines.len() {
-                "[E] Next"
+                "[Click / E] Next"
             } else if launch.is_some() {
-                "[E] Launch prep"
+                "[Click / E] Launch prep"
             } else {
-                "[E] Close"
+                "[Click / E] Close"
             };
             commands
                 .spawn((
                     ScreenEntity,
                     OverlayUi,
+                    // A click anywhere on the box advances it.
+                    Button,
+                    Click::Next,
                     panel_bg,
                     border,
                     Node {
@@ -2127,10 +2493,14 @@ fn sync_overlay(
                             font(20.0, line.speaker.color()),
                         ));
                         c.spawn((Text::new(line.text), font(19.0, Color::WHITE)));
-                        c.spawn((
-                            Text::new(format!("{more}    [X] Leave")),
-                            font(14.0, Color::srgb(0.6, 0.7, 0.75)),
-                        ));
+                        c.spawn(Node {
+                            column_gap: px(10),
+                            ..default()
+                        })
+                        .with_children(|row| {
+                            text_button(row, Click::Next, more);
+                            text_button(row, Click::Leave, "[Click / X] Leave");
+                        });
                     });
                 });
         }
@@ -2165,10 +2535,14 @@ fn sync_overlay(
                         Text::new(ship_card(ship, levels)),
                         font(14.0, Color::srgb(0.82, 0.86, 0.9)),
                     ));
-                    p.spawn((
-                        Text::new("[E] Launch    [X] Back"),
-                        font(15.0, Color::srgb(0.6, 0.7, 0.75)),
-                    ));
+                    p.spawn(Node {
+                        column_gap: px(10),
+                        ..default()
+                    })
+                    .with_children(|row| {
+                        text_button(row, Click::Launch, "[Click / E] Launch");
+                        text_button(row, Click::Leave, "[Click / X] Back");
+                    });
                 });
         }
         Overlay::Workshop {
@@ -2228,18 +2602,17 @@ fn sync_overlay(
                     })
                     .with_children(|tabs| {
                         tabs.spawn((Text::new("Workshop"), font(22.0, Color::WHITE)));
+                        for (t, name) in
+                            [(WorkshopTab::Upgrades, "Upgrades"), (WorkshopTab::Build, "Build")]
+                        {
+                            tabs.spawn((Button, Click::Tab(t)))
+                                .with_child((Text::new(name), font(20.0, tab_color(t))));
+                        }
                         tabs.spawn((
-                            Text::new("Upgrades"),
-                            font(20.0, tab_color(WorkshopTab::Upgrades)),
-                        ));
-                        tabs.spawn((
-                            Text::new("Build"),
-                            font(20.0, tab_color(WorkshopTab::Build)),
-                        ));
-                        tabs.spawn((
-                            Text::new("[Tab] switch"),
+                            Text::new("[Click / Tab] switch"),
                             font(15.0, Color::srgb(0.6, 0.7, 0.75)),
                         ));
+                        text_button(tabs, Click::Leave, "[Click / X] Close");
                     });
                     p.spawn((
                         Text::new(format!(
@@ -2273,7 +2646,8 @@ fn sync_overlay(
                                 } else {
                                     Color::srgb(0.7, 0.72, 0.75)
                                 };
-                                p.spawn(row_bg(i == *index)).with_children(|row| {
+                                p.spawn((row_bg(i == *index), Button, Click::Row(i)))
+                                    .with_children(|row| {
                                     if let Some(icon) = art.get(&mut images, upgrade.icon_id()) {
                                         row.spawn(icon_node(icon, 24.0));
                                     }
@@ -2345,7 +2719,8 @@ fn sync_overlay(
                                 } else {
                                     Color::srgb(0.7, 0.72, 0.75)
                                 };
-                                p.spawn(row_bg(i == *index)).with_children(|row| {
+                                p.spawn((row_bg(i == *index), Button, Click::Row(i)))
+                                    .with_children(|row| {
                                     let cells = [
                                         (format!("{} {}", i + 1, tool_name(*tool)), 170.0),
                                         (size, 50.0),
@@ -2373,58 +2748,315 @@ fn sync_overlay(
                     }
                     let keys = match tab {
                         WorkshopTab::Upgrades => {
-                            "[W]/[S] or [1]-[3] Choose    [E] Buy    [Tab] Build    [X] Close"
+                            "[Click a row] Buy    [W]/[S] or [1]-[3] Choose    [E] Buy    [Tab] Build    [X] Close"
                         }
                         WorkshopTab::Build => {
-                            "[W]/[S] or [1]-[4] Choose    [E] Pick    [Tab] Upgrades    [X] Close"
+                            "[Click a row] Pick    [W]/[S] or [1]-[4] Choose    [E] Pick    [Tab] Upgrades    [X] Close"
                         }
                     };
                     p.spawn((Text::new(keys), font(15.0, Color::srgb(0.6, 0.7, 0.75))));
                 });
         }
         Overlay::Build { tool, message } => {
-            commands
-                .spawn((
-                    ScreenEntity,
-                    OverlayUi,
-                    panel_bg,
-                    border,
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: px(24),
-                        right: px(24),
-                        bottom: px(14),
-                        flex_direction: FlexDirection::Column,
-                        padding: UiRect::axes(px(12), px(8)),
-                        row_gap: px(4),
-                        border: UiRect::all(px(1)),
-                        ..default()
-                    },
-                ))
+            spawn_build_ui(&mut commands, &mut art, &mut images, &game, *tool, message);
+        }
+    }
+}
+
+/// Build mode's screen, after the ONI-style mock
+/// (design/art/demo-v2/builder-ui): the category bar bottom left, the
+/// flyout of build cards with cost chips (greyed out when locked), and the
+/// detail panel for the picked tool. The error tooltip is `build_preview`'s.
+fn spawn_build_ui(
+    commands: &mut Commands,
+    art: &mut ContentImages,
+    images: &mut Assets<Image>,
+    game: &SaveGame,
+    tool: Tool,
+    message: &str,
+) {
+    let credits = art.get(images, art::ids::ICON_CREDITS);
+    let crystal = art.get(images, art::ids::ICON_VOID_CRYSTAL);
+    let chip = kit(art, images, UI_COST_CHIP);
+    let font = |size: f32, color: Color| {
+        (
+            TextFont {
+                font_size: FontSize::Px(size),
+                ..default()
+            },
+            TextColor(color),
+        )
+    };
+    let cost_chip = |p: &mut ChildSpawnerCommands, cost: workshop::Cost, color: Color| {
+        p.spawn((
+            chip.clone(),
+            Node {
+                align_items: AlignItems::Center,
+                align_self: AlignSelf::Start,
+                column_gap: px(2),
+                padding: UiRect::axes(px(6), px(2)),
+                ..default()
+            },
+        ))
+        .with_children(|c| {
+            let parts = [(&credits, cost.credits), (&crystal, cost.void_crystal)];
+            for (icon, amount) in parts.into_iter().filter(|(_, a)| *a > 0) {
+                if let Some(icon) = icon {
+                    c.spawn(icon_node(icon.clone(), 14.0));
+                }
+                c.spawn((Text::new(amount.to_string()), font(13.0, color)));
+            }
+        });
+    };
+    // Panels catch the mouse, so clicks on them don't build underneath.
+    let panel = |image: ImageNode| {
+        (
+            image,
+            Interaction::default(),
+            FocusPolicy::Block,
+            Node {
+                flex_direction: FlexDirection::Column,
+                flex_shrink: 0.0,
+                padding: UiRect::all(px(12)),
+                row_gap: px(5),
+                ..default()
+            },
+        )
+    };
+    let current = BuildCategory::of(tool);
+    let card_style = |t: Tool| {
+        if tool_lock(game, t).is_some() {
+            UI_CARD_DISABLED
+        } else if t == tool {
+            UI_CARD_SELECTED
+        } else {
+            UI_CARD
+        }
+    };
+    let categories: Vec<_> = BuildCategory::ALL
+        .iter()
+        .map(|&c| {
+            let style = if c == current {
+                UI_CARD_SELECTED
+            } else {
+                UI_CARD
+            };
+            (
+                c,
+                art.get(images, &c.icon_id()).unwrap_or_default(),
+                kit(art, images, style),
+            )
+        })
+        .collect();
+    let cards: Vec<_> = BUILD_TOOLS
+        .iter()
+        .map(|&t| {
+            let card = tool_card(game, t);
+            let icon = art.get(images, &card.icon_id).unwrap_or_default();
+            (t, card, icon, kit(art, images, card_style(t)))
+        })
+        .collect();
+    let panels: Vec<_> = (0..3).map(|_| kit(art, images, UI_PANEL)).collect();
+    let mut panels = panels.into_iter();
+    let detail = tool_card(game, tool);
+
+    // One row along the bottom edge: category bar, flyout, detail panel.
+    commands
+        .spawn((
+            ScreenEntity,
+            OverlayUi,
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(12),
+                right: px(12),
+                bottom: px(12),
+                column_gap: px(8),
+                align_items: AlignItems::End,
+                ..default()
+            },
+            GlobalZIndex(5),
+        ))
+        .with_children(|root| {
+            // Category bar.
+            root.spawn(panel(panels.next().unwrap_or_default()))
                 .with_children(|p| {
-                    p.spawn((
-                        Text::new(format!(
-                            "Build mode: {}    Credits {}    Void Crystal {}",
-                            tool.label(),
-                            game.credits,
-                            workshop::void_crystal(&game)
-                        )),
-                        font(18.0, Color::WHITE),
-                    ));
-                    if !message.is_empty() {
+                    for (c, icon, button) in categories {
                         p.spawn((
-                            Text::new(message.clone()),
-                            font(16.0, Color::srgb(1.0, 0.85, 0.4)),
+                            Button,
+                            Click::Category(c),
+                            button,
+                            Node {
+                                width: px(BUILD_CATEGORY_BUTTON),
+                                height: px(BUILD_CATEGORY_BUTTON),
+                                padding: UiRect::all(px(5)),
+                                ..default()
+                            },
+                        ))
+                        .with_child((
+                            ImageNode::new(icon),
+                            Node {
+                                width: percent(100),
+                                height: percent(100),
+                                ..default()
+                            },
                         ));
                     }
+                });
+
+            // Flyout of build cards.
+            root.spawn(panel(panels.next().unwrap_or_default()))
+                .with_children(|p| {
+                    p.spawn((Text::new(current.name()), font(18.0, BUILD_GOLD)));
+                    p.spawn(Node {
+                        column_gap: px(6),
+                        ..default()
+                    })
+                    .with_children(|row| {
+                        for (t, card, icon, style) in cards {
+                            let locked = card.lock.is_some();
+                            let (text, dim) = if locked {
+                                (Color::srgb(0.55, 0.6, 0.62), Color::srgb(0.45, 0.45, 0.45))
+                            } else {
+                                (BUILD_GOLD, Color::WHITE)
+                            };
+                            row.spawn((
+                                Button,
+                                Click::Tool(t),
+                                style,
+                                Node {
+                                    width: px(BUILD_CARD_W),
+                                    height: px(BUILD_CARD_H),
+                                    padding: UiRect::all(px(9)),
+                                    column_gap: px(5),
+                                    align_items: AlignItems::Center,
+                                    ..default()
+                                },
+                            ))
+                            .with_children(|c| {
+                                c.spawn((
+                                    ImageNode::new(icon).with_color(dim),
+                                    Node {
+                                        width: px(30),
+                                        height: px(30),
+                                        flex_shrink: 0.0,
+                                        ..default()
+                                    },
+                                ));
+                                c.spawn(Node {
+                                    flex_direction: FlexDirection::Column,
+                                    flex_grow: 1.0,
+                                    flex_shrink: 1.0,
+                                    min_width: px(0),
+                                    row_gap: px(3),
+                                    ..default()
+                                })
+                                .with_children(|col| {
+                                    // Long names wrap inside the card.
+                                    col.spawn((Text::new(card.name), font(13.0, text)));
+                                    match card.cost {
+                                        Some(cost) => cost_chip(col, cost, text),
+                                        None => {
+                                            col.spawn((Text::new("full refund"), font(12.0, text)));
+                                        }
+                                    }
+                                    if let Some(lock) = card.lock {
+                                        col.spawn((
+                                            Text::new(lock.to_uppercase()),
+                                            font(10.0, Color::srgb(0.85, 0.85, 0.85)),
+                                        ));
+                                    }
+                                });
+                            });
+                        }
+                    });
                     p.spawn((
-                        Text::new(
-                            "[Left click] Place    [X] Demolish mode    [WASD] Pan    [Wheel] Zoom    [Right click]/[Esc] Back",
-                        ),
-                        font(15.0, Color::srgb(0.6, 0.7, 0.75)),
+                        Text::new("[Click] Place  [1]-[4]/[X] Pick  [WASD] Pan  [Wheel] Zoom"),
+                        font(11.0, Color::srgb(0.6, 0.7, 0.75)),
                     ));
                 });
-        }
+
+            // Detail panel for the picked tool.
+            root.spawn(panel(panels.next().unwrap_or_default()))
+                .insert(Node {
+                    flex_direction: FlexDirection::Column,
+                    flex_shrink: 1.0,
+                    flex_grow: 1.0,
+                    max_width: px(BUILD_DETAIL_W),
+                    padding: UiRect::all(px(12)),
+                    row_gap: px(4),
+                    ..default()
+                })
+                .with_children(|p| {
+                    let info = Color::srgb(0.8, 0.9, 0.92);
+                    p.spawn((Text::new(detail.name), font(18.0, BUILD_GOLD)));
+                    p.spawn((Text::new(detail.effect.clone()), font(12.0, Color::WHITE)));
+                    if !detail.size.is_empty() {
+                        p.spawn((
+                            Text::new(format!("Size: {}", detail.size)),
+                            font(12.0, info),
+                        ));
+                    }
+                    if !detail.doors.is_empty() {
+                        p.spawn((
+                            Text::new(format!("Doors: {}", detail.doors)),
+                            font(12.0, info),
+                        ));
+                    }
+                    if let Some(cost) = detail.cost {
+                        cost_chip(p, cost, BUILD_GOLD);
+                    }
+                    if let Some(lock) = detail.lock {
+                        p.spawn((
+                            Text::new(format!("Locked: {}", lock.to_lowercase())),
+                            font(12.0, Color::srgb(1.0, 0.6, 0.55)),
+                        ));
+                    }
+                    if !message.is_empty() {
+                        p.spawn((Text::new(message), font(12.0, Color::srgb(1.0, 0.85, 0.4))));
+                    }
+                    text_button(p, Click::Leave, "[Right click / Esc] Back");
+                });
+        });
+}
+
+/// A small bordered button in a Carrier panel.
+fn text_button(p: &mut ChildSpawnerCommands, click: Click, text: &str) {
+    p.spawn((
+        Button,
+        click,
+        Hoverable,
+        BackgroundColor(BUTTON_BG),
+        BorderColor::all(Color::srgb(0.35, 0.52, 0.58)),
+        Node {
+            padding: UiRect::axes(px(10), px(4)),
+            border: UiRect::all(px(1)),
+            align_self: AlignSelf::Start,
+            ..default()
+        },
+    ))
+    .with_child((
+        Text::new(text),
+        TextFont {
+            font_size: FontSize::Px(15.0),
+            ..default()
+        },
+        TextColor(Color::srgb(0.75, 0.9, 0.95)),
+    ));
+}
+
+/// Hover feedback for [`text_button`]s.
+#[allow(clippy::type_complexity)]
+fn hover_buttons(
+    mut buttons: Query<
+        (&Interaction, &mut BackgroundColor),
+        (Changed<Interaction>, With<Hoverable>),
+    >,
+) {
+    for (interaction, mut bg) in &mut buttons {
+        bg.0 = match interaction {
+            Interaction::None => BUTTON_BG,
+            _ => BUTTON_HOVER,
+        };
     }
 }
 
@@ -2434,10 +3066,38 @@ mod tests {
 
     #[test]
     fn pilot_walk_cycle_steps_with_distance_and_idles_when_still() {
-        assert_eq!(pilot_frame(false, 50.0), PILOT_IDLE);
-        assert_eq!(pilot_frame(true, 0.0), PILOT_FRAMES[0]);
-        assert_eq!(pilot_frame(true, STRIDE * 2.5), PILOT_FRAMES[2]);
-        assert_eq!(pilot_frame(true, STRIDE * 5.0), PILOT_FRAMES[1]);
+        let frame = |moving, walked| pilot_frame(Facing::S, moving, walked).0;
+        assert_eq!(frame(false, 50.0), "core.carrier.pilot.s.idle");
+        assert_eq!(frame(true, 0.0), "core.carrier.pilot.s.walk_1");
+        assert_eq!(frame(true, STRIDE * 2.5), "core.carrier.pilot.s.walk_3");
+        assert_eq!(frame(true, STRIDE * 5.0), "core.carrier.pilot.s.walk_2");
+    }
+
+    #[test]
+    fn pilot_faces_8_directions_mirroring_the_west_ones() {
+        let cases = [
+            ((1.0, 0.0), Facing::E, "e", false),
+            ((1.0, 1.0), Facing::SE, "se", false),
+            ((0.0, 1.0), Facing::S, "s", false),
+            ((-1.0, 1.0), Facing::SW, "se", true),
+            ((-1.0, 0.0), Facing::W, "e", true),
+            ((-1.0, -1.0), Facing::NW, "ne", true),
+            ((0.0, -1.0), Facing::N, "n", false),
+            ((1.0, -1.0), Facing::NE, "ne", false),
+            // Snapped to the nearest of the 8: mostly east, a bit south.
+            ((5.0, 1.0), Facing::E, "e", false),
+            ((1.0, 3.0), Facing::S, "s", false),
+        ];
+        for ((x, y), facing, dir, flip) in cases {
+            let f = Facing::of(Vec2::new(x, y)).unwrap();
+            assert_eq!(f, facing, "{x},{y}");
+            assert_eq!(f.art(), (dir, flip), "{x},{y}");
+            assert_eq!(
+                pilot_frame(f, false, 0.0),
+                (format!("core.carrier.pilot.{dir}.idle"), flip)
+            );
+        }
+        assert_eq!(Facing::of(Vec2::ZERO), None);
     }
 
     #[test]
@@ -2545,11 +3205,18 @@ mod tests {
     fn camera_stays_within_a_cell_of_the_hull() {
         let half = Vec2::new(640.0, 360.0);
         // Pilot at the north-west corner: the view stops one cell out.
-        let c = clamp_camera(Vec2::new(0.0, 0.0), half);
+        let c = clamp_camera(Vec2::new(0.0, 0.0), half, 0.0);
         assert_eq!(c, Vec2::new(-CELL + 640.0, CELL - 360.0));
         // Overview (1 / 0.65 scale): the whole hull fits, so it's centred.
-        let c = clamp_camera(Vec2::ZERO, half / 0.65);
+        let c = clamp_camera(Vec2::ZERO, half / 0.65, 0.0);
         assert_eq!(c.x, HULL_W as f32 * CELL / 2.0);
+        // Build mode: the view can go far enough south that the last hull
+        // row sits above the panels covering the screen bottom.
+        let half = half / ZOOMS[OVERVIEW];
+        let below = BUILD_UI_H / ZOOMS[OVERVIEW];
+        let c = clamp_camera(Vec2::new(0.0, -10_000.0), half, below);
+        let screen_bottom = c.y - half.y;
+        assert!(-(HULL_H as f32) * CELL - screen_bottom >= below, "{c}");
         assert_eq!(world(grid(Vec2::new(3.0, -4.0))), Vec2::new(3.0, -4.0));
     }
 
@@ -2576,6 +3243,55 @@ mod tests {
         let (ok, text, _) = apply_build_click(&mut game, Tool::Demolish, (10, 6));
         assert!(ok, "{text}");
         assert_eq!(game.credits, 290);
+    }
+
+    #[test]
+    fn build_cards_read_the_build_data_and_grey_out_when_locked() {
+        let mut game = SaveGame {
+            credits: 150,
+            ..Default::default()
+        };
+        game.resources.insert("void_crystal".into(), 4);
+        let bay = Tool::Place(Piece::Room(RoomId::SalvageBay));
+        let training = Tool::Place(Piece::Room(RoomId::TrainingRoom));
+        let card = tool_card(&game, bay);
+        assert_eq!(card.name, "Salvage Bay");
+        assert_eq!(card.icon_id, "core.ui.builder.module.salvage_bay");
+        assert_eq!(card.size, "2 x 2 cells");
+        assert_eq!(card.doors, "N, E, S, W");
+        assert_eq!(card.cost.map(cost_text).as_deref(), Some("120 cr + 3 VC"));
+        assert_eq!(card.lock, None);
+        assert_eq!(tool_card(&game, training).lock, Some("Can't afford"));
+        let corridor = tool_card(&game, Tool::Place(Piece::Corridor));
+        assert_eq!(
+            (corridor.size.as_str(), corridor.lock),
+            ("1 x 1 cell", None)
+        );
+        let demolish = tool_card(&game, Tool::Demolish);
+        assert_eq!((demolish.cost, demolish.lock), (None, None));
+
+        // Picking a greyed-out card explains why and keeps the tool.
+        assert_eq!(pick_tool(&game, bay), Ok(bay));
+        assert_eq!(
+            pick_tool(&game, training),
+            Err("Training Room: Need 200 cr + 6 VC.".into())
+        );
+        // A category picks its first card that isn't greyed out.
+        assert_eq!(category_tool(&game, BuildCategory::Rooms), bay);
+        assert_eq!(
+            category_tool(&game, BuildCategory::Corridors),
+            Tool::Place(Piece::Corridor)
+        );
+        assert_eq!(
+            category_tool(&game, BuildCategory::Demolish),
+            Tool::Demolish
+        );
+        workshop::build(&mut game, Piece::Corridor, 8, 6).unwrap();
+        workshop::build(&mut game, Piece::Room(RoomId::SalvageBay), 9, 5).unwrap();
+        assert_eq!(tool_card(&game, bay).lock, Some("Already built"));
+        // Every room is locked: the category still lands on its first card.
+        assert_eq!(category_tool(&game, BuildCategory::Rooms), bay);
+        assert_eq!(BuildCategory::of(training), BuildCategory::Rooms);
     }
 
     #[test]

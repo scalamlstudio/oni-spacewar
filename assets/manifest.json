@@ -6,7 +6,7 @@
       "id": "core",
       "version": "0.2.0",
       "gameplay_affecting": false,
-      "content_hash": "908f2cd5125ef76dca224244a25af755cc741a2216a95c104839c869f20cec22",
+      "content_hash": "44868c6bb6fcd8c128dfb6d6fa959b6f601ef52af428eafc168c08c68ebe91bc",
       "assets": [
         {
           "id": "core.battle.enemy.void_spitter",
@@ -306,15 +306,6 @@
           "gameplay_affecting": false
         },
         {
-          "id": "core.carrier.pilot.idle",
-          "kind": "image/png",
-          "source": "source/core/carrier/pilot/idle.png",
-          "processed": "packs/core/processed/carrier/pilot/idle.png",
-          "compressed": "packs/core/bundles/carrier/pilot/idle.png.zst",
-          "hash": "122e902e754f4ad7ca7db663fa8df99a85c80a7807d2183e2f121b21da4adf4e",
-          "gameplay_affecting": false
-        },
-        {
           "id": "core.carrier.pilot.n.idle",
           "kind": "image/png",
           "source": "source/core/carrier/pilot/n/idle.png",
@@ -492,42 +483,6 @@
           "processed": "packs/core/processed/carrier/pilot/se/walk_4.png",
           "compressed": "packs/core/bundles/carrier/pilot/se/walk_4.png.zst",
           "hash": "2f3bef00077ddc4e38beb51a34ea8cfab8b2354231d5c35a41b88f1e64007103",
-          "gameplay_affecting": false
-        },
-        {
-          "id": "core.carrier.pilot.walk_1",
-          "kind": "image/png",
-          "source": "source/core/carrier/pilot/walk_1.png",
-          "processed": "packs/core/processed/carrier/pilot/walk_1.png",
-          "compressed": "packs/core/bundles/carrier/pilot/walk_1.png.zst",
-          "hash": "492785a16cf522e6ba029914383ae635261192fd67f0c873cff298485a28c776",
-          "gameplay_affecting": false
-        },
-        {
-          "id": "core.carrier.pilot.walk_2",
-          "kind": "image/png",
-          "source": "source/core/carrier/pilot/walk_2.png",
-          "processed": "packs/core/processed/carrier/pilot/walk_2.png",
-          "compressed": "packs/core/bundles/carrier/pilot/walk_2.png.zst",
-          "hash": "ad02fcd7e4960a5c9107675485af61e9603ba87e3f558299edcbce9c3dfcd31d",
-          "gameplay_affecting": false
-        },
-        {
-          "id": "core.carrier.pilot.walk_3",
-          "kind": "image/png",
-          "source": "source/core/carrier/pilot/walk_3.png",
-          "processed": "packs/core/processed/carrier/pilot/walk_3.png",
-          "compressed": "packs/core/bundles/carrier/pilot/walk_3.png.zst",
-          "hash": "8434f71165f53f7decb7d3a5315fab2a3f672ce73da00ecab8b64bbf975c0e72",
-          "gameplay_affecting": false
-        },
-        {
-          "id": "core.carrier.pilot.walk_4",
-          "kind": "image/png",
-          "source": "source/core/carrier/pilot/walk_4.png",
-          "processed": "packs/core/processed/carrier/pilot/walk_4.png",
-          "compressed": "packs/core/bundles/carrier/pilot/walk_4.png.zst",
-          "hash": "4f6f34c846570789a44f5c29b3e2bc281f07feef1327c3e61cfacf83f41a1e4e",
           "gameplay_affecting": false
         },
         {
