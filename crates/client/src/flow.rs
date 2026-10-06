@@ -1121,6 +1121,46 @@ fn autoplay_flow(
                 }
                 return;
             }
+            // First visit: the builder screen with a (red) ghost, then walk
+            // the Pilot north-east and south-west across the Bridge so the
+            // shots show the 8-direction art (the Dock walk adds more).
+            if n == 0 && tag == "run" {
+                if at(2.3) {
+                    *overlay = Overlay::Build {
+                        tool: Tool::Place(Piece::Room(RoomId::SalvageBay)),
+                        message: String::new(),
+                    };
+                    cursor.0 = Some((7, 1));
+                }
+                if at(2.9) {
+                    autoplay.shoot(&mut commands, "11b-build-mode-first-visit");
+                }
+                if at(3.2) {
+                    *overlay = Overlay::None;
+                }
+                for (start, to, name) in [
+                    (3.5, Vec2::new(330.0, 100.0), "ne"),
+                    (4.9, Vec2::new(60.0, 230.0), "sw"),
+                ] {
+                    if at(start) {
+                        let order = pilot.single().ok().and_then(|tf| {
+                            carrier::order_walk(
+                                &scene.walkable,
+                                &scene.hotspots,
+                                carrier::grid(tf.translation.truncate()),
+                                to,
+                                None,
+                            )
+                        });
+                        if let Some(o) = order {
+                            *walk = o;
+                        }
+                    }
+                    if at(start + 0.5) {
+                        autoplay.shoot(&mut commands, &format!("11c-pilot-walk-{name}"));
+                    }
+                }
+            }
             // Between missions: build the spec's example Salvage Bay (and its
             // corridor) when it's affordable and not built yet, else buy the
             // first affordable upgrade.
@@ -1264,8 +1304,17 @@ fn autoplay_flow(
                     None => println!("autoplay: no path to berth {berth}"),
                 }
             }
+            if at(8.0) {
+                autoplay.shoot(
+                    &mut commands,
+                    &format!("{:02}e-walk-to-dock-a", 12 + n * 10),
+                );
+            }
             if at(8.7) {
-                autoplay.shoot(&mut commands, &format!("{:02}e-walk-to-dock", 12 + n * 10));
+                autoplay.shoot(
+                    &mut commands,
+                    &format!("{:02}e-walk-to-dock-b", 12 + n * 10),
+                );
             }
             if *since >= 7.5 && autoplay.boarded.is_none() {
                 if matches!(

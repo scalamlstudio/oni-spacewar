@@ -112,7 +112,8 @@ everything else below is a default Mika chose and Wei can tune._
 | Walkable in a corridor | a 64 × 68 px centre square (cell-local x 32–96, y 48–116) plus a lane to each open side: north x 32–96, y 0–48 · south x 32–96, y 116–128 · east x 96–128, y 48–116 · west x 0–32, y 48–116 |
 | Interact | the nearest hotspot within 56 px of the Pilot's feet, shown as an "E Talk" / "E Use" / "E Board" prompt; a hotspot can also be clicked |
 | Spawn | new game: Bridge cell (1,1) · after a mission: Kite Dock walkway cell (5,6) |
-| Pilot art | the demo keeps the side-view walk sheet for all 8 directions: flipped for anything with a west component, the last facing kept for straight north and south. A 4-direction sheet is a later art task |
+| Pilot art | 8 directions (TAKOAI-66): the facing is the Pilot's movement (click-to-move and WASD alike) snapped to the nearest of 8. S, SE, E, NE and N are drawn (`core.carrier.pilot.<dir>.idle` + `walk_1..4`); SW, W and NW mirror SE, E and NE. Standing shows the last direction's idle frame |
+| Panels | every Carrier panel also plays with the mouse alone (TAKOAI-66): a click on the dialogue box advances it and its options (Next / Launch prep / Close, Leave) are buttons; the launch confirm has Launch / Back buttons; the Workshop's tabs and rows are clickable (a row buys the upgrade or picks the piece) and it has a Close button. Keys still work, and prompts show both, e.g. `[Click / E]` |
 
 #### Layout model
 
@@ -135,11 +136,13 @@ everything else below is a default Mika chose and Wei can tune._
 |---|---|
 | Open | E at the Workshop bench opens the panel with two tabs: **Upgrades** (unchanged) and **Build**. Tab switches tabs |
 | Pick | the Build tab lists every piece with its footprint, effect, cost and a lock reason (already built, can't afford). Picking one closes the panel and enters Build mode |
-| Ghost | the piece's real sprite at 50% opacity follows the mouse, snapped so the mouse cell is the room's north-west cell. Green tint = legal; red tint plus one line saying why ("Must connect to a corridor", "Blocked", "Outside the hull", "Need 120 cr + 3 VC") |
+| Build screen | ONI-style, after `design/art/demo-v2/builder-ui/` (TAKOAI-66), along the bottom edge: a **category bar** (Rooms, Corridors, Demolish; a click picks the category's first available card), a **flyout** of build cards (Corridor, Salvage Bay, Training Room, Demolish) each with its icon, name and a cost chip, greyed out with the reason when it is already built or can't be afforded, and a **detail panel** for the picked piece (effect, size, doors, cost, lock, the last action's feedback, a Back button). Click a card or press 1–4 to pick; a greyed-out card explains why instead. The carrier's real room art stays underneath; the camera may pan far enough south that the last hull row clears the panels |
+| Ghost | the piece's real sprite, tinted, follows the mouse, snapped so the mouse cell is the room's north-west cell, with the kit's blue-white swatch when a click works and the red one when not, plus one line: the cost, or why not ("Must connect to a corridor", "Blocked", "Outside the hull", "Need 120 cr + 3 VC"). The reason also shows in the error tooltip (top right). Over the panels there is no ghost |
+| Grid | the hull's cells show the kit's grid overlay while in Build mode |
 | Slots | every empty cell next to the network (beside a corridor or in front of a free socket) shows the build-slot marker while in Build mode |
 | Place | left click on a legal spot pays and places it, then saves. A corridor stays selected for the next cell; a room returns to the Build tab |
 | Rotate | none. Rooms have fixed sockets; corridors shape themselves |
-| Demolish | X (or the Demolish button in the Build tab) toggles demolish mode: clicking a player-built piece removes it for a **full refund**, unless that would disconnect anything (red tint, "Something would be cut off"). The starting rooms and corridors can't be demolished |
+| Demolish | X, the Demolish card / category or the Demolish row in the Build tab picks demolish mode: clicking a player-built piece removes it for a **full refund**, unless that would disconnect anything (red, "Something would be cut off"). The starting rooms and corridors can't be demolished |
 | Cancel | right click or Esc leaves Build mode back to the panel; Esc again closes it |
 
 Placement is legal when the footprint is inside the hull, covers only empty
@@ -376,7 +379,8 @@ TAKOAI-53, replaced the 3 fixed waves):
   the start at seeded angles, outside the starting view (centre ≥ 130 px past
   its edge), ≥ 600 px apart. They can't be hit or destroyed, and don't
   rotate (a gentle pulse only). Every off-screen fissure has its own arrow at
-  the screen edge pointing at it; the arrow goes while it's on screen.
+  the screen edge pointing at it, in the v2 fissure's rim colours
+  (violet-magenta with a teal inner edge); the arrow goes while it's on screen.
 - **Spawn director:** one enemy at a time out of a random fissure, on a ring
   60 px from its centre. First spawn 2 s in. The gap between spawns falls
   from 1.33 s to 0.5 s and the Spitter share rises from 10% to 40%, both

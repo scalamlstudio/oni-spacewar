@@ -42,7 +42,7 @@ crates/
     src/art.rs          ContentImages: shipped images by stable content ID (manifest -> processed PNG), cached
     src/flow.rs         first-playable scene state machine, Title / Result UI, --autoplay QA driver: Title → Carrier → Battle → Result
     src/layout.rs       2.5D carrier layout rules, no Bevy: hull grid, room catalogue, corridor masks, connectivity, can_place / can_demolish, walkable rects, click-to-move pathing, save validation + v3 Dock split
-    src/carrier.rs      Carrier scene: draws the layout, click-to-move + 8-direction WASD walking, crew dialogue, one-berth Docks (board a ship → briefing → launch), camera / zoom, Workshop panel (Upgrades + Build tabs), Build mode
+    src/carrier.rs      Carrier scene: draws the layout, click-to-move + 8-direction WASD walking, crew dialogue, one-berth Docks (board a ship → briefing → launch), camera / zoom, Workshop panel (Upgrades + Build tabs), ONI-style Build mode screen (builder UI kit), clickable panels
     src/workshop.rs     Workshop rules: upgrade costs / levels / buy(), and Build: build_lock / can_build / build / demolish (full refund)
     src/hints.rs        one-time tutorial hints: triggers, display queue, seen IDs in the save
     src/save.rs         versioned JSON save data in the OS data directory (override: ONI_SAVE_DIR) + migration
@@ -216,8 +216,7 @@ cargo run --release --bin content-pipeline -- .
 ```
 
 `demo-art-import` keys out each image's flat background (art that already
-has a transparent background is only cropped), cuts the Pilot walk sheet
-(idle + 4 frames, shared canvas) and the icon sheet (5 icons) with the same
+has a transparent background is only cropped), cuts the icon sheet (5 icons) with the same
 sheet slicer as the portraits, scales everything down to its in-game size
 and writes `assets/source/core/{battle,carrier,title,ui/icon}/...`. Restyled
 pieces from `design/art/demo-v2/` are rows in its `V2_SPRITES` table (so far
@@ -283,9 +282,16 @@ means a new table row.
   layers. Characters are scaled by their visible pixels (`standing`), so the
   Pilot and the crew are the same height (`CHARACTER_H`), and anchored at
   their visible feet (`Anchor`), so the Pilot's translation is the point
-  walking and collision use. The Pilot keeps the
-  side-view walk sheet in all 8 directions (flipped for west, the facing
-  kept for straight north / south). The
+  walking and collision use. The Pilot faces 8 directions
+  (`carrier::Facing::of`, its movement snapped to the nearest octant; client
+  code, so a float `atan2` is fine): S, SE, E, NE and N are drawn
+  (`core.carrier.pilot.<dir>.{idle,walk_1..4}`, exported by
+  `design/art/demo-v2/pilot-8dir/make-pilot-8dir.mjs`, not by
+  `demo-art-import`) and SW, W, NW mirror SE, E, NE (`Facing::art`);
+  standing keeps the last facing's idle frame (`pilot_frame`). Every Carrier
+  panel is also clickable: its parts carry a `Click` component (dialogue
+  next / leave, launch, Workshop tab / row, build card / category) that
+  `carrier_input` reads alongside the keys. The
   camera follows the Pilot, clamped to one cell past the hull
   (`clamp_camera`), with three zoom levels on the mouse wheel (`ZOOMS`); Build
   mode switches to Overview and pans with WASD instead. Pure helpers
@@ -297,8 +303,17 @@ means a new table row.
   the `MissionConfig`.
 - **Building** (Workshop bench → Build tab → `Overlay::Build`). The Build tab
   lists `BUILD_TOOLS` (Corridor, Salvage Bay, Training Room, Demolish) with
-  `workshop::build_lock` (already built / can't afford). In Build mode the
-  ghost (the piece's art, green or red, plus one line) follows `BuildCursor`;
+  `workshop::build_lock` (already built / can't afford). Build mode's screen
+  (`spawn_build_ui`, after `design/art/demo-v2/builder-ui/`) is one row of
+  9-sliced `core.ui.builder.*` panels along the bottom: the category bar
+  (`BuildCategory`, `category_tool`), the flyout of cards and the detail
+  panel, both filled from `tool_card` (name, module icon, cost chip, effect,
+  size, doors, lock); `pick_tool` refuses a greyed-out card with its reason.
+  The panels carry `Interaction`, so `build_click` / `track_build_cursor`
+  ignore the mouse over them, and `clamp_camera` lets the Build camera pan
+  `BUILD_UI_H` further south. `build_preview` draws the grid overlay, the
+  slots and the ghost (the piece's art plus the kit's valid / invalid
+  swatch, the cost or reason line, and the error tooltip) at `BuildCursor`;
   a left click runs `apply_build_click` → `workshop::build` (pays and places)
   or `workshop::demolish` (full refund) and saves. Right click / Esc go back
   to the tab (Esc on the Carrier closes panels before it opens the pause
@@ -371,7 +386,8 @@ means a new table row.
   held while `MAX_LIVE_ENEMIES` are alive. Spitters strafe around their
   target inside their range band (`Enemy::orbit`, picked at spawn). The sim's starting-view size mirrors the client's default window
   at `BATTLE_ZOOM` (`DEFAULT_WINDOW`); a client test keeps them equal. The
-  off-screen fissure arrows (`render::fissure_pointers`, one per fissure)
+  off-screen fissure arrows (`render::fissure_pointers`, one per fissure,
+  violet-magenta with a teal inner edge to match the v2 fissure art)
   and the nebula sky (`sky.rs`) are client-only.
 - **Nebula sky** (`sky.rs` + `sky.wgsl`, TAKOAI-58). One `SkyMaterial`
   (`Material2d`, shader embedded with `embedded_asset!`) on a unit quad that
