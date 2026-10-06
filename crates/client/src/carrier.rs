@@ -1971,7 +1971,7 @@ fn update_prompt(
     let near = nearest_hotspot(&scene.hotspots, grid(pilot.translation.truncate()));
     match near {
         Some((hotspot, at)) if *overlay == Overlay::None => {
-            let label = format!("[E] {}", hotspot.verb());
+            let label = format!("[Click / E] {}", hotspot.verb());
             if text.0 != label {
                 text.0 = label;
             }
