@@ -724,9 +724,12 @@ pub struct DockedShip {
     pub half: Vec2,
 }
 
-/// "Selected" tag over the docked ship the save will launch.
+/// A Dock's "Next: Elimination" line; it also reads "Selected" for the
+/// ship the save will launch (kept in the label stack, clear of the ship).
 #[derive(Component)]
-struct SelectedTag;
+struct DockNext {
+    ship: usize,
+}
 
 /// One live value in the Carrier HUD.
 #[derive(Component, Clone, Copy, PartialEq)]
@@ -970,10 +973,6 @@ fn spawn_carrier(
     scene.drawn = None;
     *view = CarrierView::default();
     // Space behind the hull is the nebula sky (`crate::sky`).
-    commands.spawn((
-        label("Selected", 13.0, Color::srgb(0.5, 0.9, 1.0), Vec3::ZERO),
-        SelectedTag,
-    ));
 
     // The Pilot (player character).
     let spawn = if arrival.from_mission {
@@ -997,7 +996,8 @@ fn spawn_carrier(
         label("", 16.0, Color::WHITE, Vec3::new(0.0, 0.0, Z_LABEL + 1.0)),
         Prompt,
     ));
-    // Wallet and current room, top right.
+    // Wallet and current room, top right, on a backing panel so room
+    // labels scrolling under it never mix with its text.
     let credits = art.get(&mut images, art::ids::ICON_CREDITS);
     let crystal = art.get(&mut images, art::ids::ICON_VOID_CRYSTAL);
     let hud_font = || {
@@ -1019,8 +1019,11 @@ fn spawn_carrier(
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::End,
                 row_gap: px(2),
+                padding: UiRect::axes(px(10), px(6)),
                 ..default()
             },
+            BackgroundColor(Color::srgb(0.03, 0.05, 0.08)),
+            GlobalZIndex(5),
         ))
         .with_children(|p| {
             p.spawn(Node {
@@ -1103,6 +1106,7 @@ fn spawn_layout(
                     Vec3::new(centre.x, centre.y + size.y / 2.0 - 34.0, Z_LABEL),
                 ),
                 LayoutSprite,
+                DockNext { ship },
             ));
         }
     }
@@ -1835,12 +1839,12 @@ fn build_preview(
     ));
 }
 
-/// Marks the docked ship the save has selected: a highlight ring and a
-/// "Selected" tag; the other ship is dimmed.
+/// Marks the docked ship the save has selected: a highlight ring and
+/// "Selected" in its Dock's label; the other ship is dimmed.
 fn show_selected_ship(
     save: Res<SaveSlot>,
-    mut ships: Query<(&Transform, &DockedShip, &mut Sprite), Without<SelectedTag>>,
-    mut tag: Query<&mut Transform, With<SelectedTag>>,
+    mut ships: Query<(&Transform, &DockedShip, &mut Sprite)>,
+    mut next: Query<(&mut Text2d, &DockNext)>,
     mut gizmos: Gizmos,
 ) {
     let selected = save
@@ -1864,9 +1868,16 @@ fn show_selected_ship(
             for r in [ring, ring + 2.0] {
                 gizmos.circle_2d(centre, r, Color::srgb(0.5, 0.9, 1.0));
             }
-            if let Ok(mut tag) = tag.single_mut() {
-                tag.translation = (centre + Vec2::Y * (ring + 10.0)).extend(1.0);
-            }
+        }
+    }
+    for (mut text, dock) in &mut next {
+        let value = if dock.ship == selected {
+            "Selected - Next: Elimination"
+        } else {
+            "Next: Elimination"
+        };
+        if text.0 != value {
+            text.0 = value.to_string();
         }
     }
 }
@@ -1996,17 +2007,23 @@ fn update_hud(
             let layout = &save.game.as_ref()?.carrier;
             let (x, y) = layout::cell_at(feet.x, feet.y);
             Some(match layout.cell(x, y) {
-                Cell::Room(i) => layout.rooms[i].id.name(),
-                Cell::Corridor => "Corridor",
-                Cell::Empty => "",
+                Cell::Room(i) => {
+                    let room = &layout.rooms[i];
+                    match docked_ship(layout, room) {
+                        Some(ship) => format!("In: {} Dock", SHIPS[ship].name),
+                        None => format!("In: {}", room.id.name()),
+                    }
+                }
+                Cell::Corridor => "In: Corridor".to_string(),
+                Cell::Empty => String::new(),
             })
         })
-        .unwrap_or("");
+        .unwrap_or_default();
     for (mut text, field) in &mut hud {
         let value = match field {
             HudField::Credits => format!("{credits} credits  "),
             HudField::Crystal => format!("{crystal} Void Crystal"),
-            HudField::Room => room.to_string(),
+            HudField::Room => room.clone(),
         };
         if text.0 != value {
             text.0 = value;

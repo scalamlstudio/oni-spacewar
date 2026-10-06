@@ -141,7 +141,8 @@ fn spawn_hint_ui(mut commands: Commands) {
         .spawn((
             HintUi,
             Visibility::Hidden,
-            BackgroundColor(Color::srgba(0.05, 0.12, 0.16, 0.92)),
+            // Opaque: Carrier room labels scroll underneath.
+            BackgroundColor(Color::srgb(0.05, 0.12, 0.16)),
             BorderColor::all(Color::srgb(0.95, 0.8, 0.35)),
             Node {
                 position_type: PositionType::Absolute,

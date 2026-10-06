@@ -323,7 +323,7 @@ means a new table row.
   (`Hotspot::Berth`) or a click on the ship calls `interact_with`, which
   writes it to `selected_battleship`, plays the Pilot's briefing and ends in
   the launch confirm panel for that ship. The selected ship gets a highlight
-  ring and a "Selected" tag; the other is dimmed.
+  ring and "Selected" in its Dock's "Next: Elimination" label; the other is dimmed.
 - **Ship numbers have one source.** `sim::ShipSheet::new(loadout)` gives a
   battleship's stats after upgrades in human units; `ShipStats` (what the
   battle uses) is derived from it, and the Dock card and Workshop preview
@@ -394,7 +394,9 @@ means a new table row.
   `--shots` saves a screenshot of every scene. Use a scratch `ONI_SAVE_DIR`.
   The acceptance loop is `--missions 2` followed by `--continue --missions 0`.
   On macOS, wrap it in `caffeinate -d`: if the display sleeps the window stops
-  presenting and screenshots come out black.
+  presenting and screenshots come out black. For the same reason (a fully
+  covered window presents nothing), autoplay opens its window always-on-top
+  and activates it once winit has created it (`bring_window_to_front`).
 - Save data is client-only JSON with an explicit schema version (now 4). It
   stores credits, resources, purchased upgrades, selected battleship, tutorial
   hints seen, missions played and won, the last result and the carrier
