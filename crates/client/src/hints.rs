@@ -17,7 +17,7 @@ const SHOW_SECS: f32 = 6.0;
 pub enum Hint {
     /// First Carrier load.
     CarrierWalk,
-    /// First time the Pilot stands at something E can use.
+    /// First time the Pilot stands at something they can use.
     CarrierInteract,
     /// First time the Pilot walks into the Dock.
     Dock,
@@ -56,9 +56,13 @@ impl Hint {
 
     pub fn text(self) -> &'static str {
         match self {
-            Hint::CarrierWalk => "WASD to walk. E to talk or use.",
-            Hint::CarrierInteract => "[E] appears when you can talk to crew or use a console.",
-            Hint::Dock => "Pick a battleship here to start a mission.",
+            Hint::CarrierWalk => {
+                "Click to walk. Click a crew member, ship or the Workshop bench to use it."
+            }
+            Hint::CarrierInteract => {
+                "Click what the label points at to use it. E works too when you stand next to it."
+            }
+            Hint::Dock => "Click a battleship here to board it and start a mission.",
             Hint::Workshop => {
                 "W / S pick an upgrade, E buys it. Tab switches to Build for new rooms."
             }
@@ -279,5 +283,14 @@ mod tests {
         ];
         let ids: std::collections::BTreeSet<_> = all.iter().map(|h| h.id()).collect();
         assert_eq!(ids.len(), all.len());
+    }
+
+    #[test]
+    fn carrier_walk_hint_leads_with_click_to_move() {
+        // TAKOAI-62: click-to-move is the main Carrier control; WASD is a
+        // secondary input and no longer the headline.
+        let text = Hint::CarrierWalk.text();
+        assert!(text.starts_with("Click to walk."));
+        assert!(!text.contains("WASD"));
     }
 }

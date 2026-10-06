@@ -18,7 +18,7 @@ under [`crates/`](crates/), separate from the design docs — see
      has its own Dock: board it, then launch
    - Building: Workshop bench → Tab to the Build tab → pick a piece, then
      left-click a spot (green = legal); X toggles demolish (full refund),
-     right click / Esc goes back
+     WASD / arrows pan, mouse wheel zooms, right click / Esc goes back
    - Battle: left-click to move, auto-fire, Q / W skills, Esc pause;
      destroy 20 enemies and fly over loot to collect it
    - Save: `~/Library/Application Support/oni-spacewar/save.json` (macOS),
