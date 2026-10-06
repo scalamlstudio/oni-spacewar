@@ -6,7 +6,7 @@
       "id": "core",
       "version": "0.2.0",
       "gameplay_affecting": false,
-      "content_hash": "69aec89ea930733897136ea20e7f7fa98c34f555e6e245a85bf141f5466f0ade",
+      "content_hash": "908f2cd5125ef76dca224244a25af755cc741a2216a95c104839c869f20cec22",
       "assets": [
         {
           "id": "core.battle.enemy.void_spitter",
@@ -32,7 +32,7 @@
           "source": "source/core/battle/env/void_fissure.png",
           "processed": "packs/core/processed/battle/env/void_fissure.png",
           "compressed": "packs/core/bundles/battle/env/void_fissure.png.zst",
-          "hash": "7453bf90dd180d18d438cb3ebeedc1186d6987b2ecb8853625389d572d66ebc9",
+          "hash": "24e62f7b3800aa95f9f9fbc9574b533686f733224eb6187c328e6e92881daf41",
           "gameplay_affecting": false
         },
         {

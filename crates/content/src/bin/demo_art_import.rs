@@ -39,7 +39,7 @@ const SPRITES: [(&str, &str, u32, u32); 7] = [
         128,
     ),
     (
-        "demo-v2/void-fissure-v1",
+        "demo-v2/void-fissure-v2",
         "battle/env/void_fissure",
         192,
         192,
