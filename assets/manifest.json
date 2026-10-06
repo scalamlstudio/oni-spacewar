@@ -6,7 +6,7 @@
       "id": "core",
       "version": "0.2.0",
       "gameplay_affecting": false,
-      "content_hash": "7910de30834109146f23234991cdcf35ff64993c196a61b54d02b74027fd1892",
+      "content_hash": "69aec89ea930733897136ea20e7f7fa98c34f555e6e245a85bf141f5466f0ade",
       "assets": [
         {
           "id": "core.battle.enemy.void_spitter",
@@ -996,6 +996,150 @@
           "processed": "packs/core/processed/title/key_art.png",
           "compressed": "packs/core/bundles/title/key_art.png.zst",
           "hash": "a8bcdf4ae005278007cf60a92c5b7ee60a38e917cd35ba3632ed2bdeb2f7e086",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.ui.builder.category.corridors",
+          "kind": "image/png",
+          "source": "source/core/ui/builder/category/corridors.png",
+          "processed": "packs/core/processed/ui/builder/category/corridors.png",
+          "compressed": "packs/core/bundles/ui/builder/category/corridors.png.zst",
+          "hash": "87f3de46f25b5a34c2f52bf1cedf387f0d2a6f5ee051126e6a21c3b98172a06b",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.ui.builder.category.demolish",
+          "kind": "image/png",
+          "source": "source/core/ui/builder/category/demolish.png",
+          "processed": "packs/core/processed/ui/builder/category/demolish.png",
+          "compressed": "packs/core/bundles/ui/builder/category/demolish.png.zst",
+          "hash": "061df1ad443c10c373e15bab55f7299680af212c0133627c54fdcc7e3c51d947",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.ui.builder.category.rooms",
+          "kind": "image/png",
+          "source": "source/core/ui/builder/category/rooms.png",
+          "processed": "packs/core/processed/ui/builder/category/rooms.png",
+          "compressed": "packs/core/bundles/ui/builder/category/rooms.png.zst",
+          "hash": "47bd4db18ba23d5b698f489a9347beaa950459e216f19b5f5773b8873a7d17a9",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.ui.builder.cost_chip_bg",
+          "kind": "image/png",
+          "source": "source/core/ui/builder/cost_chip_bg.png",
+          "processed": "packs/core/processed/ui/builder/cost_chip_bg.png",
+          "compressed": "packs/core/bundles/ui/builder/cost_chip_bg.png.zst",
+          "hash": "81d174465e4b16ac212bda1ba5b63e8b2af725708a0f937ed002a714f8db053c",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.ui.builder.ghost.invalid",
+          "kind": "image/png",
+          "source": "source/core/ui/builder/ghost/invalid.png",
+          "processed": "packs/core/processed/ui/builder/ghost/invalid.png",
+          "compressed": "packs/core/bundles/ui/builder/ghost/invalid.png.zst",
+          "hash": "54f0f607c26fcf1fe2189ee7df40d1116b870a4d622c5ed37fe24c57c69bb5e7",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.ui.builder.ghost.valid",
+          "kind": "image/png",
+          "source": "source/core/ui/builder/ghost/valid.png",
+          "processed": "packs/core/processed/ui/builder/ghost/valid.png",
+          "compressed": "packs/core/bundles/ui/builder/ghost/valid.png.zst",
+          "hash": "08c402037a38feb56b5a679c2d313253face1fa99471e81dcc73ae74592091f0",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.ui.builder.grid_cell_overlay",
+          "kind": "image/png",
+          "source": "source/core/ui/builder/grid_cell_overlay.png",
+          "processed": "packs/core/processed/ui/builder/grid_cell_overlay.png",
+          "compressed": "packs/core/bundles/ui/builder/grid_cell_overlay.png.zst",
+          "hash": "cacf80f25f33915908d34776b5744cb16c9e7a808b860e654c05bea98f7ffdbf",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.ui.builder.module.corridor",
+          "kind": "image/png",
+          "source": "source/core/ui/builder/module/corridor.png",
+          "processed": "packs/core/processed/ui/builder/module/corridor.png",
+          "compressed": "packs/core/bundles/ui/builder/module/corridor.png.zst",
+          "hash": "efbb93d4a238c91ff80f52fa40ad57b25b08635fe09f28e663178db379466bab",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.ui.builder.module.demolish",
+          "kind": "image/png",
+          "source": "source/core/ui/builder/module/demolish.png",
+          "processed": "packs/core/processed/ui/builder/module/demolish.png",
+          "compressed": "packs/core/bundles/ui/builder/module/demolish.png.zst",
+          "hash": "061df1ad443c10c373e15bab55f7299680af212c0133627c54fdcc7e3c51d947",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.ui.builder.module.salvage_bay",
+          "kind": "image/png",
+          "source": "source/core/ui/builder/module/salvage_bay.png",
+          "processed": "packs/core/processed/ui/builder/module/salvage_bay.png",
+          "compressed": "packs/core/bundles/ui/builder/module/salvage_bay.png.zst",
+          "hash": "d04c0beb4a71051be4a85a7586c6da870900b08e53acc603a3bff0e5191c7cbd",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.ui.builder.module.training_room",
+          "kind": "image/png",
+          "source": "source/core/ui/builder/module/training_room.png",
+          "processed": "packs/core/processed/ui/builder/module/training_room.png",
+          "compressed": "packs/core/bundles/ui/builder/module/training_room.png.zst",
+          "hash": "31d2f75dac48ae8cff90007a687289232ee1477cf97ef9c02dcd69fc47082190",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.ui.builder.panel.card",
+          "kind": "image/png",
+          "source": "source/core/ui/builder/panel/card.png",
+          "processed": "packs/core/processed/ui/builder/panel/card.png",
+          "compressed": "packs/core/bundles/ui/builder/panel/card.png.zst",
+          "hash": "41412b4b97ed3d8e821e9f9bdff2ecd5e59fe321593159841d2dde7fa395b69c",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.ui.builder.panel.disabled_card",
+          "kind": "image/png",
+          "source": "source/core/ui/builder/panel/disabled_card.png",
+          "processed": "packs/core/processed/ui/builder/panel/disabled_card.png",
+          "compressed": "packs/core/bundles/ui/builder/panel/disabled_card.png.zst",
+          "hash": "152d38befcd6533f705a28657358fb3349aa2fede154b2b10767aab439b13c85",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.ui.builder.panel.outer_panel",
+          "kind": "image/png",
+          "source": "source/core/ui/builder/panel/outer_panel.png",
+          "processed": "packs/core/processed/ui/builder/panel/outer_panel.png",
+          "compressed": "packs/core/bundles/ui/builder/panel/outer_panel.png.zst",
+          "hash": "1d7dd8f3c1d711bb9b01f46e9a84a10ea732ee474973d6415ba03f4c8a2fd871",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.ui.builder.panel.selected_card",
+          "kind": "image/png",
+          "source": "source/core/ui/builder/panel/selected_card.png",
+          "processed": "packs/core/processed/ui/builder/panel/selected_card.png",
+          "compressed": "packs/core/bundles/ui/builder/panel/selected_card.png.zst",
+          "hash": "09a8ebef7bc48ff66874836d32bf7a03356adbbe0ea53e21f5ba2f39472cdc52",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.ui.builder.panel.tooltip",
+          "kind": "image/png",
+          "source": "source/core/ui/builder/panel/tooltip.png",
+          "processed": "packs/core/processed/ui/builder/panel/tooltip.png",
+          "compressed": "packs/core/bundles/ui/builder/panel/tooltip.png.zst",
+          "hash": "aa376a22fef9af239d29a78e7a8e34f36c3a062d7a8ebd18214e220cf789d327",
           "gameplay_affecting": false
         },
         {
