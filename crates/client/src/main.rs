@@ -28,11 +28,12 @@ mod workshop;
 use std::time::Duration;
 
 use bevy::app::ScheduleRunnerPlugin;
+use bevy::ecs::system::NonSendMarker;
 use bevy::log::LogPlugin;
 use bevy::prelude::*;
 use bevy::time::TimeUpdateStrategy;
-use bevy::window::{PresentMode, WindowResolution};
-use bevy::winit::WinitSettings;
+use bevy::window::{PresentMode, PrimaryWindow, WindowLevel, WindowResolution};
+use bevy::winit::{WinitSettings, WINIT_WINDOWS};
 use bevy_ggrs::prelude::*;
 use content::ContentManifest;
 use ggrs::DesyncDetection;
@@ -223,6 +224,13 @@ fn main() {
                     PresentMode::AutoNoVsync
                 },
                 desired_maximum_frame_latency: args.frame_latency.and_then(std::num::NonZero::new),
+                // macOS presents no frames for a fully covered window, so
+                // autoplay screenshots would be black: keep it on top.
+                window_level: if args.autoplay {
+                    WindowLevel::AlwaysOnTop
+                } else {
+                    WindowLevel::Normal
+                },
                 ..default()
             }),
             ..default()
@@ -254,6 +262,7 @@ fn main() {
             if let Some(dir) = &args.shots {
                 std::fs::create_dir_all(dir).expect("create --shots dir");
             }
+            app.add_systems(Update, bring_window_to_front);
             app.insert_resource(flow::Autoplay {
                 ship: args.ship.clone(),
                 shots: args.shots.clone(),
@@ -446,4 +455,25 @@ fn wait_for_peers(
     );
     info!("session started: {}", status.0);
     commands.insert_resource(Session::P2P(session));
+}
+
+/// Activates the app and raises its window once, as soon as winit has
+/// created it (autoplay: a covered window renders black screenshots).
+fn bring_window_to_front(
+    mut done: Local<bool>,
+    window: Query<Entity, With<PrimaryWindow>>,
+    _main_thread: NonSendMarker,
+) {
+    if *done {
+        return;
+    }
+    let Ok(entity) = window.single() else {
+        return;
+    };
+    WINIT_WINDOWS.with_borrow(|windows| {
+        if let Some(w) = windows.get_window(entity) {
+            w.focus_window();
+            *done = true;
+        }
+    });
 }
