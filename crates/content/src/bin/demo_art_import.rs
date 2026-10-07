@@ -12,7 +12,7 @@ use content::cutouts::{extract_expression_cutout_sheet, extract_sprite, fit_with
 use image::RgbaImage;
 
 /// Single sprites: design file stem, pack-relative output, max width/height.
-const SPRITES: [(&str, &str, u32, u32); 7] = [
+const SPRITES: [(&str, &str, u32, u32); 6] = [
     ("demo/battleship-kite-v1", "battle/ship/kite", 256, 256),
     (
         "demo/battleship-bulwark-v1",
@@ -44,24 +44,23 @@ const SPRITES: [(&str, &str, u32, u32); 7] = [
         192,
         192,
     ),
-    (
-        "demo-v2/carrier-room-dock-empty-v2",
-        "carrier/dock/berth",
-        480,
-        360,
-    ),
 ];
 
-/// The 2.5D carrier's modular pieces (`design/art/carrier-2_5d/`, TAKOAI-55):
-/// already transparent and authored at 2× on a shared 256 px-per-cell grid,
+/// The 2.5D carrier's modular pieces: the detailed painted set
+/// (`design/art/carrier-2_5d-v2/`, TAKOAI-69) on the grid TAKOAI-55 set up.
+/// Already transparent and authored at 2× on a shared 256 px-per-cell grid,
 /// so they are copied as they are (the size is checked). Design file stem,
 /// pack-relative output, expected width × height.
-const CARRIER_2_5D: [(&str, &str, u32, u32); 26] = [
+const CARRIER_DIR: &str = "carrier-2_5d-v2";
+const CARRIER_2_5D: [(&str, &str, u32, u32); 28] = [
     ("room-bridge", "carrier/room/bridge", 768, 512),
+    // The one-berth Dock (TAKOAI-60), drawn as one by Art since TAKOAI-69.
+    ("room-dock", "carrier/room/dock", 512, 768),
+    ("dock-berth", "carrier/dock/berth", 480, 244),
     ("room-crew-quarters", "carrier/room/crew_quarters", 512, 512),
     ("room-workshop", "carrier/room/workshop", 768, 512),
     ("room-salvage-bay", "carrier/room/salvage_bay", 512, 512),
-    ("room-training", "carrier/room/training_room", 512, 512),
+    ("room-training-room", "carrier/room/training_room", 512, 512),
     ("door-n", "carrier/door/n", 256, 96),
     ("door-e", "carrier/door/e", 24, 256),
     ("door-s", "carrier/door/s", 256, 24),
@@ -85,13 +84,6 @@ const CARRIER_2_5D: [(&str, &str, u32, u32); 26] = [
     ("build-slot", "carrier/build_slot", 256, 256),
 ];
 
-/// The one-berth Dock (TAKOAI-60) from the two-berth `room-dock.png`
-/// (1024 × 768): its left half (the west wall, half a pad, half the
-/// walkway) plus that half mirrored, so the 512 × 768 room has both side
-/// walls, one centred pad and no half bay door. The carrier art is a
-/// placeholder; a clean crop is enough until it is redrawn.
-const DOCK: (&str, &str, u32, u32) = ("room-dock", "carrier/room/dock", 1024, 768);
-
 /// Full-frame images (no background to key): stem, output, max size.
 /// (The battle background tile was dropped for the procedural nebula sky,
 /// TAKOAI-58.) Both are flat demo-v2 renders at 2000 x 1160, the largest
@@ -104,9 +96,9 @@ const BACKDROPS: [(&str, &str, u32, u32); 2] = [
 /// Row sheets: stem, output directory, frame names left to right, max frame
 /// size. A later sheet overwrites frames of the same name (the v2 loot icons
 /// replace the v1 credits / Void Crystal icons). The v1 side-view Pilot walk
-/// sheet is gone: the 8-direction Pilot (`core.carrier.pilot.<dir>.*`,
-/// TAKOAI-63) is exported straight into `assets/source/` by
-/// `design/art/demo-v2/pilot-8dir/make-pilot-8dir.mjs`.
+/// sheet is gone: the painted 8-direction Pilot
+/// (`core.carrier.pilot.<dir>.*`, TAKOAI-68) is exported straight into
+/// `assets/source/` by `design/art/demo-v3/pilot-8dir/make-pilot-8dir.py`.
 const SHEETS: [(&str, &str, &[&str], u32, u32); 2] = [
     (
         "demo/demo-icons-sheet-v1",
@@ -148,27 +140,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )?;
     }
     for (stem, out, w, h) in CARRIER_2_5D {
-        let image = open(&root, &format!("carrier-2_5d/{stem}"))?;
+        let image = open(&root, &format!("{CARRIER_DIR}/{stem}"))?;
         if image.dimensions() != (w, h) {
             return Err(format!(
-                "carrier-2_5d/{stem}: {:?}, expected {w}x{h}",
+                "{CARRIER_DIR}/{stem}: {:?}, expected {w}x{h}",
                 image.dimensions()
             )
             .into());
         }
         write(&root, out, image, &mut contact)?;
-    }
-    {
-        let (stem, out, w, h) = DOCK;
-        let image = open(&root, &format!("carrier-2_5d/{stem}"))?;
-        if image.dimensions() != (w, h) {
-            return Err(format!(
-                "carrier-2_5d/{stem}: {:?}, expected {w}x{h}",
-                image.dimensions()
-            )
-            .into());
-        }
-        write(&root, out, mirror_left_half(&image, w / 4), &mut contact)?;
     }
     for (stem, dir, names, max_w, max_h) in SHEETS {
         let sheet = open(&root, stem)?;
@@ -196,14 +176,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     sheet.save(&path)?;
     println!("wrote {}", path.display());
     Ok(())
-}
-
-/// The image's leftmost `half` columns, then the same columns mirrored.
-fn mirror_left_half(image: &RgbaImage, half: u32) -> RgbaImage {
-    RgbaImage::from_fn(2 * half, image.height(), |x, y| {
-        let sx = if x < half { x } else { 2 * half - 1 - x };
-        *image.get_pixel(sx, y)
-    })
 }
 
 fn open(root: &Path, stem: &str) -> Result<RgbaImage, Box<dyn std::error::Error>> {

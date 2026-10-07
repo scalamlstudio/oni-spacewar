@@ -36,7 +36,7 @@ crates/
     src/bin/content_manifest_diff.rs   compare manifests and list packs/assets a patch needs
     src/cutouts.rs                     background keying, sheet slicing, single-sprite crop, resize
     src/bin/sprite_sheet_cutouts.rs    expression sheets -> portraits
-    src/bin/demo_art_import.rs         design/art/demo (+ demo-v2 battle art and backdrops, carrier-2_5d pieces) -> battle / carrier / title / result / icon sources
+    src/bin/demo_art_import.rs         design/art/demo (+ demo-v2 battle art and backdrops, carrier-2_5d-v2 pieces) -> battle / carrier / title / result / icon sources
   client/             package `oni-client`, bin `oni-spacewar` — everything else
     src/main.rs         CLI (synctest / p2p modes), app + GGRS session setup, ICE (STUN/TURN) config
     src/art.rs          ContentImages: shipped images by stable content ID (manifest -> processed PNG), cached
@@ -219,10 +219,12 @@ cargo run --release --bin content-pipeline -- .
 has a transparent background is only cropped), cuts the icon sheet (5 icons) with the same
 sheet slicer as the portraits, scales everything down to its in-game size
 and writes `assets/source/core/{battle,carrier,title,ui/icon}/...`. Restyled
-pieces from `design/art/demo-v2/` are rows in its `V2_SPRITES` table (so far
-the ship-free Dock berth, `core.carrier.dock.berth`, no longer drawn since
-the 2.5D Dock room has its own pads). The 2.5D carrier's modular pieces
-(`design/art/carrier-2_5d/`, TAKOAI-55) are rows in `CARRIER_2_5D`: they are
+pieces from `design/art/demo-v2/` are rows in its `SPRITES` table. The 2.5D
+carrier's modular pieces (the detailed set in `design/art/carrier-2_5d-v2/`,
+TAKOAI-69, on the TAKOAI-55 grid; `CARRIER_DIR`) are rows in `CARRIER_2_5D`,
+including Art's own one-berth Dock and the ship-free Dock berth
+(`core.carrier.dock.berth`, no longer drawn since the Dock room has its own
+pad). They are
 already transparent and authored at 2× on a 256 px-per-cell grid, so they are
 copied unchanged after a size check, as `core.carrier.room.<id>`,
 `core.carrier.door.<n|e|s|w>`, `core.carrier.corridor.<mask>`,
@@ -286,7 +288,7 @@ means a new table row.
   (`carrier::Facing::of`, its movement snapped to the nearest octant; client
   code, so a float `atan2` is fine): S, SE, E, NE and N are drawn
   (`core.carrier.pilot.<dir>.{idle,walk_1..4}`, exported by
-  `design/art/demo-v2/pilot-8dir/make-pilot-8dir.mjs`, not by
+  `design/art/demo-v3/pilot-8dir/make-pilot-8dir.py`, not by
   `demo-art-import`) and SW, W, NW mirror SE, E, NE (`Facing::art`);
   standing keeps the last facing's idle frame (`pilot_frame`). Every Carrier
   panel is also clickable: its parts carry a `Click` component (dialogue

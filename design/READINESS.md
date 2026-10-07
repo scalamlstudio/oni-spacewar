@@ -265,7 +265,12 @@ recognised by matching the starting layout.
   piece in it is refunded (unknown IDs refund nothing), with a warning in the
   log.
 
-#### Art list (Stage 7, `design/art/carrier-2_5d/`)
+#### Art list (Stage 7, `design/art/carrier-2_5d/`; detailed set `design/art/carrier-2_5d-v2/`)
+
+Shipped since TAKOAI-69/70: the detailed painted set in
+`design/art/carrier-2_5d-v2/` (same files, canvases and grid as below;
+`make-carrier-v2.mjs` builds it). The Stage 7 set in
+`design/art/carrier-2_5d/` is kept as the previous version.
 
 Style: the palette and line weight from TAKOAI-51 (bold outlines, flat vibrant
 colour, no gradients). Every piece is authored at 2× (256 px per cell) on a
@@ -279,9 +284,10 @@ socket **closed** (solid wall); the door overlays open them.
 | `room-bridge.png` | 768 × 512 | star-map screen on the back wall above cell (1,0), captain's console in the middle, two side consoles. Leave cell (0,1) clear for the Gunner |
 | `room-crew-quarters.png` | 512 × 512 | two bunks along the back wall, a small table, a locker. Leave cell (1,1) clear for the Researcher |
 | `room-workshop.png` | 768 × 512 | the bench with tools and a build-planning screen against the back wall at cell (2,0), a tool wall, parts crates. Leave cell (0,1) clear for the Engineer |
-| `room-dock.png` | 1024 × 768 | two **empty** berth pads (512 × 512 each, landing markings) on rows 0–1, a big bay door in the back wall, walkway row 2. No ships. Since TAKOAI-60 the shipped one-berth Dock (512 × 768) is its left half plus that half mirrored (`demo-art-import`), until the Art agent draws a one-berth Dock |
+| `room-dock.png` | 512 × 768 | one **empty** berth pad (512 × 512, landing markings) on rows 0–1, a bay door in the back wall, walkway row 2. No ships. (The Stage 7 file was the old two-berth Dock, 1024 × 768; the v2 one-berth Dock replaces the mirrored crop TAKOAI-60 shipped) |
+| `dock-berth.png` | 480 × 244 | the Dock panel's empty berth (`core.carrier.dock.berth`) |
 | `room-salvage-bay.png` | 512 × 512 | scrap bins, a magnet crane, a sorting belt stub (decor only) |
-| `room-training.png` | 512 × 512 | a simulator pod, a target hologram |
+| `room-training-room.png` (v1: `room-training.png`) | 512 × 512 | a simulator pod, a target hologram |
 | `door-n.png` | 256 × 96 | a 128 px opening (x 64–192) in the back-wall face, with a door frame and floor threshold |
 | `door-s.png` | 256 × 24 | a 128 px gap in the front lip |
 | `door-e.png`, `door-w.png` | 24 × 256 | a gap in the side wall from y 96 to 232, with a threshold |
@@ -290,7 +296,9 @@ socket **closed** (solid wall); the door overlays open them.
 | `build-slot.png` | 256 × 256 | a bright dashed outline with a small "+" on transparent, readable on top of `hull-floor` |
 | `mockup-starting-layout.png` | 3072 × 2048 | the starting layout above assembled from the pieces (not shipped) |
 
-Crew and the Pilot are not redrawn. Shipped IDs after import:
+Crew are not redrawn. The Pilot's painted 8-direction frames come from
+`design/art/demo-v3/pilot-8dir/` (TAKOAI-68; `make-pilot-8dir.py` writes
+them to `assets/source/core/carrier/pilot/`). Shipped IDs after import:
 `core.carrier.room.<id>`, `core.carrier.door.<n|e|s|w>`,
 `core.carrier.corridor.<mask>`, `core.carrier.hull_floor`,
 `core.carrier.build_slot`.
