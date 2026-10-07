@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageOps
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -131,23 +131,109 @@ def add_back_ear_tips(cell: Image.Image) -> Image.Image:
     return padded
 
 
-def lean_back_view_ne(cell: Image.Image) -> Image.Image:
-    cell = cell.convert("RGBA")
-    box = bbox_from_alpha(cell)
-    out = Image.new("RGBA", (cell.width + 28, cell.height), (0, 0, 0, 0))
-    source = cell.load()
-    dest = out.load()
-    for y in range(cell.height):
-        lean = round((1.0 - y / max(1, cell.height - 1)) * 18)
-        for x in range(cell.width):
-            r, g, b, a = source[x, y]
-            if a == 0:
-                continue
-            nx = x + lean + 4
-            pr, pg, pb, pa = dest[nx, y]
-            if a >= pa:
-                dest[nx, y] = (r, g, b, a)
-    return out.crop(bbox_from_alpha(out))
+def draw_scaled(base: Image.Image, painter) -> None:
+    scale = 4
+    layer = Image.new("RGBA", (base.width * scale, base.height * scale), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(layer, "RGBA")
+
+    def sx(points):
+        if isinstance(points[0], tuple):
+            return tuple((x * scale, y * scale) for x, y in points)
+        return tuple(v * scale for v in points)
+
+    painter(draw, sx, scale)
+    layer = layer.resize(base.size, Image.Resampling.LANCZOS)
+    base.alpha_composite(layer)
+
+
+def make_ne_three_quarter(frame: Image.Image) -> Image.Image:
+    frame = frame.convert("RGBA")
+
+    body = frame.copy()
+    backpack = body.crop((52, 101, 108, 151))
+
+    out = Image.new("RGBA", frame.size, (0, 0, 0, 0))
+    out.alpha_composite(body)
+    out.alpha_composite(backpack, (47, 101))
+
+    def painter(draw, sx, scale):
+        outline = (71, 47, 34, 210)
+        orange = (240, 125, 36, 245)
+        light = (255, 182, 78, 220)
+        cream = (255, 231, 194, 230)
+        pink = (255, 121, 118, 190)
+        strap = (31, 39, 45, 235)
+        lens_dark = (18, 82, 88, 235)
+        lens = (64, 214, 203, 230)
+        shine = (199, 255, 239, 190)
+
+        draw.ellipse(sx((114, 69, 137, 96)), fill=outline)
+        draw.ellipse(sx((112, 68, 134, 95)), fill=orange)
+        draw.pieslice(sx((120, 78, 141, 101)), 90, 260, fill=cream)
+        draw.ellipse(sx((124, 90, 136, 100)), fill=pink)
+        draw.arc(sx((111, 65, 136, 96)), 285, 65, fill=light, width=2 * scale)
+
+        draw.line(sx(((91, 66), (111, 62), (137, 65))), fill=strap, width=5 * scale)
+        draw.rounded_rectangle(sx((116, 52, 139, 68)), radius=7 * scale, fill=(23, 29, 35, 245))
+        draw.rounded_rectangle(sx((120, 55, 136, 66)), radius=5 * scale, fill=lens_dark)
+        draw.ellipse(sx((121, 56, 134, 65)), fill=lens)
+        draw.ellipse(sx((126, 56, 136, 60)), fill=shine)
+
+        draw.arc(sx((36, 105, 85, 166)), 150, 250, fill=outline, width=9 * scale)
+        draw.arc(sx((38, 106, 83, 164)), 150, 250, fill=orange, width=7 * scale)
+        draw.arc(sx((41, 109, 79, 158)), 150, 235, fill=light, width=2 * scale)
+
+    draw_scaled(out, painter)
+    return out
+
+
+def borrow_front_ears(frame: Image.Image, front: Image.Image, turn: str) -> Image.Image:
+    frame = frame.convert("RGBA")
+    front = front.convert("RGBA")
+
+    pixels = frame.load()
+    for y in range(22, 69):
+        for x in range(30, 146):
+            r, g, b, a = pixels[x, y]
+            if a:
+                pixels[x, y] = (r, g, b, 0)
+
+    def head_painter(draw, sx, scale):
+        outline = (76, 49, 33, 210)
+        orange = (237, 119, 33, 255)
+        mid = (246, 143, 45, 255)
+        light = (255, 177, 69, 235)
+        head = (44, 47, 123, 90) if turn == "n" else (47, 47, 128, 90)
+        draw.ellipse(sx(head), fill=outline)
+        draw.ellipse(sx((head[0] + 3, head[1] + 2, head[2] - 3, head[3] + 5)), fill=orange)
+        draw.pieslice(sx((head[0] + 6, head[1] + 3, head[2] - 5, head[3] + 6)), 188, 352, fill=mid)
+        draw.ellipse(sx((head[0] + 7, head[1] + 16, head[2] - 7, head[3] + 9)), fill=(241, 132, 39, 238))
+        draw.arc(sx((head[0] + 5, head[1] + 4, head[2] - 5, head[3] + 7)), 190, 350, fill=light, width=2 * scale)
+        stripe_xs = [61, 72, 84, 96, 108] if turn == "n" else [65, 78, 92, 106, 118]
+        for i, x in enumerate(stripe_xs):
+            y0 = 51 + (i % 2) * 2
+            draw.polygon(sx(((x, y0), (x + 4, y0 + 2), (x + 1, y0 + 10), (x - 3, y0 + 3))), fill=(215, 93, 28, 70))
+
+    draw_scaled(frame, head_painter)
+
+    ear_layer = Image.new("RGBA", front.size, (0, 0, 0, 0))
+    ear_pixels = ear_layer.load()
+    src_pixels = front.load()
+    for y in range(26, 76):
+        for x in list(range(33, 76)) + list(range(94, 138)):
+            r, g, b, a = src_pixels[x, y]
+            if a > 20 and (r > 120 and g > 45 and b < 190):
+                ear_pixels[x, y] = (r, g, b, a)
+
+    if turn == "ne":
+        ear_layer = ear_layer.transform(
+            ear_layer.size,
+            Image.Transform.AFFINE,
+            (1.0, 0.0, 4.0, 0.0, 1.0, 0.0),
+            resample=Image.Resampling.BICUBIC,
+        )
+    frame.alpha_composite(ear_layer)
+    return frame
 
 
 def cut_generated_sheet() -> dict[tuple[str, str], Image.Image]:
@@ -172,7 +258,13 @@ def cut_generated_sheet() -> dict[tuple[str, str], Image.Image]:
             cell = keep_largest_alpha_component(cell)
             if direction in {"ne", "n"}:
                 cell = add_back_ear_tips(cell)
-            result[(direction, frame)] = fit_to_frame(cell)
+            fitted = fit_to_frame(cell)
+            if direction == "n":
+                fitted = borrow_front_ears(fitted, result[("s", frame)], "n")
+            elif direction == "ne":
+                fitted = make_ne_three_quarter(fitted)
+                fitted = borrow_front_ears(fitted, result[("s", frame)], "ne")
+            result[(direction, frame)] = fitted
     return result
 
 
