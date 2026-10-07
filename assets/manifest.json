@@ -6,7 +6,7 @@
       "id": "core",
       "version": "0.2.0",
       "gameplay_affecting": false,
-      "content_hash": "44868c6bb6fcd8c128dfb6d6fa959b6f601ef52af428eafc168c08c68ebe91bc",
+      "content_hash": "fea0266673072eb670744332219ce8ca0c62af4b3629c9312915a79755c24aaf",
       "assets": [
         {
           "id": "core.battle.enemy.void_spitter",
@@ -68,7 +68,7 @@
           "source": "source/core/carrier/build_slot.png",
           "processed": "packs/core/processed/carrier/build_slot.png",
           "compressed": "packs/core/bundles/carrier/build_slot.png.zst",
-          "hash": "5e058a2a0f654b42f7cbe9700e99b2f6f0cd5e320fd2ce77db98382d62c527e4",
+          "hash": "9feb0340d4170daaf016b713aa0edfddd7d155a556a945c7e0c3246f3bc6c21f",
           "gameplay_affecting": false
         },
         {
@@ -77,7 +77,7 @@
           "source": "source/core/carrier/corridor/e.png",
           "processed": "packs/core/processed/carrier/corridor/e.png",
           "compressed": "packs/core/bundles/carrier/corridor/e.png.zst",
-          "hash": "901438eb1c8528619150500f7d1eae7da5322d0de3901d2d6edc581b5b78a00a",
+          "hash": "677dbed624dcbc122b2bf92aabbd3c3c177f79a30fd2bbfe08a3edd971b7094d",
           "gameplay_affecting": false
         },
         {
@@ -86,7 +86,7 @@
           "source": "source/core/carrier/corridor/es.png",
           "processed": "packs/core/processed/carrier/corridor/es.png",
           "compressed": "packs/core/bundles/carrier/corridor/es.png.zst",
-          "hash": "afbf5c127535dbb0fde198b733b5935c8194f07df7e6e7b5f06edffd37d8d0a4",
+          "hash": "1c312af3b88b77f154e5b96791252e28e1f99343c87dcde8a0990bbddc754ebc",
           "gameplay_affecting": false
         },
         {
@@ -95,7 +95,7 @@
           "source": "source/core/carrier/corridor/esw.png",
           "processed": "packs/core/processed/carrier/corridor/esw.png",
           "compressed": "packs/core/bundles/carrier/corridor/esw.png.zst",
-          "hash": "42f1a1fde6b58158850833aa3334024ae0a7c437a830418ffd13b8de00b3c920",
+          "hash": "1b0e63f4ae4333db090838a3f36f3e4ec73b203ca2e332caebb1004e22c2d16d",
           "gameplay_affecting": false
         },
         {
@@ -104,7 +104,7 @@
           "source": "source/core/carrier/corridor/ew.png",
           "processed": "packs/core/processed/carrier/corridor/ew.png",
           "compressed": "packs/core/bundles/carrier/corridor/ew.png.zst",
-          "hash": "b915fb965dbd84c48f19e44faedb646a4904d8b2d09a5bc5629d1e2fd4929c3f",
+          "hash": "7a7fde9e4f190d42649ebb0aed7e33cb25e3ea4c526ed2b75434ea5b42ef3dbd",
           "gameplay_affecting": false
         },
         {
@@ -113,7 +113,7 @@
           "source": "source/core/carrier/corridor/n.png",
           "processed": "packs/core/processed/carrier/corridor/n.png",
           "compressed": "packs/core/bundles/carrier/corridor/n.png.zst",
-          "hash": "245b6d1ec08dbcd1e052812c688b5409db43aaa90b24724a7e9621089eb914bf",
+          "hash": "a16e766bbd1ba4085e1e339c19d5b751f3b97f6733f7bf5b606aff79929cf8f0",
           "gameplay_affecting": false
         },
         {
@@ -122,7 +122,7 @@
           "source": "source/core/carrier/corridor/ne.png",
           "processed": "packs/core/processed/carrier/corridor/ne.png",
           "compressed": "packs/core/bundles/carrier/corridor/ne.png.zst",
-          "hash": "7d5d4c5030266c00163214f701a5e5ef16a723c5c7d177211e78489e9ffd763b",
+          "hash": "f55dfceaf0c2ade447f86a1c30941711a3ee5ab1d6b362278fad676dea234b01",
           "gameplay_affecting": false
         },
         {
@@ -131,7 +131,7 @@
           "source": "source/core/carrier/corridor/nes.png",
           "processed": "packs/core/processed/carrier/corridor/nes.png",
           "compressed": "packs/core/bundles/carrier/corridor/nes.png.zst",
-          "hash": "12322dc3755e62bef949c9dbce7f90f69df99f9fb1ebeaee2fe86056c2f8b914",
+          "hash": "bf09121dfd60046f7384b88e62358bba7b1243ef665468ef6e4d39d3430871e5",
           "gameplay_affecting": false
         },
         {
@@ -140,7 +140,7 @@
           "source": "source/core/carrier/corridor/nesw.png",
           "processed": "packs/core/processed/carrier/corridor/nesw.png",
           "compressed": "packs/core/bundles/carrier/corridor/nesw.png.zst",
-          "hash": "dde0af9b87374b71e5e08fd61e1fe5305c730a2cf478c46faaff7f5173070c69",
+          "hash": "ff6880a36d25c6a90b845e40e1bd37a504c4edf181007be546b9b6d59efe2e48",
           "gameplay_affecting": false
         },
         {
@@ -149,7 +149,7 @@
           "source": "source/core/carrier/corridor/new.png",
           "processed": "packs/core/processed/carrier/corridor/new.png",
           "compressed": "packs/core/bundles/carrier/corridor/new.png.zst",
-          "hash": "b4a00f695ac0d92b0a2b5529b9be3aa837af11ae4f1a43e23a909dc6187882f8",
+          "hash": "7bd0c1b13e8f487172953e090591c221ad64fa0e77c0c30f0a0075911d806aa4",
           "gameplay_affecting": false
         },
         {
@@ -158,7 +158,7 @@
           "source": "source/core/carrier/corridor/ns.png",
           "processed": "packs/core/processed/carrier/corridor/ns.png",
           "compressed": "packs/core/bundles/carrier/corridor/ns.png.zst",
-          "hash": "62fa6eb70c51a41bffedeba4cfe8bdbd93b3f51d057a3598fe8cf42590a2cf78",
+          "hash": "fd9c888160b12928a8faceba593b892270cb54f6cee954612eabaff233157035",
           "gameplay_affecting": false
         },
         {
@@ -167,7 +167,7 @@
           "source": "source/core/carrier/corridor/nsw.png",
           "processed": "packs/core/processed/carrier/corridor/nsw.png",
           "compressed": "packs/core/bundles/carrier/corridor/nsw.png.zst",
-          "hash": "e9c381f767e706238476b3a44135712854f6e7bd8498b877244f40ef6e6f30cd",
+          "hash": "878e0baf0cd1e16f283563e8c6b79bbd0ab9944228c5f5120b786b3361e63af4",
           "gameplay_affecting": false
         },
         {
@@ -176,7 +176,7 @@
           "source": "source/core/carrier/corridor/nw.png",
           "processed": "packs/core/processed/carrier/corridor/nw.png",
           "compressed": "packs/core/bundles/carrier/corridor/nw.png.zst",
-          "hash": "963b81f4844aed9499b130bc6c41df9f0b06d515c45a83c4f5e032b3cb4cb89e",
+          "hash": "3d09e5a8f0c4fb6664a712143c841b1dded02660ee434438b5b1d891e8ddcd65",
           "gameplay_affecting": false
         },
         {
@@ -185,7 +185,7 @@
           "source": "source/core/carrier/corridor/s.png",
           "processed": "packs/core/processed/carrier/corridor/s.png",
           "compressed": "packs/core/bundles/carrier/corridor/s.png.zst",
-          "hash": "41cf5cb5fdafcd923602366d9ec04704551296a3b46178098e85d819244943bb",
+          "hash": "f6568bd095efd4d7db3d984876afcfde861167f9efb616d8cb208f68922ee35c",
           "gameplay_affecting": false
         },
         {
@@ -194,7 +194,7 @@
           "source": "source/core/carrier/corridor/sw.png",
           "processed": "packs/core/processed/carrier/corridor/sw.png",
           "compressed": "packs/core/bundles/carrier/corridor/sw.png.zst",
-          "hash": "4db21d0a0a17ac82dccadea0b259e2390fb3bace0ea5658dac9d323eefbbf295",
+          "hash": "d6b6e654481c1635ace9ce9623d20c4ebf6734e1e99b9d201f51dbde8b4ba2a8",
           "gameplay_affecting": false
         },
         {
@@ -203,7 +203,7 @@
           "source": "source/core/carrier/corridor/w.png",
           "processed": "packs/core/processed/carrier/corridor/w.png",
           "compressed": "packs/core/bundles/carrier/corridor/w.png.zst",
-          "hash": "8316a20664b9edf87bd5f7e489ae974c72fd3a43e483fe57bdc7ed329cfba6d2",
+          "hash": "cae378c291e383b8147ba93de309416683a2bcaf8b74bd99d82e6142a6ba7e9e",
           "gameplay_affecting": false
         },
         {
@@ -212,7 +212,7 @@
           "source": "source/core/carrier/dock/berth.png",
           "processed": "packs/core/processed/carrier/dock/berth.png",
           "compressed": "packs/core/bundles/carrier/dock/berth.png.zst",
-          "hash": "6163bfae1dd9e7a9f9494fc744a602e4d4e2185084e73c4226cd0ef2acceb1fd",
+          "hash": "fc318b52746576ec4fc5c0e72ea02a2c6007f6f3c98dc8a0e47ff0c082e178ed",
           "gameplay_affecting": false
         },
         {
@@ -221,7 +221,7 @@
           "source": "source/core/carrier/door/e.png",
           "processed": "packs/core/processed/carrier/door/e.png",
           "compressed": "packs/core/bundles/carrier/door/e.png.zst",
-          "hash": "a0ba84d64d9bb13822bd2916e7ba15e4cbf3253fa7038d67c82995120ba3169b",
+          "hash": "1ae1f5c5e71a690e4755822d02d81360a214888bd668dd7053608df2227bba15",
           "gameplay_affecting": false
         },
         {
@@ -230,7 +230,7 @@
           "source": "source/core/carrier/door/n.png",
           "processed": "packs/core/processed/carrier/door/n.png",
           "compressed": "packs/core/bundles/carrier/door/n.png.zst",
-          "hash": "4d8ed91f05c3353f6b260ca348f8ea6bbb0a673606ad3a18cabf37ac25cd2039",
+          "hash": "d52875129d83da8b7e5d847aed952ed03d44c4c6f2ae4fbbbf066cce567fc4ce",
           "gameplay_affecting": false
         },
         {
@@ -239,7 +239,7 @@
           "source": "source/core/carrier/door/s.png",
           "processed": "packs/core/processed/carrier/door/s.png",
           "compressed": "packs/core/bundles/carrier/door/s.png.zst",
-          "hash": "6682182e52284694beab363e9b6bbe9ad5f163d38fe6f2057b0aa0e87eb0038e",
+          "hash": "77e35620708bf32b3f7cc1d519479452da86f6b0eae5eaefbdfeb1e9e5f48804",
           "gameplay_affecting": false
         },
         {
@@ -248,7 +248,7 @@
           "source": "source/core/carrier/door/w.png",
           "processed": "packs/core/processed/carrier/door/w.png",
           "compressed": "packs/core/bundles/carrier/door/w.png.zst",
-          "hash": "a0ba84d64d9bb13822bd2916e7ba15e4cbf3253fa7038d67c82995120ba3169b",
+          "hash": "1ae1f5c5e71a690e4755822d02d81360a214888bd668dd7053608df2227bba15",
           "gameplay_affecting": false
         },
         {
@@ -257,7 +257,7 @@
           "source": "source/core/carrier/hull_floor.png",
           "processed": "packs/core/processed/carrier/hull_floor.png",
           "compressed": "packs/core/bundles/carrier/hull_floor.png.zst",
-          "hash": "474777d075724ed457bb0e20a296ed87d5eddd6fb26b910f9670fd9a60619613",
+          "hash": "5090a79a70f946b92047f4ea2472df224505d32f24f54825e55c0d96e27558c1",
           "gameplay_affecting": false
         },
         {
@@ -266,7 +266,7 @@
           "source": "source/core/carrier/pilot/e/idle.png",
           "processed": "packs/core/processed/carrier/pilot/e/idle.png",
           "compressed": "packs/core/bundles/carrier/pilot/e/idle.png.zst",
-          "hash": "36fc918eea03ee24c9ab64163429a302151ab20b496db9b9e3b36af59ec10afe",
+          "hash": "f2f317bce0ae47df99e6ba2f2b93cb8969a59405431762e9c420690c817b51c5",
           "gameplay_affecting": false
         },
         {
@@ -275,7 +275,7 @@
           "source": "source/core/carrier/pilot/e/walk_1.png",
           "processed": "packs/core/processed/carrier/pilot/e/walk_1.png",
           "compressed": "packs/core/bundles/carrier/pilot/e/walk_1.png.zst",
-          "hash": "a9e599a09cb12f02e034deee767ec6e52464bdf24279cb88ba01f94c06fe6b87",
+          "hash": "308691b5125e57c70eb84fd79a1d0291b0772eb0d25202c5481e0c3646ccc1b1",
           "gameplay_affecting": false
         },
         {
@@ -284,7 +284,7 @@
           "source": "source/core/carrier/pilot/e/walk_2.png",
           "processed": "packs/core/processed/carrier/pilot/e/walk_2.png",
           "compressed": "packs/core/bundles/carrier/pilot/e/walk_2.png.zst",
-          "hash": "fcf0e644ddb72199286672d2bbe2abb42caa23a4ede0183f57c9d5e227a15000",
+          "hash": "d585f38bc32e9f5f949a1a61da9005787924bd0b34c592b298e585b26d70b2a8",
           "gameplay_affecting": false
         },
         {
@@ -293,7 +293,7 @@
           "source": "source/core/carrier/pilot/e/walk_3.png",
           "processed": "packs/core/processed/carrier/pilot/e/walk_3.png",
           "compressed": "packs/core/bundles/carrier/pilot/e/walk_3.png.zst",
-          "hash": "af6aefa3031c7be11b34e23e90dee9e22756d37c603cdc492d4e5e9e8ace0a25",
+          "hash": "5b15bd5d8a93a30a79d1a1baa81a09d59140064f002a236751be3820cc3fff87",
           "gameplay_affecting": false
         },
         {
@@ -302,7 +302,7 @@
           "source": "source/core/carrier/pilot/e/walk_4.png",
           "processed": "packs/core/processed/carrier/pilot/e/walk_4.png",
           "compressed": "packs/core/bundles/carrier/pilot/e/walk_4.png.zst",
-          "hash": "69806026fd8fb4144da398737709280d0d687275efe34f27a23f6d7f0f22628d",
+          "hash": "bdecd9e7e736568feef13330759dea28765dcf1475315aaac47b060f5f77f925",
           "gameplay_affecting": false
         },
         {
@@ -311,7 +311,7 @@
           "source": "source/core/carrier/pilot/n/idle.png",
           "processed": "packs/core/processed/carrier/pilot/n/idle.png",
           "compressed": "packs/core/bundles/carrier/pilot/n/idle.png.zst",
-          "hash": "91ab614ebbaf9c28fd2e648fc795d6a995ca770110040b7d0ae573d05f3bc357",
+          "hash": "93d60ee90e55ec539c6cd9bc9085d54388dbd00e6fb8f48ec67afa880d7abe66",
           "gameplay_affecting": false
         },
         {
@@ -320,7 +320,7 @@
           "source": "source/core/carrier/pilot/n/walk_1.png",
           "processed": "packs/core/processed/carrier/pilot/n/walk_1.png",
           "compressed": "packs/core/bundles/carrier/pilot/n/walk_1.png.zst",
-          "hash": "727c9ff64af3e97650ac20c177fb619682b93ca1bc79bb8a960c3ec90c9b5b46",
+          "hash": "2f41ba3b26f0bb75807208f122d998cad4256c492a07aa1100b44058af368789",
           "gameplay_affecting": false
         },
         {
@@ -329,7 +329,7 @@
           "source": "source/core/carrier/pilot/n/walk_2.png",
           "processed": "packs/core/processed/carrier/pilot/n/walk_2.png",
           "compressed": "packs/core/bundles/carrier/pilot/n/walk_2.png.zst",
-          "hash": "2661ad399d5328015e3f606629cb61ac710e78f6b44e004654a0b401acc4bb3d",
+          "hash": "f4305f21a9cb5832097f01ee20b2983ac415ff80f3a2361f5fc0695aa657c70d",
           "gameplay_affecting": false
         },
         {
@@ -338,7 +338,7 @@
           "source": "source/core/carrier/pilot/n/walk_3.png",
           "processed": "packs/core/processed/carrier/pilot/n/walk_3.png",
           "compressed": "packs/core/bundles/carrier/pilot/n/walk_3.png.zst",
-          "hash": "9a630fef5c9947e4bfcf31ea85034f8b5d6df2ee907b1bee00e9efff77815ed0",
+          "hash": "d8552b7982604ae01f687e8a3a027736f09d9a260a0f5b4a232fa648881dfcfb",
           "gameplay_affecting": false
         },
         {
@@ -347,7 +347,7 @@
           "source": "source/core/carrier/pilot/n/walk_4.png",
           "processed": "packs/core/processed/carrier/pilot/n/walk_4.png",
           "compressed": "packs/core/bundles/carrier/pilot/n/walk_4.png.zst",
-          "hash": "a7c4ba7a77fd3ea3e9055086ffec038203f9142dcfb39b6283468bac89973d7b",
+          "hash": "9f12421d7fef7c68dee604f293bbd8c4f85dfab044d2e3c6e38d5b25bf22f165",
           "gameplay_affecting": false
         },
         {
@@ -356,7 +356,7 @@
           "source": "source/core/carrier/pilot/ne/idle.png",
           "processed": "packs/core/processed/carrier/pilot/ne/idle.png",
           "compressed": "packs/core/bundles/carrier/pilot/ne/idle.png.zst",
-          "hash": "45aded308a613c8a6a40cc708a28883d3c76471c976ec3f8c7c4de6de4b9768b",
+          "hash": "e3f159234913de927269f62052f6c4f2392e1c26a8b4d8b36e42088e69bb61e4",
           "gameplay_affecting": false
         },
         {
@@ -365,7 +365,7 @@
           "source": "source/core/carrier/pilot/ne/walk_1.png",
           "processed": "packs/core/processed/carrier/pilot/ne/walk_1.png",
           "compressed": "packs/core/bundles/carrier/pilot/ne/walk_1.png.zst",
-          "hash": "51b152b73db4a333319d8af021deb0f1af42109e980aef750d99650f0869da3f",
+          "hash": "7cfa20c5c5a70cfff172aeaaaf18753e56eb628fcf3e40f14c37c8cec2edaf02",
           "gameplay_affecting": false
         },
         {
@@ -374,7 +374,7 @@
           "source": "source/core/carrier/pilot/ne/walk_2.png",
           "processed": "packs/core/processed/carrier/pilot/ne/walk_2.png",
           "compressed": "packs/core/bundles/carrier/pilot/ne/walk_2.png.zst",
-          "hash": "cb86e827a7e63938a2b3bb2206db76f668b9fef39fd4355247604f383d54e6dd",
+          "hash": "da476dede5f5d7e6c690ecca8fb6dfc633d9794c3a9907000dd585e0687dfd8b",
           "gameplay_affecting": false
         },
         {
@@ -383,7 +383,7 @@
           "source": "source/core/carrier/pilot/ne/walk_3.png",
           "processed": "packs/core/processed/carrier/pilot/ne/walk_3.png",
           "compressed": "packs/core/bundles/carrier/pilot/ne/walk_3.png.zst",
-          "hash": "a64a83503dae8d404a575eab354f23c941a0465ecd5772d1ba5051afca009799",
+          "hash": "ba5e0d52da19c4a5dd4ca900c19ef567ab062652acff9df43f79a9d13629bdd6",
           "gameplay_affecting": false
         },
         {
@@ -392,7 +392,7 @@
           "source": "source/core/carrier/pilot/ne/walk_4.png",
           "processed": "packs/core/processed/carrier/pilot/ne/walk_4.png",
           "compressed": "packs/core/bundles/carrier/pilot/ne/walk_4.png.zst",
-          "hash": "e91d4a09486d0238d3bb4d54898fa0d6f1799730ea0eaec54cefe95ad5a0d6c7",
+          "hash": "226d8a5d40fb84e6e95374c42adb27985590791353d322f0054c871af6cb919c",
           "gameplay_affecting": false
         },
         {
@@ -401,7 +401,7 @@
           "source": "source/core/carrier/pilot/s/idle.png",
           "processed": "packs/core/processed/carrier/pilot/s/idle.png",
           "compressed": "packs/core/bundles/carrier/pilot/s/idle.png.zst",
-          "hash": "73a3f856fe6dd211cc30733acd7a08fc6470f6ed30a66295dc9fa391e89cfc65",
+          "hash": "471f8d6da66a13bb685bf8282c1ad3592da880d53cd6018af3f0f53f3bd758f5",
           "gameplay_affecting": false
         },
         {
@@ -410,7 +410,7 @@
           "source": "source/core/carrier/pilot/s/walk_1.png",
           "processed": "packs/core/processed/carrier/pilot/s/walk_1.png",
           "compressed": "packs/core/bundles/carrier/pilot/s/walk_1.png.zst",
-          "hash": "82da0d89945be0a378e57e5575edf30469714ab3e0725986f9d42b90d57cedf2",
+          "hash": "f5dab4f469e17add8731cdf44bfed4918c4820c0c6492a327674b50371b873c6",
           "gameplay_affecting": false
         },
         {
@@ -419,7 +419,7 @@
           "source": "source/core/carrier/pilot/s/walk_2.png",
           "processed": "packs/core/processed/carrier/pilot/s/walk_2.png",
           "compressed": "packs/core/bundles/carrier/pilot/s/walk_2.png.zst",
-          "hash": "c9392d071240fb12d16aab8636d8772cd3c71fcd72d767ad0f63f1d7014e367e",
+          "hash": "d9130fcbda7ffcddbc882da81f151f9c9349b042b2340ee3201c879dfa39f194",
           "gameplay_affecting": false
         },
         {
@@ -428,7 +428,7 @@
           "source": "source/core/carrier/pilot/s/walk_3.png",
           "processed": "packs/core/processed/carrier/pilot/s/walk_3.png",
           "compressed": "packs/core/bundles/carrier/pilot/s/walk_3.png.zst",
-          "hash": "85dbe3e2cb1376242623ac2823ed981a6399a306f62cfecb655a8e8dd5462e7d",
+          "hash": "bd0e5fa5f4cd347eea9a98b8a28d2a414f6f138cc8f85fd3aa12e4ba6b578499",
           "gameplay_affecting": false
         },
         {
@@ -437,7 +437,7 @@
           "source": "source/core/carrier/pilot/s/walk_4.png",
           "processed": "packs/core/processed/carrier/pilot/s/walk_4.png",
           "compressed": "packs/core/bundles/carrier/pilot/s/walk_4.png.zst",
-          "hash": "33d714fd49f5d3254c9ddec92aa8b32eb0072204c23cc3189687b6754baa7547",
+          "hash": "d64838c4cba9352faf8ff972baf62509a0ea5dd0b3934475f4d96e645f527e9d",
           "gameplay_affecting": false
         },
         {
@@ -446,7 +446,7 @@
           "source": "source/core/carrier/pilot/se/idle.png",
           "processed": "packs/core/processed/carrier/pilot/se/idle.png",
           "compressed": "packs/core/bundles/carrier/pilot/se/idle.png.zst",
-          "hash": "74a38fcb1a7eeb4020a36e7707f48cc8f13a6e27ab4a820849ae85cb68fff1dc",
+          "hash": "87c4a776b31faa74f65d906b338944b34fafd81ea911e19d27aa7f167b7c4843",
           "gameplay_affecting": false
         },
         {
@@ -455,7 +455,7 @@
           "source": "source/core/carrier/pilot/se/walk_1.png",
           "processed": "packs/core/processed/carrier/pilot/se/walk_1.png",
           "compressed": "packs/core/bundles/carrier/pilot/se/walk_1.png.zst",
-          "hash": "8a94da4ee70fde24cf537d736a3c83a5b41ec615fa5da0610c5b93ba7025520f",
+          "hash": "048a476bf997497249bb5570c9829f580bec96f5acfb2b41c499f7628074d939",
           "gameplay_affecting": false
         },
         {
@@ -464,7 +464,7 @@
           "source": "source/core/carrier/pilot/se/walk_2.png",
           "processed": "packs/core/processed/carrier/pilot/se/walk_2.png",
           "compressed": "packs/core/bundles/carrier/pilot/se/walk_2.png.zst",
-          "hash": "273a31b4dd72829288c537f4f0b6e990fb96fa3f9ca5bcf7198472b7bd6ce7cd",
+          "hash": "b03807e641130fd41c6cc5a71c9b6953d587f7c937e9a4af03f83c11f9a3335c",
           "gameplay_affecting": false
         },
         {
@@ -473,7 +473,7 @@
           "source": "source/core/carrier/pilot/se/walk_3.png",
           "processed": "packs/core/processed/carrier/pilot/se/walk_3.png",
           "compressed": "packs/core/bundles/carrier/pilot/se/walk_3.png.zst",
-          "hash": "82eef93497ebbc71e98cbb6aa7eee5de4557fdd85e58b4459d5e11da4ebc6022",
+          "hash": "9d325efd3b0ac2c5e7ec612700c656282fb3a1e4869daa3e25cb280cce5d88e4",
           "gameplay_affecting": false
         },
         {
@@ -482,7 +482,7 @@
           "source": "source/core/carrier/pilot/se/walk_4.png",
           "processed": "packs/core/processed/carrier/pilot/se/walk_4.png",
           "compressed": "packs/core/bundles/carrier/pilot/se/walk_4.png.zst",
-          "hash": "2f3bef00077ddc4e38beb51a34ea8cfab8b2354231d5c35a41b88f1e64007103",
+          "hash": "26775c654ab05ab24398c1223ef08adfad5c98f3552dd0895940b7604064202e",
           "gameplay_affecting": false
         },
         {
@@ -491,7 +491,7 @@
           "source": "source/core/carrier/room/bridge.png",
           "processed": "packs/core/processed/carrier/room/bridge.png",
           "compressed": "packs/core/bundles/carrier/room/bridge.png.zst",
-          "hash": "b8197a045a5761bcb753d18434c4de8bcf8f47cb16593410b36b51a9a93b2af1",
+          "hash": "194b7848944fd1c377635b2523aabc823d57ff701ff56d62794aa5f4658a4a8d",
           "gameplay_affecting": false
         },
         {
@@ -500,7 +500,7 @@
           "source": "source/core/carrier/room/crew_quarters.png",
           "processed": "packs/core/processed/carrier/room/crew_quarters.png",
           "compressed": "packs/core/bundles/carrier/room/crew_quarters.png.zst",
-          "hash": "e6898ddd3e3e131856b83da9a14cd18617b22cd98c6c6b8ded7f9eaf79e369cb",
+          "hash": "4b3b3c210e9d24a030d1453daab0ba56bc1626ea261ae42dce72d3db7b7d8910",
           "gameplay_affecting": false
         },
         {
@@ -509,7 +509,7 @@
           "source": "source/core/carrier/room/dock.png",
           "processed": "packs/core/processed/carrier/room/dock.png",
           "compressed": "packs/core/bundles/carrier/room/dock.png.zst",
-          "hash": "a3a7a041c24e82376b095b9d78c2f721f9960d657304404b9e806fe3fa399c0b",
+          "hash": "cdd3e7f6b9011c7a4d0541ae907d65ad14fc85cbd42fd3184ef14bec20032a60",
           "gameplay_affecting": false
         },
         {
@@ -518,7 +518,7 @@
           "source": "source/core/carrier/room/salvage_bay.png",
           "processed": "packs/core/processed/carrier/room/salvage_bay.png",
           "compressed": "packs/core/bundles/carrier/room/salvage_bay.png.zst",
-          "hash": "d0ac45241691fa1a1c21234e8434929d00823426444600600edf6ecfe1a675ee",
+          "hash": "3e77329a1d1b92da6984d9a6c00f3c8c2667d8627f52c8cbce073a929518f396",
           "gameplay_affecting": false
         },
         {
@@ -527,7 +527,7 @@
           "source": "source/core/carrier/room/training_room.png",
           "processed": "packs/core/processed/carrier/room/training_room.png",
           "compressed": "packs/core/bundles/carrier/room/training_room.png.zst",
-          "hash": "712cf1debaf75b909ce452739ab7254ef05c54bcec868b5a75180d3eaf9d3490",
+          "hash": "15a72df9be6ee9722074273cd0acca6d160bfa612d7442891a2f3d097ace94bf",
           "gameplay_affecting": false
         },
         {
@@ -536,7 +536,7 @@
           "source": "source/core/carrier/room/workshop.png",
           "processed": "packs/core/processed/carrier/room/workshop.png",
           "compressed": "packs/core/bundles/carrier/room/workshop.png.zst",
-          "hash": "6e5f00a5274a1e521ed131feccde6144a19dba00f92c7d1b5c7a591a3dfae47a",
+          "hash": "64f8a4556c4e926abcad9ac3cdc9801a98a550aed29def710036f91d19e9ce0a",
           "gameplay_affecting": false
         },
         {

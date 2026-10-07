@@ -1121,10 +1121,11 @@ fn autoplay_flow(
                 }
                 return;
             }
-            // First visit: the builder screen with a (red) ghost, then walk
-            // the Pilot north-east and south-west across the Bridge so the
-            // shots show the 8-direction art (the Dock walk adds more).
-            if n == 0 && tag == "run" {
+            // First visit (a new game or a Continued save): the builder
+            // screen with a ghost, then walk the Pilot north-east and
+            // south-west across the Bridge so the shots show the
+            // 8-direction art (the Dock walk adds more).
+            if n == 0 && !autoplay.reloaded {
                 if at(2.3) {
                     *overlay = Overlay::Build {
                         tool: Tool::Place(Piece::Room(RoomId::SalvageBay)),
