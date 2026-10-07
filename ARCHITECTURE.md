@@ -317,11 +317,15 @@ means a new table row.
   (`BuildCategory`, `category_tool`), the flyout of cards and the detail
   panel, both filled from `tool_card` (name, module icon, cost chip, effect,
   size, doors, lock); `pick_tool` refuses a greyed-out card with its reason.
+  The 9-slices fill the whole node (`VisualBox::BorderBox`; `ImageNode`
+  defaults to the content box) and the text is padded in past the art's rim
+  (`UI_PANEL_PAD`, `UI_CARD_PAD`); the detail panel has a fixed width so its
+  wrapped text is measured at the width it's drawn at.
   The panels carry `Interaction`, so `build_click` / `track_build_cursor`
   ignore the mouse over them, and `clamp_camera` lets the Build camera pan
   `BUILD_UI_H` further south. `build_preview` draws the grid overlay, the
   slots and the ghost (the piece's art plus the kit's valid / invalid
-  swatch, the cost or reason line, and the error tooltip) at `BuildCursor`;
+  swatch, and one cost or reason line over it) at `BuildCursor`;
   a left click runs `apply_build_click` → `workshop::build` (pays and places)
   or `workshop::demolish` (full refund) and saves. Right click / Esc go back
   to the tab (Esc on the Carrier closes panels before it opens the pause
@@ -395,7 +399,8 @@ means a new table row.
   target inside their range band (`Enemy::orbit`, picked at spawn). The sim's starting-view size mirrors the client's default window
   at `BATTLE_ZOOM` (`DEFAULT_WINDOW`); a client test keeps them equal. The
   off-screen fissure arrows (`render::fissure_pointers`, one per fissure,
-  violet-magenta with a teal inner edge to match the v2 fissure art)
+  violet-magenta with a teal inner edge to match the v2 fissure art;
+  `render::clear_of` slides one along its edge off the HUD text's corner)
   and the nebula sky (`sky.rs`) are client-only.
 - **Nebula sky** (`sky.rs` + `sky.wgsl`, TAKOAI-58). One `SkyMaterial`
   (`Material2d`, shader embedded with `embedded_asset!`) on a unit quad that

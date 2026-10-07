@@ -200,6 +200,9 @@ fn skill_names(kind: ShipKind) -> (&'static str, &'static str) {
     }
 }
 
+/// The battle HUD text's offset from the top-left corner.
+const HUD_MARGIN: f32 = 10.0;
+
 fn setup_scene(mut commands: Commands) {
     commands.spawn(Camera2d);
     commands.spawn((
@@ -212,8 +215,8 @@ fn setup_scene(mut commands: Commands) {
         TextColor(Color::srgb(0.75, 1.0, 0.75)),
         Node {
             position_type: PositionType::Absolute,
-            left: px(10),
-            top: px(10),
+            left: px(HUD_MARGIN),
+            top: px(HUD_MARGIN),
             ..default()
         },
     ));
@@ -544,13 +547,33 @@ pub fn fissure_pointers(
         .collect()
 }
 
+/// Slides an edge pointer at `tip` along its screen edge until it is clear
+/// of `keep_out` (the HUD's corner, grown by the arrow's size), the way the
+/// Carrier labels keep clear of its panels. It slides toward the screen
+/// `centre` (away from the corner); `on_top_or_bottom` says which edge the
+/// pointer sits on, so which way it may slide.
+pub fn clear_of(tip: Vec2, keep_out: Rect, centre: Vec2, on_top_or_bottom: bool) -> Vec2 {
+    if !keep_out.contains(tip) {
+        return tip;
+    }
+    let toward = |at: f32, c: f32, min: f32, max: f32| if c > at { max } else { min };
+    if on_top_or_bottom {
+        let x = toward(tip.x, centre.x, keep_out.min.x, keep_out.max.x);
+        Vec2::new(x, tip.y)
+    } else {
+        let y = toward(tip.y, centre.y, keep_out.min.y, keep_out.max.y);
+        Vec2::new(tip.x, y)
+    }
+}
+
 /// Every off-screen fissure gets an arrow at the screen edge pointing at
-/// it. Client-only.
+/// it, kept off the HUD text. Client-only.
 fn draw_fissure_pointers(
     mut gizmos: Gizmos,
     world: Option<Res<SimWorld>>,
     windows: Query<&Window, With<PrimaryWindow>>,
     camera: Query<(&Transform, &Projection), With<Camera2d>>,
+    hud: Query<&ComputedNode, With<Hud>>,
 ) {
     let (Some(world), Ok(window), Ok((cam, projection))) =
         (world, windows.single(), camera.single())
@@ -566,11 +589,26 @@ fn draw_fissure_pointers(
     };
     let half = window.size() / 2.0 * scale;
     let fissures: Vec<Vec2> = world.fissures.iter().map(|f| to_world(f.pos)).collect();
-    for (tip, dir) in fissure_pointers(cam.translation.truncate(), half, 24.0 * scale, &fissures) {
+    let centre = cam.translation.truncate();
+    let size = 22.0 * scale;
+    let inset = 24.0 * scale;
+    // The HUD text block (top left, `HUD_MARGIN` in) in world space, grown
+    // by an arrow's length so no part of an arrow reaches the text.
+    let keep_out = hud.single().ok().map(|node| {
+        let hud = node.size() * node.inverse_scale_factor() * scale;
+        let top_left = centre + Vec2::new(-half.x, half.y);
+        let margin = HUD_MARGIN * scale + size;
+        Rect::from_corners(
+            top_left - Vec2::splat(margin),
+            top_left + Vec2::new(hud.x, -hud.y) + Vec2::new(margin, -margin),
+        )
+    });
+    for (tip, dir) in fissure_pointers(centre, half, inset, &fissures) {
+        let on_top_or_bottom = (tip.y - centre.y).abs() >= half.y - inset - 0.5;
+        let tip = keep_out.map_or(tip, |r| clear_of(tip, r, centre, on_top_or_bottom));
         // A solid-looking chevron: nested outlines shrinking toward the tip,
         // the innermost ones teal.
         let side = dir.perp();
-        let size = 22.0 * scale;
         for k in 0..6 {
             let s = size * (1.0 - k as f32 * 0.15);
             let base = tip - dir * s;
@@ -781,6 +819,24 @@ mod tests {
         let p = fissure_pointers(Vec2::new(-650.0, 0.0), half, 20.0, &[far_up_left]);
         let (tip, dir) = p[0];
         assert!(dir.y > 0.99 && (tip.y - 330.0).abs() < 1e-3, "{tip} {dir}");
+    }
+
+    #[test]
+    fn pointers_slide_off_the_hud() {
+        let hud = Rect::new(-600.0, 200.0, -100.0, 350.0);
+        // On the top edge under the HUD: slides right, past its far side.
+        let c = Vec2::ZERO;
+        let tip = Vec2::new(-200.0, 330.0);
+        assert_eq!(clear_of(tip, hud, c, true), Vec2::new(-100.0, 330.0));
+        // Even right by the corner it slides toward the middle, not off screen.
+        let tip = Vec2::new(-580.0, 330.0);
+        assert_eq!(clear_of(tip, hud, c, true), Vec2::new(-100.0, 330.0));
+        // On the left edge beside it: slides down.
+        let tip = Vec2::new(-580.0, 340.0);
+        assert_eq!(clear_of(tip, hud, c, false), Vec2::new(-580.0, 200.0));
+        // Clear of it already: untouched.
+        let tip = Vec2::new(300.0, 330.0);
+        assert_eq!(clear_of(tip, hud, c, true), tip);
     }
 
     #[test]

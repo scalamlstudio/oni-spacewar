@@ -36,8 +36,9 @@ pub const WALK_SPEED: f32 = 160.0;
 /// E reaches the nearest hotspot within this many px of the Pilot's feet.
 pub const INTERACT_RANGE: f32 = 56.0;
 /// Spawn cells: a new game on the Bridge, after a mission on the Dock
-/// walkway (§ Walking and interaction).
-const SPAWN_NEW_GAME: (i32, i32) = (1, 1);
+/// walkway (§ Walking and interaction). The Bridge spawn is its south-east
+/// floor, clear of the room label and the consoles (TAKOAI-67).
+const SPAWN_NEW_GAME: (i32, i32) = (2, 2);
 const SPAWN_AFTER_MISSION: (i32, i32) = (5, 6);
 /// Zoom levels, screen px per world px: Overview (the whole hull fits
 /// 1280 × 720), Normal, Close. The mouse wheel steps between them.
@@ -67,8 +68,12 @@ const UI_PANEL: (&str, f32) = ("core.ui.builder.panel.outer_panel", 24.0);
 const UI_CARD: (&str, f32) = ("core.ui.builder.panel.card", 28.0);
 const UI_CARD_SELECTED: (&str, f32) = ("core.ui.builder.panel.selected_card", 28.0);
 const UI_CARD_DISABLED: (&str, f32) = ("core.ui.builder.panel.disabled_card", 28.0);
-const UI_TOOLTIP: (&str, f32) = ("core.ui.builder.panel.tooltip", 22.0);
-const UI_COST_CHIP: (&str, f32) = ("core.ui.builder.cost_chip_bg", 18.0);
+/// Text insets that clear the panel's dark rim and the selected card's
+/// gold brackets (TAKOAI-67). Cards draw their corners at
+/// `UI_CARD_CORNER_SCALE` so the brackets leave room for the text.
+const UI_PANEL_PAD: f32 = 18.0;
+const UI_CARD_PAD: f32 = 19.0;
+const UI_CARD_CORNER_SCALE: f32 = 0.75;
 const GHOST_VALID: &str = "core.ui.builder.ghost.valid";
 const GHOST_INVALID: &str = "core.ui.builder.ghost.invalid";
 const GRID_OVERLAY: &str = "core.ui.builder.grid_cell_overlay";
@@ -438,7 +443,9 @@ impl Hotspot {
 /// walks on the Bridge floor from the new-game spawn, one per facing, each
 /// at least 148 px (0.9 s) long so a shot mid-walk is mid-stride, and kept
 /// off the Gunner's west column. Grid px targets and the facing's name.
+/// It starts north-west from the spawn on the Bridge's south-east floor.
 pub const PILOT_TOUR: [(Vec2, &str); 8] = [
+    (Vec2::new(192.0, 192.0), "nw"),
     (Vec2::new(44.0, 192.0), "w"),
     (Vec2::new(192.0, 340.0), "se"),
     (Vec2::new(192.0, 192.0), "n"),
@@ -446,7 +453,6 @@ pub const PILOT_TOUR: [(Vec2, &str); 8] = [
     (Vec2::new(192.0, 340.0), "sw"),
     (Vec2::new(340.0, 192.0), "ne"),
     (Vec2::new(340.0, 340.0), "s"),
-    (Vec2::new(192.0, 192.0), "nw"),
 ];
 
 /// Room-local spot (cell, then px inside it) of a crew member's feet:
@@ -952,15 +958,15 @@ struct Hoverable;
 
 const BUTTON_BG: Color = Color::srgb(0.08, 0.16, 0.2);
 const BUTTON_HOVER: Color = Color::srgb(0.14, 0.3, 0.36);
-/// Build mode's screen layout (screen px, from the left edge; the 1280 px
-/// window fits it all) and its heading gold.
+/// Build mode's screen layout (screen px; the default 1000 px window fits
+/// the category bar, four cards and the detail panel) and its heading gold.
 const BUILD_CATEGORY_BUTTON: f32 = 46.0;
-const BUILD_CARD_W: f32 = 138.0;
-const BUILD_CARD_H: f32 = 86.0;
-const BUILD_DETAIL_W: f32 = 270.0;
+const BUILD_CARD_W: f32 = 142.0;
+const BUILD_CARD_H: f32 = 104.0;
+const BUILD_DETAIL_W: f32 = 250.0;
 /// How much of the screen bottom the build panels cover; the Build-mode
 /// camera may pan that much further south so the last hull row clears them.
-const BUILD_UI_H: f32 = 200.0;
+const BUILD_UI_H: f32 = 240.0;
 const BUILD_GOLD: Color = Color::srgb(1.0, 0.86, 0.55);
 
 /// A clickable part of a Carrier panel: the same action as its key, so the
@@ -983,17 +989,37 @@ enum Click {
     Category(BuildCategory),
 }
 
-/// `image` 9-sliced with `inset` px corners (the builder kit's panels).
-fn sliced(image: Handle<Image>, inset: f32) -> ImageNode {
-    ImageNode::new(image).with_mode(NodeImageMode::Sliced(TextureSlicer {
-        border: BorderRect::all(inset),
-        ..default()
-    }))
+/// `image` 9-sliced with `inset` px corners (the builder kit's panels),
+/// filling the whole node: an `ImageNode` draws inside the padding by
+/// default, which left the text outside the frame (TAKOAI-67).
+fn sliced(image: Handle<Image>, inset: f32, corner_scale: f32) -> ImageNode {
+    ImageNode {
+        visual_box: VisualBox::BorderBox,
+        ..ImageNode::new(image).with_mode(NodeImageMode::Sliced(TextureSlicer {
+            border: BorderRect::all(inset),
+            max_corner_scale: corner_scale,
+            ..default()
+        }))
+    }
 }
 
 /// A builder-kit 9-slice by `(id, inset)`.
 fn kit(art: &mut ContentImages, images: &mut Assets<Image>, (id, inset): (&str, f32)) -> ImageNode {
-    sliced(art.get(images, id).unwrap_or_default(), inset)
+    sliced(art.get(images, id).unwrap_or_default(), inset, 1.0)
+}
+
+/// A build card's 9-slice, its corners drawn smaller (see
+/// [`UI_CARD_CORNER_SCALE`]).
+fn card_kit(
+    art: &mut ContentImages,
+    images: &mut Assets<Image>,
+    (id, inset): (&str, f32),
+) -> ImageNode {
+    sliced(
+        art.get(images, id).unwrap_or_default(),
+        inset,
+        UI_CARD_CORNER_SCALE,
+    )
 }
 
 fn portrait(
@@ -1047,14 +1073,7 @@ pub fn image_ids() -> Vec<String> {
         }
     }
     ids.extend(SHIPS.iter().map(|s| s.image_id.to_string()));
-    for (id, _) in [
-        UI_PANEL,
-        UI_CARD,
-        UI_CARD_SELECTED,
-        UI_CARD_DISABLED,
-        UI_TOOLTIP,
-        UI_COST_CHIP,
-    ] {
+    for (id, _) in [UI_PANEL, UI_CARD, UI_CARD_SELECTED, UI_CARD_DISABLED] {
         ids.push(id.into());
     }
     ids.extend([GHOST_VALID, GHOST_INVALID, GRID_OVERLAY].map(String::from));
@@ -2065,7 +2084,8 @@ fn ghost(game: &SaveGame, tool: Tool, (x, y): (i32, i32)) -> Option<Ghost> {
 
 /// Build mode visuals: the grid overlay on every hull cell, a slot marker
 /// on every empty cell next to the network, and the ghost at the cursor
-/// (blue-white = a click works, red + why, also in the error tooltip).
+/// (blue-white = a click works, red + why). The reason shows once, over the
+/// ghost: the cursor is on it, so it's on screen (TAKOAI-67).
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn build_preview(
     mut commands: Commands,
@@ -2164,49 +2184,6 @@ fn build_preview(
         ),
         BuildUi,
     ));
-    if !ok {
-        // The kit's error tooltip.
-        let title = match tool {
-            Tool::Place(_) => "Can't build here",
-            Tool::Demolish => "Can't demolish",
-        };
-        commands
-            .spawn((
-                ScreenEntity,
-                BuildUi,
-                kit(&mut art, &mut images, UI_TOOLTIP),
-                // Top right, under the wallet, clear of the panels.
-                Node {
-                    position_type: PositionType::Absolute,
-                    right: px(16),
-                    top: px(112),
-                    max_width: px(220),
-                    flex_direction: FlexDirection::Column,
-                    padding: UiRect::all(px(14)),
-                    row_gap: px(4),
-                    ..default()
-                },
-                GlobalZIndex(6),
-            ))
-            .with_children(|p| {
-                p.spawn((
-                    Text::new(title),
-                    TextFont {
-                        font_size: FontSize::Px(16.0),
-                        ..default()
-                    },
-                    TextColor(BUILD_GOLD),
-                ));
-                p.spawn((
-                    Text::new(text),
-                    TextFont {
-                        font_size: FontSize::Px(14.0),
-                        ..default()
-                    },
-                    TextColor(Color::srgb(1.0, 0.75, 0.7)),
-                ));
-            });
-    }
 }
 
 /// Marks the docked ship the save has selected: a highlight ring and
@@ -2792,7 +2769,6 @@ fn spawn_build_ui(
 ) {
     let credits = art.get(images, art::ids::ICON_CREDITS);
     let crystal = art.get(images, art::ids::ICON_VOID_CRYSTAL);
-    let chip = kit(art, images, UI_COST_CHIP);
     let font = |size: f32, color: Color| {
         (
             TextFont {
@@ -2802,14 +2778,19 @@ fn spawn_build_ui(
             TextColor(color),
         )
     };
+    // A plain pill, not the kit's chip art: that has a coin and a crystal
+    // painted in, which landed under the numbers (TAKOAI-67).
     let cost_chip = |p: &mut ChildSpawnerCommands, cost: workshop::Cost, color: Color| {
         p.spawn((
-            chip.clone(),
+            BackgroundColor(Color::srgb(0.09, 0.23, 0.27)),
+            BorderColor::all(Color::srgb(0.06, 0.09, 0.12)),
             Node {
                 align_items: AlignItems::Center,
                 align_self: AlignSelf::Start,
                 column_gap: px(2),
-                padding: UiRect::axes(px(6), px(2)),
+                padding: UiRect::axes(px(6), px(1)),
+                border: UiRect::all(px(2)),
+                border_radius: BorderRadius::all(px(10)),
                 ..default()
             },
         ))
@@ -2819,7 +2800,7 @@ fn spawn_build_ui(
                 if let Some(icon) = icon {
                     c.spawn(icon_node(icon.clone(), 14.0));
                 }
-                c.spawn((Text::new(amount.to_string()), font(13.0, color)));
+                c.spawn((Text::new(amount.to_string()), font(12.0, color)));
             }
         });
     };
@@ -2832,7 +2813,7 @@ fn spawn_build_ui(
             Node {
                 flex_direction: FlexDirection::Column,
                 flex_shrink: 0.0,
-                padding: UiRect::all(px(12)),
+                padding: UiRect::all(px(UI_PANEL_PAD)),
                 row_gap: px(5),
                 ..default()
             },
@@ -2868,7 +2849,7 @@ fn spawn_build_ui(
         .map(|&t| {
             let card = tool_card(game, t);
             let icon = art.get(images, &card.icon_id).unwrap_or_default();
-            (t, card, icon, kit(art, images, card_style(t)))
+            (t, card, icon, card_kit(art, images, card_style(t)))
         })
         .collect();
     let panels: Vec<_> = (0..3).map(|_| kit(art, images, UI_PANEL)).collect();
@@ -2941,46 +2922,45 @@ fn spawn_build_ui(
                                 Node {
                                     width: px(BUILD_CARD_W),
                                     height: px(BUILD_CARD_H),
-                                    padding: UiRect::all(px(9)),
-                                    column_gap: px(5),
-                                    align_items: AlignItems::Center,
+                                    flex_direction: FlexDirection::Column,
+                                    padding: UiRect::all(px(UI_CARD_PAD)),
+                                    row_gap: px(4),
                                     ..default()
                                 },
                             ))
                             .with_children(|c| {
-                                c.spawn((
-                                    ImageNode::new(icon).with_color(dim),
-                                    Node {
-                                        width: px(30),
-                                        height: px(30),
-                                        flex_shrink: 0.0,
-                                        ..default()
-                                    },
-                                ));
+                                // The name on its own line, then the icon
+                                // with the cost, then why it's locked: all
+                                // inside the card's rim.
+                                c.spawn((Text::new(card.name), font(12.0, text)));
                                 c.spawn(Node {
-                                    flex_direction: FlexDirection::Column,
-                                    flex_grow: 1.0,
-                                    flex_shrink: 1.0,
-                                    min_width: px(0),
-                                    row_gap: px(3),
+                                    column_gap: px(5),
+                                    align_items: AlignItems::Center,
                                     ..default()
                                 })
-                                .with_children(|col| {
-                                    // Long names wrap inside the card.
-                                    col.spawn((Text::new(card.name), font(13.0, text)));
+                                .with_children(|row| {
+                                    row.spawn((
+                                        ImageNode::new(icon).with_color(dim),
+                                        Node {
+                                            width: px(20),
+                                            height: px(20),
+                                            flex_shrink: 0.0,
+                                            ..default()
+                                        },
+                                    ));
                                     match card.cost {
-                                        Some(cost) => cost_chip(col, cost, text),
+                                        Some(cost) => cost_chip(row, cost, text),
                                         None => {
-                                            col.spawn((Text::new("full refund"), font(12.0, text)));
+                                            row.spawn((Text::new("full refund"), font(11.0, text)));
                                         }
                                     }
-                                    if let Some(lock) = card.lock {
-                                        col.spawn((
-                                            Text::new(lock.to_uppercase()),
-                                            font(10.0, Color::srgb(0.85, 0.85, 0.85)),
-                                        ));
-                                    }
                                 });
+                                if let Some(lock) = card.lock {
+                                    c.spawn((
+                                        Text::new(lock.to_uppercase()),
+                                        font(10.0, Color::srgb(0.85, 0.85, 0.85)),
+                                    ));
+                                }
                             });
                         }
                     });
@@ -2992,12 +2972,13 @@ fn spawn_build_ui(
 
             // Detail panel for the picked tool.
             root.spawn(panel(panels.next().unwrap_or_default()))
+                // A fixed width: a shrinking panel measured its wrapped
+                // text too short, and the text spilt out of the frame.
                 .insert(Node {
                     flex_direction: FlexDirection::Column,
-                    flex_shrink: 1.0,
-                    flex_grow: 1.0,
-                    max_width: px(BUILD_DETAIL_W),
-                    padding: UiRect::all(px(12)),
+                    flex_shrink: 0.0,
+                    width: px(BUILD_DETAIL_W),
+                    padding: UiRect::all(px(UI_PANEL_PAD)),
                     row_gap: px(4),
                     ..default()
                 })
@@ -3029,13 +3010,18 @@ fn spawn_build_ui(
                     if !message.is_empty() {
                         p.spawn((Text::new(message), font(12.0, Color::srgb(1.0, 0.85, 0.4))));
                     }
-                    text_button(p, Click::Leave, "[Right click / Esc] Back");
+                    sized_button(p, Click::Leave, "[Right click / Esc] Back", 13.0);
                 });
         });
 }
 
 /// A small bordered button in a Carrier panel.
 fn text_button(p: &mut ChildSpawnerCommands, click: Click, text: &str) {
+    sized_button(p, click, text, 15.0);
+}
+
+/// A [`text_button`] with `size` px text.
+fn sized_button(p: &mut ChildSpawnerCommands, click: Click, text: &str, size: f32) {
     p.spawn((
         Button,
         click,
@@ -3052,7 +3038,7 @@ fn text_button(p: &mut ChildSpawnerCommands, click: Click, text: &str) {
     .with_child((
         Text::new(text),
         TextFont {
-            font_size: FontSize::Px(15.0),
+            font_size: FontSize::Px(size),
             ..default()
         },
         TextColor(Color::srgb(0.75, 0.9, 0.95)),
