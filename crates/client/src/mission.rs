@@ -33,6 +33,9 @@ pub struct MissionConfig {
     pub mission_type: MissionType,
     pub ship_loadouts: Vec<ShipLoadout>,
     pub seed: u64,
+    /// Kills that win the Elimination: `KILL_TARGET` in normal play,
+    /// `AUTOPLAY_KILL_TARGET` under `--autoplay`, or `--kill-target N`.
+    pub kill_target: u32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -70,6 +73,8 @@ pub const VOID_CRYSTAL_REWARD: RewardRule = RewardRule {
 pub struct MissionResult {
     pub outcome: MissionOutcome,
     pub kills: u32,
+    /// The mission's kill target (shown as `kills/kill_target`).
+    pub kill_target: u32,
     /// Mission length in sim ticks (60 per second), to the end or the quit.
     pub ticks: u32,
     /// Loot picked up during the mission.
@@ -137,7 +142,7 @@ pub fn upgrade_ids(save: &SaveGame) -> Vec<String> {
     ids
 }
 
-pub fn config_from_save(save: &SaveGame) -> MissionConfig {
+pub fn config_from_save(save: &SaveGame, kill_target: u32) -> MissionConfig {
     MissionConfig {
         mission_type: MissionType::Elimination,
         ship_loadouts: vec![ShipLoadout {
@@ -146,6 +151,7 @@ pub fn config_from_save(save: &SaveGame) -> MissionConfig {
             upgrade_ids: upgrade_ids(save),
         }],
         seed: 10_000 + save.mission_count as u64,
+        kill_target,
     }
 }
 
@@ -162,7 +168,7 @@ pub fn sim_loadouts(config: &MissionConfig) -> Vec<Loadout> {
 }
 
 pub fn launch_sim(config: &MissionConfig) -> SimState {
-    SimState::with_loadouts(config.seed, &sim_loadouts(config))
+    SimState::with_loadouts(config.seed, &sim_loadouts(config)).with_kill_target(config.kill_target)
 }
 
 /// The mission's result. `outcome` comes from the sim when it ended there
@@ -199,6 +205,7 @@ pub fn result_from_sim(sim: &SimState, outcome: MissionOutcome) -> MissionResult
     MissionResult {
         outcome,
         kills: m.kills,
+        kill_target: m.kill_target,
         ticks,
         collected: m.collected,
         bonus,
@@ -236,6 +243,7 @@ mod tests {
                 upgrade_ids: upgrades.iter().map(|s| s.to_string()).collect(),
             }],
             seed: 1,
+            kill_target: sim::tuning::KILL_TARGET,
         }
     }
 
@@ -275,13 +283,26 @@ mod tests {
         assert!(upgrade_ids(&save).is_empty());
         save.carrier.place(Piece::Corridor, 6, 1);
         save.carrier.place(Piece::Room(RoomId::TrainingRoom), 7, 0);
-        let config = config_from_save(&save);
+        let config = config_from_save(&save, sim::tuning::KILL_TARGET);
         assert_eq!(config.ship_loadouts[0].upgrade_ids, ["training_room_1"]);
         assert_eq!(sim_loadouts(&config)[0].upgrades.training, 1);
         let sim = launch_sim(&config);
         assert_eq!(sim.ships[0].q_cooldown_max(), 204);
         // Clamped to the one level the room has.
         assert_eq!(upgrade_levels(&["training_room_3".to_string()]).training, 1);
+    }
+
+    #[test]
+    fn kill_target_goes_from_config_to_sim_and_result() {
+        let save = SaveGame::default();
+        let config = config_from_save(&save, sim::tuning::AUTOPLAY_KILL_TARGET);
+        let mut sim = launch_sim(&config);
+        assert_eq!(sim.mission.kill_target, 10);
+        sim.mission.kills = 10;
+        sim.mission.status = MissionStatus::Success;
+        let r = result_from_sim(&sim, sim_outcome(&sim).unwrap());
+        assert_eq!((r.kills, r.kill_target), (10, 10));
+        assert!(crate::flow::result_text(&r, (0, 0), (0, 0)).starts_with("Kills 10/10"));
     }
 
     #[test]

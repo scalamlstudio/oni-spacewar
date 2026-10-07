@@ -252,7 +252,13 @@ means a new table row.
   handle (1..=4, `MAX_PLAYERS`); single-player is `num_players = 1`.
 - The first-playable single-player flow launches missions through
   `client::mission::MissionConfig`, which carries a list of ship loadouts even
-  when that list currently has one entry. The demo battle path steps the same
+  when that list currently has one entry, plus the mission's `kill_target`
+  (`KILL_TARGET` = 40 in normal play, `AUTOPLAY_KILL_TARGET` = 10 under
+  `--autoplay`, or `--kill-target N`; the run's value is the `flow::KillTarget`
+  resource). `launch_sim` puts it into the sim's start state with
+  `SimState::with_kill_target`; it lives in `Mission::kill_target`, so it is
+  rolled back, hashed and identical on every peer, and the sim, HUD and Result
+  screen all read it from there. The demo battle path steps the same
   `SimWorld` resource at a fixed rate without opening a network session; the
   `synctest` and `p2p` modes still use `RollbackPlugin` and GGRS.
 - **The 2.5D carrier** (`layout.rs` rules, `carrier.rs` scene; design/READINESS.md
@@ -401,7 +407,8 @@ means a new table row.
   never build it. Floats and wall-clock time are fine here: it is purely
   visual and never reads or writes sim state.
 - `oni-spacewar --autoplay [--ship kite|bulwark] [--missions N] [--continue]
-  [--abandon] [--shots DIR]` is a QA mode for the whole demo loop: New Game
+  [--abandon] [--shots DIR] [--kill-target N]` is a QA mode for the whole
+  demo loop; its battles end at 10 kills unless `--kill-target` says otherwise: New Game
   (or Continue the existing save), fly N battles (default 1) with a scripted
   pilot (input only, like a player); between them, build the corridor at
   (8,6) and the Salvage Bay at (9,5) if they're affordable and not built yet,

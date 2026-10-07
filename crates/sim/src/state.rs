@@ -159,6 +159,15 @@ impl SimState {
         }
     }
 
+    /// The same mission won at `kill_target` kills instead of `KILL_TARGET`.
+    /// A launch setting: call it before the first `step`.
+    pub fn with_kill_target(mut self, kill_target: u32) -> Self {
+        assert_eq!(self.frame, 0, "the kill target is set at launch");
+        assert!(kill_target > 0, "kill target must be at least 1");
+        self.mission.kill_target = kill_target;
+        self
+    }
+
     /// The finished mission's result, or `None` while it is still running.
     pub fn outcome(&self) -> Option<MissionOutcome> {
         self.mission.outcome()
@@ -557,7 +566,7 @@ impl SimState {
     /// left is collected); failure when every ship is destroyed.
     fn check_end(&mut self) {
         let m = &mut self.mission;
-        if m.kills >= KILL_TARGET {
+        if m.kills >= m.kill_target {
             m.status = MissionStatus::Success;
             for p in self.pickups.drain(..) {
                 m.collected.add(p.kind, p.amount);
@@ -1100,6 +1109,7 @@ mod tests {
     #[test]
     fn kill_target_wins_and_collects_the_field() {
         let mut s = quiet(&[KITE]);
+        assert_eq!(s.mission.kill_target, KILL_TARGET);
         s.mission.kills = KILL_TARGET - 1;
         s.pickups.push(Pickup {
             kind: LootKind::Credits,
@@ -1125,6 +1135,32 @@ mod tests {
         s.step(&[input(INPUT_MOVE, 300, 0)]);
         assert_eq!(s.ships, frozen.ships);
         assert_eq!(s.mission.end_frame, frozen.frame - 1);
+    }
+
+    #[test]
+    fn a_ten_kill_mission_ends_at_ten_kills() {
+        for loadout in [KITE, BULWARK] {
+            let mut s =
+                SimState::with_loadouts(11, &[loadout]).with_kill_target(AUTOPLAY_KILL_TARGET);
+            let mut f = 0;
+            while s.outcome().is_none() && f < 60 * 300 {
+                s.ships[0].hull = 10_000;
+                assert!(s.mission.kills < AUTOPLAY_KILL_TARGET);
+                let e = s.enemies.first().map(|e| e.pos).unwrap_or_default();
+                let buttons = if f % 30 == 0 { INPUT_SKILL_W } else { 0 };
+                s.step(&[input(buttons, e.x / SUB, e.y / SUB)]);
+                f += 1;
+            }
+            let out = s.outcome().expect("mission over");
+            assert!(out.success, "{loadout:?} wins");
+            // Several enemies can die on the winning tick.
+            assert!((AUTOPLAY_KILL_TARGET..KILL_TARGET).contains(&out.kills));
+            assert!(s.enemies.is_empty());
+        }
+        // Same seed and inputs, different target: a different state hash.
+        let a = SimState::with_loadouts(3, &[KITE]);
+        let b = a.clone().with_kill_target(10);
+        assert_ne!(a, b);
     }
 
     #[test]
