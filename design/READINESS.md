@@ -56,7 +56,8 @@ Carrier, result, menus and save live in `client`.
   Crystal, upgrade levels, last result, tutorial hints seen).
 - **Tutorial hints** the first time the player does something.
 - **Art:** the demo art set, shipped through the content pipeline
-  (`assets/source/<pack>/…`, stable IDs, manifest). No audio.
+  (`assets/source/<pack>/…`, stable IDs, manifest) and following
+  `design/ART_GUIDELINES.md`. No audio.
 
 **Out of scope / deferred** (not rejected)
 
@@ -272,12 +273,13 @@ Shipped since TAKOAI-69/70: the detailed painted set in
 `make-carrier-v2.mjs` builds it). The Stage 7 set in
 `design/art/carrier-2_5d/` is kept as the previous version.
 
-Style: the palette and line weight from TAKOAI-51 (bold outlines, flat vibrant
-colour, no gradients). Every piece is authored at 2× (256 px per cell) on a
-transparent background, canvas exactly the footprint, so pieces line up on a
-shared 256 px grid. North walls show a 96 px face (2×) at the top of the top
-row; side walls and the front lip are 24 px (2×). Rooms are drawn with every
-socket **closed** (solid wall); the door overlays open them.
+Style: follow `design/ART_GUIDELINES.md` for painted detail, material rendering,
+crew consistency, text-free image assets and cropping checks. Every piece is
+authored at 2× (256 px per cell) on a transparent background, canvas exactly
+the footprint, so pieces line up on a shared 256 px grid. North walls show a
+96 px face (2×) at the top of the top row; side walls and the front lip are
+24 px (2×). Rooms are drawn with every socket **closed** (solid wall); the door
+overlays open them.
 
 | File | Canvas (2×) | Content |
 |---|---|---|

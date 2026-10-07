@@ -86,11 +86,11 @@ const CARRIER_2_5D: [(&str, &str, u32, u32); 28] = [
 
 /// Full-frame images (no background to key): stem, output, max size.
 /// (The battle background tile was dropped for the procedural nebula sky,
-/// TAKOAI-58.) Both are flat demo-v2 renders at 2000 x 1160, the largest
-/// window they have to stay crisp in (TAKOAI-59).
+/// TAKOAI-58.) These painted demo-v3 renders are 2000 x 1160, the largest
+/// window they have to stay crisp in.
 const BACKDROPS: [(&str, &str, u32, u32); 2] = [
-    ("demo-v2/title-key-art-v2", "title/key_art", 2000, 1160),
-    ("demo-v2/result-backdrop-v1", "result/backdrop", 2000, 1160),
+    ("demo-v3/title-key-art-v3", "title/key_art", 2000, 1160),
+    ("demo-v3/result-backdrop-v2", "result/backdrop", 2000, 1160),
 ];
 
 /// Row sheets: stem, output directory, frame names left to right, max frame

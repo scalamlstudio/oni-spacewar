@@ -12,7 +12,7 @@ is commit `b92126c`, its results are recorded on TAKOAI-18).
 | `Cargo.toml`, `crates/` | Rust/Bevy workspace | foundation (TAKOAI-26) + Elimination mission (TAKOAI-41) |
 | `assets/` | source and shipped content packs | modular content-patch foundation (TAKOAI-30) |
 | `.github/workflows/`, `ci/` | CI: determinism gate for the sim; local P2P soak script | see § Verifying determinism, § Netcode |
-| `design/` | design docs and concept art | source of truth for gameplay |
+| `design/` | design docs, art guidelines and concept art | source of truth for gameplay and art direction |
 
 ## Rust workspace
 
@@ -64,10 +64,11 @@ the network.
 ## Modular content packs
 
 Shipped game content lives under `assets/` and is split into independently
-versioned packs. Source art and design exploration remain in `design/art/`;
-that tree is never loaded directly by the game and is not rewritten by the
-content pipeline. When art is ready to ship, an import step copies or exports it
-into `assets/source/<pack>/...`, then the pipeline writes processed files and
+versioned packs. Source art and design exploration remain in `design/art/`,
+with binding art rules in `design/ART_GUIDELINES.md`; that tree is never loaded
+directly by the game and is not rewritten by the content pipeline. When art is
+ready to ship, an import step copies or exports it into
+`assets/source/<pack>/...`, then the pipeline writes processed files and
 compressed bundles under `assets/packs/<pack>/...`.
 
 ```
@@ -207,8 +208,9 @@ detected pose count differs from the provided expression count.
 
 The First Playable art set (`design/art/demo/*-v1.png`, with the restyled
 battle art from `design/art/demo-v2/` replacing the Swarmer, Spitter, Spitter
-shot and loot icons under the same stable IDs, plus the void fissure) is
-imported with:
+shot and loot icons under the same stable IDs, plus the void fissure, and
+painted text-free full-screen backdrops from `design/art/demo-v3/`) is imported
+with:
 
 ```sh
 cargo run --release --bin demo-art-import -- .
@@ -229,13 +231,13 @@ already transparent and authored at 2× on a 256 px-per-cell grid, so they are
 copied unchanged after a size check, as `core.carrier.room.<id>`,
 `core.carrier.door.<n|e|s|w>`, `core.carrier.corridor.<mask>`,
 `core.carrier.hull_floor` and `core.carrier.build_slot` (drawn at 1×, 128 px
-per cell). The full-screen backdrops (`BACKDROPS`) are the demo-v2 title key
-art and Result backdrop (`core.title.key_art`, `core.result.backdrop`,
-TAKOAI-59), shipped at 2000 × 1160 so they stay crisp up to that window
-size. Their SVG sources live in `design/art/demo-v2/` and are rendered to
-PNG with `design/art/demo-v2/render-svg.sh <name>` (headless Chrome). It also
-writes `target/demo-art-contact-sheet.png` for a visual check. The file
-names and target sizes are tables at the top of the tool; a new art file
+per cell). The full-screen backdrops (`BACKDROPS`) are the demo-v3 title key
+art and Result backdrop (`core.title.key_art`, `core.result.backdrop`), shipped
+at 2000 × 1160 so they stay crisp up to that window size. They follow
+`design/ART_GUIDELINES.md`: painted detail, no in-image text, concept crew only
+when characters appear, and composition that leaves calm areas for UI text. The
+import also writes `target/demo-art-contact-sheet.png` for a visual check. The
+file names and target sizes are tables at the top of the tool; a new art file
 means a new table row.
 
 ### How the sim plugs into rollback
