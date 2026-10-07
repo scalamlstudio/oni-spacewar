@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<defs>
+  <filter id="paint" x="-10%" y="-10%" width="120%" height="120%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.018" numOctaves="3" seed="43" result="noise"/>
+    <feColorMatrix in="noise" type="matrix" values="0.08 0 0 0 0  0 0.08 0 0 0  0 0 0.08 0 0  0 0 0 0.35 0" result="grain"/>
+    <feBlend in="SourceGraphic" in2="grain" mode="multiply"/>
+  </filter>
+  <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+    <feGaussianBlur stdDeviation="4" result="blur"/>
+    <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <linearGradient id="floorGrad" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#a4bca9"/>
+    <stop offset="0.45" stop-color="#78998c"/>
+    <stop offset="1" stop-color="#547b73"/>
+  </linearGradient>
+  <linearGradient id="wallGrad" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#245b5d"/>
+    <stop offset="0.5" stop-color="#173f45"/>
+    <stop offset="1" stop-color="#102b31"/>
+  </linearGradient>
+  <linearGradient id="darkMetal" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#28484c"/>
+    <stop offset="1" stop-color="#0b2025"/>
+  </linearGradient>
+  <pattern id="floorGrid" width="64" height="64" patternUnits="userSpaceOnUse">
+    <path d="M64 0H0V64" fill="none" stroke="#2f605d" stroke-width="2" opacity="0.32"/>
+  </pattern>
+  <pattern id="hatch" width="16" height="16" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+    <rect width="16" height="16" fill="transparent"/>
+    <path d="M0 0V16" stroke="#f1ba61" stroke-width="4" opacity="0.45"/>
+  </pattern>
+  
+</defs>
+<rect x="0" y="0" width="256" height="256" fill="#071316" /><rect x="0" y="0" width="256" height="256" fill="url(#darkMetal)" filter="url(#paint)"/><rect x="64" y="80" width="128" height="96" fill="#88a998" rx="10" filter="url(#paint)"/><rect x="160" y="80" width="96" height="96" fill="#88a998" filter="url(#paint)"/><rect x="0" y="80" width="96" height="96" fill="#88a998" filter="url(#paint)"/><rect x="70" y="86" width="116" height="84" fill="url(#floorGrid)" opacity="0.42"/><path d="M64 80L192 80" fill="none" stroke="#39d5c3" stroke-width="4" opacity="0.65" filter="url(#glow)"/><path d="M64 176L192 176" fill="none" stroke="#39d5c3" stroke-width="4" opacity="0.65" filter="url(#glow)"/><path d="M64 80L64 176" fill="none" stroke="#39d5c3" stroke-width="4" opacity="0.65" filter="url(#glow)"/><path d="M192 80L192 176" fill="none" stroke="#39d5c3" stroke-width="4" opacity="0.65" filter="url(#glow)"/><path d="M174 80L256 80" fill="none" stroke="#39d5c3" stroke-width="4" opacity="0.65" filter="url(#glow)"/><path d="M174 176L256 176" fill="none" stroke="#39d5c3" stroke-width="4" opacity="0.65" filter="url(#glow)"/><path d="M0 80L82 80" fill="none" stroke="#39d5c3" stroke-width="4" opacity="0.65" filter="url(#glow)"/><path d="M0 176L82 176" fill="none" stroke="#39d5c3" stroke-width="4" opacity="0.65" filter="url(#glow)"/><path d="M20 34C70 18 104 38 142 24S214 24 238 50" fill="none" stroke="#15373d" stroke-width="11" opacity="0.72"/><path d="M22 216C72 202 126 224 176 204S224 204 244 222" fill="none" stroke="#173f45" stroke-width="9" opacity="0.8"/><circle cx="38" cy="54" r="8" fill="#ffd58c" opacity="0.72" filter="url(#glow)"/><circle cx="218" cy="56" r="8" fill="#ffd58c" opacity="0.72" filter="url(#glow)"/><circle cx="38" cy="206" r="8" fill="#ffd58c" opacity="0.72" filter="url(#glow)"/><circle cx="218" cy="206" r="8" fill="#ffd58c" opacity="0.72" filter="url(#glow)"/><rect x="18" y="18" width="46" height="14" fill="url(#hatch)" opacity="0.75"/><rect x="190" y="224" width="46" height="14" fill="url(#hatch)" opacity="0.75"/>
+</svg>

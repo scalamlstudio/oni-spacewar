@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<defs>
+  <filter id="paint" x="-10%" y="-10%" width="120%" height="120%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.018" numOctaves="3" seed="43" result="noise"/>
+    <feColorMatrix in="noise" type="matrix" values="0.08 0 0 0 0  0 0.08 0 0 0  0 0 0.08 0 0  0 0 0 0.35 0" result="grain"/>
+    <feBlend in="SourceGraphic" in2="grain" mode="multiply"/>
+  </filter>
+  <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+    <feGaussianBlur stdDeviation="4" result="blur"/>
+    <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <linearGradient id="floorGrad" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#a4bca9"/>
+    <stop offset="0.45" stop-color="#78998c"/>
+    <stop offset="1" stop-color="#547b73"/>
+  </linearGradient>
+  <linearGradient id="wallGrad" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#245b5d"/>
+    <stop offset="0.5" stop-color="#173f45"/>
+    <stop offset="1" stop-color="#102b31"/>
+  </linearGradient>
+  <linearGradient id="darkMetal" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#28484c"/>
+    <stop offset="1" stop-color="#0b2025"/>
+  </linearGradient>
+  <pattern id="floorGrid" width="64" height="64" patternUnits="userSpaceOnUse">
+    <path d="M64 0H0V64" fill="none" stroke="#2f605d" stroke-width="2" opacity="0.32"/>
+  </pattern>
+  <pattern id="hatch" width="16" height="16" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+    <rect width="16" height="16" fill="transparent"/>
+    <path d="M0 0V16" stroke="#f1ba61" stroke-width="4" opacity="0.45"/>
+  </pattern>
+  
+</defs>
+<rect x="0" y="0" width="256" height="256" fill="transparent" /><rect x="44" y="44" width="168" height="168" fill="#17343b" rx="22" opacity="0.78" filter="url(#paint)"/><rect x="58" y="58" width="140" height="140" fill="none" rx="18" stroke="#39d5c3" stroke-width="7" stroke-dasharray="22 15" opacity="0.82" filter="url(#glow)"/><path d="M128 84V172M84 128H172" stroke="#ffd58c" stroke-width="8" stroke-linecap="round" opacity="0.82"/><g transform="translate(181 78) scale(0.42)" opacity="0.75">
+    <path d="M-16 -7L-8 -18L-2 -8L8 -8L14 -18L20 -5C23 10 15 22 2 23C-13 23 -23 10 -16 -7Z" fill="#ffd58c"/>
+    <circle cx="-6" cy="4" r="2.4" fill="#17313a"/><circle cx="9" cy="4" r="2.4" fill="#17313a"/>
+    <path d="M0 12Q3 15 7 12" fill="none" stroke="#17313a" stroke-width="2"/>
+  </g>
+</svg>
