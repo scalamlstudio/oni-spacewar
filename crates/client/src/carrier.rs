@@ -439,6 +439,22 @@ impl Hotspot {
     }
 }
 
+/// The autoplay's first-visit Pilot tour (TAKOAI-74): eight straight
+/// walks on the Bridge floor from the new-game spawn, one per facing, each
+/// at least 148 px (0.9 s) long so a shot mid-walk is mid-stride, and kept
+/// off the Gunner's west column. Grid px targets and the facing's name.
+/// It starts north-west from the spawn on the Bridge's south-east floor.
+pub const PILOT_TOUR: [(Vec2, &str); 8] = [
+    (Vec2::new(192.0, 192.0), "nw"),
+    (Vec2::new(44.0, 192.0), "w"),
+    (Vec2::new(192.0, 340.0), "se"),
+    (Vec2::new(192.0, 192.0), "n"),
+    (Vec2::new(340.0, 192.0), "e"),
+    (Vec2::new(192.0, 340.0), "sw"),
+    (Vec2::new(340.0, 192.0), "ne"),
+    (Vec2::new(340.0, 340.0), "s"),
+];
+
 /// Room-local spot (cell, then px inside it) of a crew member's feet:
 /// design/READINESS.md § Room catalogue.
 const CREW_SPOTS: [(RoomId, Crew, (i32, i32)); 3] = [
@@ -3157,6 +3173,36 @@ mod tests {
         let floor = order_walk(&rects, &spots, start, cell_centre((3, 4)), None).unwrap();
         assert_eq!(floor.interact, None);
         assert!(order_walk(&rects, &spots, start, cell_centre((10, 0)), None).is_none());
+    }
+
+    #[test]
+    fn pilot_tour_walks_once_in_every_facing() {
+        let l = CarrierLayout::starting();
+        let rects = l.walkable();
+        let spots = hotspots(&l);
+        let mut feet = cell_centre(SPAWN_NEW_GAME);
+        let mut seen = Vec::new();
+        for (to, name) in PILOT_TOUR {
+            let mut order = order_walk(&rects, &spots, feet, to, None).expect("on the Bridge");
+            // One straight leg, so the facing holds for the whole walk.
+            assert_eq!(order.path, vec![to], "{name}");
+            let facing = Facing::of(to - feet).unwrap();
+            assert_eq!(format!("{facing:?}").to_lowercase(), name);
+            // Still walking 0.5 s in, when the autoplay shoots.
+            assert!(feet.distance(to) > WALK_SPEED * 0.5, "{name}");
+            let mut done = false;
+            for _ in 0..60 * 2 {
+                (feet, done) = follow(&rects, &mut order, feet, WALK_SPEED / 60.0);
+                if done {
+                    break;
+                }
+            }
+            assert!(done && feet.distance(to) < 0.5, "{name} ends at {feet}");
+            seen.push(facing);
+        }
+        for facing in Facing::BY_ANGLE {
+            assert!(seen.contains(&facing), "{facing:?}");
+        }
     }
 
     #[test]

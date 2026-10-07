@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from PIL import Image, ImageChops, ImageDraw, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageOps
 
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -13,9 +13,10 @@ BASELINE = 181
 TARGET_HEIGHT = 150
 
 FRAMES = ["idle", "walk_1", "walk_2", "walk_3", "walk_4"]
-DIRS = ["s", "se", "e", "ne", "n"]
+ASSET_DIRS = ["s", "se", "e", "ne", "n"]
+SHEET_DIRS = ["s", "se", "e", "ne", "n", "sw", "w", "nw"]
 
-GENERATED_SHEET = HERE / "oni-pilot-8dir-generated-source-v1.png"
+GENERATED_SHEET = HERE / "oni-pilot-8dir-generated-source-v2.png"
 EAST_SHEET = ROOT / "design/art/demo/oni-pilot-walk-sheet-v1.png"
 
 
@@ -94,6 +95,61 @@ def fit_to_frame(sprite: Image.Image, target_height: int = TARGET_HEIGHT) -> Ima
     return canvas
 
 
+def add_back_ear_tips(cell: Image.Image) -> Image.Image:
+    cell = cell.convert("RGBA")
+    box = bbox_from_alpha(cell)
+    if box[1] > 0:
+        return cell
+
+    top_pad = 30
+    padded = Image.new("RGBA", (cell.width, cell.height + top_pad), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(padded, "RGBA")
+
+    x1, _, x2, _ = box
+    span = x2 - x1
+    head_left = x1 + round(span * 0.08)
+    head_right = x2 - round(span * 0.02)
+    base_y = top_pad + 7
+    tip_y = 5
+    outline = (73, 50, 38, 230)
+    dark = (150, 75, 31, 255)
+    orange = (238, 126, 37, 255)
+    light = (255, 171, 67, 245)
+
+    ears = [
+        ((head_left, base_y + 3), (head_left + 34, tip_y), (head_left + 72, base_y + 2)),
+        ((head_right - 76, base_y + 2), (head_right - 38, tip_y), (head_right, base_y + 3)),
+    ]
+    for points in ears:
+        draw.polygon(points, fill=orange, outline=outline)
+        draw.line(points + (points[0],), fill=outline, width=4, joint="curve")
+        draw.line((points[0], points[1], points[2]), fill=light, width=2, joint="curve")
+        draw.line((points[0][0] + 11, base_y, points[1][0], tip_y + 12), fill=dark, width=2)
+        draw.line((points[2][0] - 13, base_y, points[1][0], tip_y + 12), fill=dark, width=2)
+
+    padded.alpha_composite(cell, (0, top_pad))
+    return padded
+
+
+def lean_back_view_ne(cell: Image.Image) -> Image.Image:
+    cell = cell.convert("RGBA")
+    box = bbox_from_alpha(cell)
+    out = Image.new("RGBA", (cell.width + 28, cell.height), (0, 0, 0, 0))
+    source = cell.load()
+    dest = out.load()
+    for y in range(cell.height):
+        lean = round((1.0 - y / max(1, cell.height - 1)) * 18)
+        for x in range(cell.width):
+            r, g, b, a = source[x, y]
+            if a == 0:
+                continue
+            nx = x + lean + 4
+            pr, pg, pb, pa = dest[nx, y]
+            if a >= pa:
+                dest[nx, y] = (r, g, b, a)
+    return out.crop(bbox_from_alpha(out))
+
+
 def cut_generated_sheet() -> dict[tuple[str, str], Image.Image]:
     source = Image.open(GENERATED_SHEET).convert("RGBA")
     cell_w = source.width / 5
@@ -114,6 +170,8 @@ def cut_generated_sheet() -> dict[tuple[str, str], Image.Image]:
             alpha = cell.getchannel("A")
             cell.putalpha(alpha.point(lambda a: 0 if a < 24 else a))
             cell = keep_largest_alpha_component(cell)
+            if direction in {"ne", "n"}:
+                cell = add_back_ear_tips(cell)
             result[(direction, frame)] = fit_to_frame(cell)
     return result
 
@@ -143,10 +201,10 @@ def checkerboard(size: tuple[int, int], cell: int = 16) -> Image.Image:
 def make_contact_sheet(frames: dict[tuple[str, str], Image.Image]) -> None:
     margin = 18
     label_h = 22
-    sheet = checkerboard((W * len(FRAMES) + margin * 2, (H + label_h) * len(DIRS) + margin * 2))
+    sheet = checkerboard((W * len(FRAMES) + margin * 2, (H + label_h) * len(SHEET_DIRS) + margin * 2))
     draw = ImageDraw.Draw(sheet)
     font = ImageFont.load_default()
-    for row, direction in enumerate(DIRS):
+    for row, direction in enumerate(SHEET_DIRS):
         y = margin + row * (H + label_h)
         draw.text((6, y + 6), direction.upper(), fill=(226, 238, 232, 255), font=font)
         for col, frame in enumerate(FRAMES):
@@ -193,7 +251,7 @@ def main() -> None:
     generated = cut_generated_sheet()
     east = cut_east_sheet()
     frames = {}
-    for direction in DIRS:
+    for direction in ASSET_DIRS:
         (ASSET_ROOT / direction).mkdir(parents=True, exist_ok=True)
         (HERE / "frames" / direction).mkdir(parents=True, exist_ok=True)
         for frame in FRAMES:
@@ -201,6 +259,10 @@ def main() -> None:
             frames[(direction, frame)] = image
             image.save(ASSET_ROOT / direction / f"{frame}.png")
             image.save(HERE / "frames" / direction / f"{frame}.png")
+    for frame in FRAMES:
+        frames[("w", frame)] = ImageOps.mirror(frames[("e", frame)])
+        frames[("sw", frame)] = ImageOps.mirror(frames[("se", frame)])
+        frames[("nw", frame)] = ImageOps.mirror(frames[("ne", frame)])
     make_contact_sheet(frames)
     make_crew_compare(frames)
 
