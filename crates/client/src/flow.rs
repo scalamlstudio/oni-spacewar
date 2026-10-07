@@ -139,6 +139,11 @@ impl Autoplay {
     }
 }
 
+/// First Carrier visit: when the autoplay's 8-direction Pilot tour starts,
+/// and the time per walk (the longest, a 209 px diagonal, takes 1.3 s).
+const TOUR_START: f32 = 3.5;
+const TOUR_LEG: f32 = 1.4;
+
 /// Upgrade preference for the autoplay pilot: the spec's most visible first
 /// buy first.
 const AUTOPLAY_UPGRADES: [crate::workshop::Upgrade; 3] = [
@@ -1003,7 +1008,7 @@ fn autoplay_flow(
         ResMut<WalkOrder>,
         Res<CarrierScene>,
     ),
-    pilot: Query<&Transform, With<Pilot>>,
+    pilot: Query<(&Transform, &Pilot)>,
     mut launch: MessageWriter<MissionRequest>,
     mut exit: MessageWriter<AppExit>,
     world: Option<Res<SimWorld>>,
@@ -1122,10 +1127,11 @@ fn autoplay_flow(
                 return;
             }
             // First visit (a new game or a Continued save): the builder
-            // screen with a ghost, then walk the Pilot north-east and
-            // south-west across the Bridge so the shots show the
-            // 8-direction art (the Dock walk adds more).
-            if n == 0 && !autoplay.reloaded {
+            // screen with a ghost, then walk the Pilot once in each of the 8
+            // directions across the Bridge, shooting mid-stride (the Dock
+            // walk adds more).
+            let first_visit = n == 0 && !autoplay.reloaded;
+            if first_visit {
                 if at(2.3) {
                     *overlay = Overlay::Build {
                         tool: Tool::Place(Piece::Room(RoomId::SalvageBay)),
@@ -1139,12 +1145,10 @@ fn autoplay_flow(
                 if at(3.2) {
                     *overlay = Overlay::None;
                 }
-                for (start, to, name) in [
-                    (3.5, Vec2::new(330.0, 100.0), "ne"),
-                    (4.9, Vec2::new(60.0, 230.0), "sw"),
-                ] {
+                for (i, (to, name)) in carrier::PILOT_TOUR.into_iter().enumerate() {
+                    let start = TOUR_START + i as f32 * TOUR_LEG;
                     if at(start) {
-                        let order = pilot.single().ok().and_then(|tf| {
+                        let order = pilot.single().ok().and_then(|(tf, _)| {
                             carrier::order_walk(
                                 &scene.walkable,
                                 &scene.hotspots,
@@ -1153,11 +1157,19 @@ fn autoplay_flow(
                                 None,
                             )
                         });
-                        if let Some(o) = order {
-                            *walk = o;
+                        match order {
+                            Some(o) => *walk = o,
+                            None => println!("autoplay: WARNING no path for walk {name}"),
                         }
                     }
-                    if at(start + 0.5) {
+                    if at(start + 0.45) {
+                        if let Ok((tf, p)) = pilot.single() {
+                            println!(
+                                "autoplay: pilot walk {name} at {} facing {:?}",
+                                carrier::grid(tf.translation.truncate()).round(),
+                                p.facing
+                            );
+                        }
                         autoplay.shoot(&mut commands, &format!("11c-pilot-walk-{name}"));
                     }
                 }
@@ -1280,11 +1292,17 @@ fn autoplay_flow(
                 }
             }
             let berth = carrier::ship_index(&autoplay.ship);
-            if at(7.5) {
+            // The first visit's Pilot tour runs past the usual 7.5 s.
+            let dock = if first_visit {
+                TOUR_START + carrier::PILOT_TOUR.len() as f32 * TOUR_LEG + 0.4
+            } else {
+                7.5
+            };
+            if at(dock) {
                 // Click the ship: the Pilot walks to its Dock and boards it
                 // on arrival (selects it and starts the briefing).
                 autoplay.boarded = None;
-                let order = pilot.single().ok().and_then(|tf| {
+                let order = pilot.single().ok().and_then(|(tf, _)| {
                     carrier::order_walk(
                         &scene.walkable,
                         &scene.hotspots,
@@ -1305,19 +1323,19 @@ fn autoplay_flow(
                     None => println!("autoplay: no path to berth {berth}"),
                 }
             }
-            if at(8.0) {
+            if at(dock + 0.5) {
                 autoplay.shoot(
                     &mut commands,
                     &format!("{:02}e-walk-to-dock-a", 12 + n * 10),
                 );
             }
-            if at(8.7) {
+            if at(dock + 1.2) {
                 autoplay.shoot(
                     &mut commands,
                     &format!("{:02}e-walk-to-dock-b", 12 + n * 10),
                 );
             }
-            if *since >= 7.5 && autoplay.boarded.is_none() {
+            if *since >= dock && autoplay.boarded.is_none() {
                 if matches!(
                     *overlay,
                     Overlay::Dialogue {
@@ -1325,9 +1343,9 @@ fn autoplay_flow(
                         ..
                     }
                 ) {
-                    println!("autoplay: boarded after a {:.1} s walk", *since - 7.5);
+                    println!("autoplay: boarded after a {:.1} s walk", *since - dock);
                     autoplay.boarded = Some(*since);
-                } else if *since >= 27.5 {
+                } else if *since >= dock + 20.0 {
                     // Never arrived: board in place so the run goes on.
                     println!("autoplay: WARNING walk to berth {berth} timed out");
                     *walk = WalkOrder::default();
