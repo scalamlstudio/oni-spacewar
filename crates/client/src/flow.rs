@@ -6,7 +6,6 @@ use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
 use bevy::window::PrimaryWindow;
 use sim::input::{INPUT_MOVE, INPUT_SKILL_Q, INPUT_SKILL_W};
-use sim::tuning::KILL_TARGET;
 use sim::{FxVec2, NetInput, SimState, SUB};
 
 use crate::art::ContentImages;
@@ -59,6 +58,7 @@ impl Plugin for FlowPlugin {
             .insert_resource(SaveSlot::load())
             .init_resource::<PauseMenu>()
             .init_resource::<LastMissionResult>()
+            .init_resource::<KillTarget>()
             .add_message::<MissionRequest>()
             .add_systems(OnEnter(GameScreen::Title), enter_title)
             .add_systems(OnEnter(GameScreen::Carrier), enter_carrier)
@@ -109,6 +109,18 @@ impl Plugin for FlowPlugin {
 /// arrival. After the last mission it quits to the Title, reloads the save
 /// from disk and Continues once (a restart inside the same process) before
 /// quitting. Prints `autoplay:` lines.
+/// Kills that win each Elimination in this run: `KILL_TARGET` in normal
+/// play, `AUTOPLAY_KILL_TARGET` under `--autoplay`, or `--kill-target N`.
+/// Goes into the `MissionConfig` at launch.
+#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct KillTarget(pub u32);
+
+impl Default for KillTarget {
+    fn default() -> Self {
+        Self(sim::tuning::KILL_TARGET)
+    }
+}
+
 #[derive(Resource, Clone, Default)]
 pub struct Autoplay {
     pub ship: String,
@@ -432,9 +444,9 @@ fn apply_mission_request(
     ));
 }
 
-fn enter_battle(mut commands: Commands, save: Res<SaveSlot>) {
+fn enter_battle(mut commands: Commands, save: Res<SaveSlot>, kill_target: Res<KillTarget>) {
     let game = save.game.clone().unwrap_or_default();
-    let config = mission::config_from_save(&game);
+    let config = mission::config_from_save(&game, kill_target.0);
     commands.insert_resource(SimWorld(mission::launch_sim(&config)));
     commands.spawn((
         ScreenEntity,
@@ -466,8 +478,9 @@ pub fn result_text(r: &MissionResult, wallet: (u32, u32), salvage: (u32, u32)) -
         .unwrap_or(0);
     let mut lines = vec![
         format!(
-            "Kills {}/{KILL_TARGET}    Time {}",
+            "Kills {}/{}    Time {}",
             r.kills,
+            r.kill_target,
             mission_time(r.ticks)
         ),
         format!(
@@ -1468,6 +1481,7 @@ mod tests {
                 upgrade_ids: upgrades.iter().map(|s| s.to_string()).collect(),
             }],
             seed,
+            kill_target: sim::tuning::KILL_TARGET,
         };
         let mut world = mission::launch_sim(&config);
         for _ in 0..60 * 60 * 5 {

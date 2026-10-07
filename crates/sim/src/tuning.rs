@@ -144,9 +144,13 @@ pub const SPIT_LIFETIME: u32 = ticks(3, 1);
 
 // --- Elimination: void fissures and the spawn director ----------------------
 
-/// Raised from 20 with the 3× spawn rate (TAKOAI-58) so a mission still
-/// lasts about 1-2 minutes.
+/// Normal play's kill target. Raised from 20 with the 3× spawn rate
+/// (TAKOAI-58) so a mission still lasts about 1-2 minutes. The sim reads the
+/// mission's own [`Mission::kill_target`](crate::Mission::kill_target), set
+/// at launch (`SimState::with_kill_target`); this is only its default.
 pub const KILL_TARGET: u32 = 40;
+/// `--autoplay` / test runs' kill target (TAKOAI-77): shorter QA battles.
+pub const AUTOPLAY_KILL_TARGET: u32 = 10;
 
 /// Each mission places `FISSURES_MIN..=FISSURES_MAX` void fissures.
 pub const FISSURES_MIN: i32 = 1;

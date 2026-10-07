@@ -11,7 +11,7 @@ use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy_ggrs::{LocalPlayers, Session};
-use sim::tuning::{FISSURE_RADIUS, KILL_TARGET, SHOCKWAVE_RADIUS, TICKS_PER_SEC};
+use sim::tuning::{FISSURE_RADIUS, SHOCKWAVE_RADIUS, TICKS_PER_SEC};
 use sim::{EnemyKind, FxVec2, LootKind, MissionStatus, Ship, ShipKind, SimState, SUB};
 
 use crate::art::ContentImages;
@@ -664,8 +664,9 @@ pub fn battle_hud(world: &SimState, me: usize) -> String {
         );
     }
     let secs = world.frame / TICKS_PER_SEC as u32;
+    let target = m.kill_target;
     s += &format!(
-        "\nKills {}/{KILL_TARGET} - Objective: destroy {KILL_TARGET} void monsters\nTime {}:{:02}   Enemies {}\nLoot: {} credits, {} Void Crystal",
+        "\nKills {}/{target} - Objective: destroy {target} void monsters\nTime {}:{:02}   Enemies {}\nLoot: {} credits, {} Void Crystal",
         m.kills,
         secs / 60,
         secs % 60,

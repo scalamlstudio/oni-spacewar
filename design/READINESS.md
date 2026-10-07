@@ -373,8 +373,9 @@ Basic attacks fire at the nearest enemy in range (design/DESIGN.md § Player).
   procedural "magical night sky with nebula" (deep blue-violet, drifting
   magenta / teal / violet clouds, twinkling stars at 3 parallax depths), kept
   dark so ships and shots read.
-- **Kill target:** 40. The HUD shows "Kills x/40". Reaching 40 is Success
-  immediately: remaining enemies vanish and every pickup still on the field is
+- **Kill target:** 40. The HUD shows "Kills x/40". `--autoplay` QA runs use
+  10 instead (shorter test battles, TAKOAI-77); `--kill-target N` overrides
+  either for manual testing. Reaching the target is Success immediately: remaining enemies vanish and every pickup still on the field is
   collected.
 - **Failed:** every battleship in the mission is destroyed (solo: yours). Quit
   Mission from the pause menu also counts as Failed.

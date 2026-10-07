@@ -52,7 +52,9 @@ pub const DEFAULT_WINDOW: UVec2 = UVec2::new(1000, 580);
 const USAGE: &str = "\
 usage:
   oni-spacewar [--autoplay [--ship kite|bulwark] [--missions N] [--continue] [--abandon]
-                [--shots DIR]]
+                [--shots DIR]] [--kill-target N]
+                --autoplay battles end at 10 kills, normal play at 40;
+                --kill-target N overrides either (manual testing)
   oni-spacewar synctest [--minutes M] [--check-distance D] [--headless] [--bot]
   oni-spacewar p2p [--room ws://127.0.0.1:3536/oni?next=2]
                    [--delay-ms 50] [--jitter-ms 0] [--loss 0.0] [--input-delay 2]
@@ -60,7 +62,8 @@ usage:
                    [--ice URL]...   STUN/TURN servers (default: public Google STUN;
                                     `--ice none` = host candidates only, LAN)
                    TURN auth from env: ONI_ICE_USERNAME, ONI_ICE_CREDENTIAL
-common: [--players 2] [--seed 42] [--no-vsync] [--frame-latency N] [--inject-desync]";
+common: [--players 2] [--seed 42] [--no-vsync] [--frame-latency N] [--inject-desync]
+        [--kill-target N]";
 
 #[derive(Clone, Debug)]
 struct Args {
@@ -91,6 +94,19 @@ struct Args {
     /// `--abandon`: autoplay quits its last mission (counts as Failed).
     abandon: bool,
     shots: Option<std::path::PathBuf>,
+    /// `--kill-target N`; `None` = 10 under `--autoplay`, else 40.
+    kill_target: Option<u32>,
+}
+
+impl Args {
+    /// Kills that win each Elimination in this run.
+    fn kill_target(&self) -> u32 {
+        self.kill_target.unwrap_or(if self.autoplay {
+            sim::tuning::AUTOPLAY_KILL_TARGET
+        } else {
+            sim::tuning::KILL_TARGET
+        })
+    }
 }
 
 fn usage_exit(msg: &str) -> ! {
@@ -128,6 +144,7 @@ fn parse_args() -> Args {
         resume: false,
         abandon: false,
         shots: None,
+        kill_target: None,
     };
 
     fn val<T: std::str::FromStr>(name: &str, it: &mut dyn Iterator<Item = String>) -> T {
@@ -163,11 +180,15 @@ fn parse_args() -> Args {
             "--continue" => a.resume = true,
             "--abandon" => a.abandon = true,
             "--shots" => a.shots = Some(val(&flag, it)),
+            "--kill-target" => a.kill_target = Some(val(&flag, it)),
             _ => usage_exit(&format!("unknown flag {flag}\n")),
         }
     }
     if !(1..=MAX_PLAYERS).contains(&a.players) {
         usage_exit(&format!("--players must be 1..={MAX_PLAYERS}\n"));
+    }
+    if a.kill_target == Some(0) {
+        usage_exit("--kill-target must be at least 1\n");
     }
     if a.room.is_empty() {
         a.room = format!("ws://127.0.0.1:3536/oni?next={}", a.players);
@@ -257,7 +278,8 @@ fn main() {
         app.insert_resource(NetStatus("demo flow".into()))
             .insert_resource(ContentStatus(content_status))
             .init_resource::<Stats>()
-            .add_plugins((flow::FlowPlugin, carrier::CarrierPlugin, hints::HintsPlugin));
+            .add_plugins((flow::FlowPlugin, carrier::CarrierPlugin, hints::HintsPlugin))
+            .insert_resource(flow::KillTarget(args.kill_target()));
         if args.autoplay {
             if let Some(dir) = &args.shots {
                 std::fs::create_dir_all(dir).expect("create --shots dir");
@@ -280,10 +302,10 @@ fn main() {
 
     app.add_plugins(GgrsPlugin::<GameConfig>::default())
         .insert_resource(RollbackFrameRate(60))
-        .insert_resource(SimWorld(SimState::with_loadouts(
-            args.seed,
-            &test_loadouts(args.players),
-        )))
+        .insert_resource(SimWorld(
+            SimState::with_loadouts(args.seed, &test_loadouts(args.players))
+                .with_kill_target(args.kill_target()),
+        ))
         .insert_resource(RunLimit {
             frames,
             warmup_frames: 180,

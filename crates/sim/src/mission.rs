@@ -22,6 +22,9 @@ pub struct Mission {
     /// Ticks until the spawn director's next spawn (it waits at 0 while
     /// `MAX_LIVE_ENEMIES` are alive).
     pub spawn_timer: u32,
+    /// Kills that win the mission. Part of the start state, so identical on
+    /// every peer; `KILL_TARGET` unless the launch sets another value.
+    pub kill_target: u32,
     pub kills: u32,
     pub spawned: u32,
     /// Loot picked up so far (shared by every ship in the mission).
@@ -36,6 +39,7 @@ impl Default for Mission {
     fn default() -> Self {
         Self {
             spawn_timer: SPAWN_FIRST,
+            kill_target: KILL_TARGET,
             kills: 0,
             spawned: 0,
             collected: Loot::default(),
