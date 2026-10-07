@@ -1122,9 +1122,11 @@ fn autoplay_flow(
                 return;
             }
             // First visit (a new game or a Continued save): the builder
-            // screen with a ghost, then walk the Pilot north-east and
-            // south-west across the Bridge so the shots show the
-            // 8-direction art (the Dock walk adds more).
+            // screen with a ghost, then walk the Pilot across the Bridge
+            // floor (x 24..360, y 188..360 grid px for its feet): to the
+            // north-east corner, south-west, and north-east again, each
+            // shot half a second into its leg so the Pilot has turned and
+            // is mid-stride (the Dock walk adds more directions).
             if n == 0 && !autoplay.reloaded {
                 if at(2.3) {
                     *overlay = Overlay::Build {
@@ -1140,8 +1142,9 @@ fn autoplay_flow(
                     *overlay = Overlay::None;
                 }
                 for (start, to, name) in [
-                    (3.5, Vec2::new(330.0, 100.0), "ne"),
-                    (4.9, Vec2::new(60.0, 230.0), "sw"),
+                    (3.4, Vec2::new(350.0, 200.0), None),
+                    (4.4, Vec2::new(60.0, 350.0), Some("sw")),
+                    (5.8, Vec2::new(350.0, 200.0), Some("ne")),
                 ] {
                     if at(start) {
                         let order = pilot.single().ok().and_then(|tf| {
@@ -1157,8 +1160,10 @@ fn autoplay_flow(
                             *walk = o;
                         }
                     }
-                    if at(start + 0.5) {
-                        autoplay.shoot(&mut commands, &format!("11c-pilot-walk-{name}"));
+                    if let Some(name) = name {
+                        if at(start + 0.5) {
+                            autoplay.shoot(&mut commands, &format!("11c-pilot-walk-{name}"));
+                        }
                     }
                 }
             }
