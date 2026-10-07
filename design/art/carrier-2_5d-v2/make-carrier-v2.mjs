@@ -275,19 +275,23 @@ function corridor(mask) {
   let s = rect(0, 0, 256, 256, "#071316");
   s += rect(0, 0, 256, 256, "url(#darkMetal)", `filter="url(#paint)"`);
   const has = (d) => mask.includes(d);
+  const hasSide = has("e") || has("w");
   const lane = "#88a998";
   const edge = palette.teal;
-  s += rect(64, 80, 128, 96, lane, `rx="10" filter="url(#paint)"`);
-  if (has("n")) s += rect(64, 0, 128, 96, lane, `filter="url(#paint)"`);
+  const hTop = hasSide ? 96 : 80;
+  const hBottom = hasSide ? 232 : 176;
+  const hHeight = hBottom - hTop;
+  s += rect(64, hTop, 128, hHeight, lane, `rx="10" filter="url(#paint)"`);
+  if (has("n")) s += rect(64, 0, 128, hasSide ? 128 : 96, lane, `filter="url(#paint)"`);
   if (has("s")) s += rect(64, 160, 128, 96, lane, `filter="url(#paint)"`);
-  if (has("e")) s += rect(160, 80, 96, 96, lane, `filter="url(#paint)"`);
-  if (has("w")) s += rect(0, 80, 96, 96, lane, `filter="url(#paint)"`);
-  s += rect(70, 86, 116, 84, "url(#floorGrid)", `opacity="0.42"`);
-  for (const [x1, y1, x2, y2] of [[64,80,192,80],[64,176,192,176],[64,80,64,176],[192,80,192,176]]) s += line(x1,y1,x2,y2,edge,4,`opacity="0.65" filter="url(#glow)"`);
-  if (has("n")) { s += line(64, 0, 64, 82, edge, 4, `opacity="0.65" filter="url(#glow)"`); s += line(192, 0, 192, 82, edge, 4, `opacity="0.65" filter="url(#glow)"`); }
+  if (has("e")) s += rect(160, hTop, 96, hHeight, lane, `filter="url(#paint)"`);
+  if (has("w")) s += rect(0, hTop, 96, hHeight, lane, `filter="url(#paint)"`);
+  s += rect(70, hTop + 6, 116, hHeight - 12, "url(#floorGrid)", `opacity="0.42"`);
+  for (const [x1, y1, x2, y2] of [[64,hTop,192,hTop],[64,hBottom,192,hBottom],[64,hTop,64,hBottom],[192,hTop,192,hBottom]]) s += line(x1,y1,x2,y2,edge,4,`opacity="0.65" filter="url(#glow)"`);
+  if (has("n")) { s += line(64, 0, 64, hTop + 2, edge, 4, `opacity="0.65" filter="url(#glow)"`); s += line(192, 0, 192, hTop + 2, edge, 4, `opacity="0.65" filter="url(#glow)"`); }
   if (has("s")) { s += line(64, 174, 64, 256, edge, 4, `opacity="0.65" filter="url(#glow)"`); s += line(192, 174, 192, 256, edge, 4, `opacity="0.65" filter="url(#glow)"`); }
-  if (has("e")) { s += line(174, 80, 256, 80, edge, 4, `opacity="0.65" filter="url(#glow)"`); s += line(174, 176, 256, 176, edge, 4, `opacity="0.65" filter="url(#glow)"`); }
-  if (has("w")) { s += line(0, 80, 82, 80, edge, 4, `opacity="0.65" filter="url(#glow)"`); s += line(0, 176, 82, 176, edge, 4, `opacity="0.65" filter="url(#glow)"`); }
+  if (has("e")) { s += line(174, hTop, 256, hTop, edge, 4, `opacity="0.65" filter="url(#glow)"`); s += line(174, hBottom, 256, hBottom, edge, 4, `opacity="0.65" filter="url(#glow)"`); }
+  if (has("w")) { s += line(0, hTop, 82, hTop, edge, 4, `opacity="0.65" filter="url(#glow)"`); s += line(0, hBottom, 82, hBottom, edge, 4, `opacity="0.65" filter="url(#glow)"`); }
   s += `<path d="M20 34C70 18 104 38 142 24S214 24 238 50" fill="none" stroke="#15373d" stroke-width="11" opacity="0.72"/>`;
   s += `<path d="M22 216C72 202 126 224 176 204S224 204 244 222" fill="none" stroke="#173f45" stroke-width="9" opacity="0.8"/>`;
   for (const [x, y] of [[38, 54], [218, 56], [38, 206], [218, 206]]) s += `<circle cx="${x}" cy="${y}" r="8" fill="${palette.amber2}" opacity="0.72" filter="url(#glow)"/>`;
@@ -310,8 +314,8 @@ function door(side) {
     s += line(78, 20, 178, 20, palette.amber2, 3, `opacity="0.65" filter="url(#glow)"`);
   } else {
     s += rect(0, 0, 24, 256, "#092025", `filter="url(#paint)"`);
-    s += rect(3, 64, 18, 128, "#7f9d91", `rx="4"`);
-    s += line(side === "e" ? 3 : 21, 78, side === "e" ? 3 : 21, 178, palette.amber2, 3, `opacity="0.65" filter="url(#glow)"`);
+    s += rect(3, 96, 18, 136, "#7f9d91", `rx="4"`);
+    s += line(side === "e" ? 3 : 21, 110, side === "e" ? 3 : 21, 218, palette.amber2, 3, `opacity="0.65" filter="url(#glow)"`);
   }
   return svgDoc(w, h, s);
 }

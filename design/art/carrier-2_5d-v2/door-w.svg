@@ -33,5 +33,5 @@
   </pattern>
   
 </defs>
-<rect x="0" y="0" width="24" height="256" fill="transparent" /><rect x="0" y="0" width="24" height="256" fill="#092025" filter="url(#paint)"/><rect x="3" y="64" width="18" height="128" fill="#7f9d91" rx="4"/><path d="M21 78L21 178" fill="none" stroke="#ffd58c" stroke-width="3" opacity="0.65" filter="url(#glow)"/>
+<rect x="0" y="0" width="24" height="256" fill="transparent" /><rect x="0" y="0" width="24" height="256" fill="#092025" filter="url(#paint)"/><rect x="3" y="96" width="18" height="136" fill="#7f9d91" rx="4"/><path d="M21 110L21 218" fill="none" stroke="#ffd58c" stroke-width="3" opacity="0.65" filter="url(#glow)"/>
 </svg>
