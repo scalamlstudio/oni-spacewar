@@ -6,7 +6,7 @@
       "id": "core",
       "version": "0.2.0",
       "gameplay_affecting": false,
-      "content_hash": "8026f952f2ee8a9993679501ca99079454d836f8a1bcbd29024fcb2c51130a7e",
+      "content_hash": "fff05f91ef807dd9c72863a52b5d1a30cc152e48ad5af1c63b0df4f6c09a0dc3",
       "assets": [
         {
           "id": "core.battle.enemy.void_spitter",
@@ -68,7 +68,7 @@
           "source": "source/core/carrier/build_slot.png",
           "processed": "packs/core/processed/carrier/build_slot.png",
           "compressed": "packs/core/bundles/carrier/build_slot.png.zst",
-          "hash": "9feb0340d4170daaf016b713aa0edfddd7d155a556a945c7e0c3246f3bc6c21f",
+          "hash": "e4369f3b6feebf6dc4688baac06e9c7042f4be02f6858c74f90564ea33de58aa",
           "gameplay_affecting": false
         },
         {
@@ -113,7 +113,7 @@
           "source": "source/core/carrier/corridor/n.png",
           "processed": "packs/core/processed/carrier/corridor/n.png",
           "compressed": "packs/core/bundles/carrier/corridor/n.png.zst",
-          "hash": "a16e766bbd1ba4085e1e339c19d5b751f3b97f6733f7bf5b606aff79929cf8f0",
+          "hash": "4f63455db0e1f85f43b58ce86e9f26d4477834c12b8a132f7c2dfdd2cbd21512",
           "gameplay_affecting": false
         },
         {
@@ -158,7 +158,7 @@
           "source": "source/core/carrier/corridor/ns.png",
           "processed": "packs/core/processed/carrier/corridor/ns.png",
           "compressed": "packs/core/bundles/carrier/corridor/ns.png.zst",
-          "hash": "fd9c888160b12928a8faceba593b892270cb54f6cee954612eabaff233157035",
+          "hash": "d4529664988d6c60e9a6e6fc6f27995aff54f8108784aeb5b20ad8c48e940fe1",
           "gameplay_affecting": false
         },
         {
@@ -185,7 +185,7 @@
           "source": "source/core/carrier/corridor/s.png",
           "processed": "packs/core/processed/carrier/corridor/s.png",
           "compressed": "packs/core/bundles/carrier/corridor/s.png.zst",
-          "hash": "f6568bd095efd4d7db3d984876afcfde861167f9efb616d8cb208f68922ee35c",
+          "hash": "5ee41f47beea194d1e9cd50a23bd3a6b65eeabb89146f94ddd74d61021aeb7fa",
           "gameplay_affecting": false
         },
         {
@@ -212,7 +212,7 @@
           "source": "source/core/carrier/dock/berth.png",
           "processed": "packs/core/processed/carrier/dock/berth.png",
           "compressed": "packs/core/bundles/carrier/dock/berth.png.zst",
-          "hash": "fc318b52746576ec4fc5c0e72ea02a2c6007f6f3c98dc8a0e47ff0c082e178ed",
+          "hash": "3dbafd0f6027e03e18ba69a7df1768be9e137dd85b5c5403e68897c9f25f1ca0",
           "gameplay_affecting": false
         },
         {
@@ -230,7 +230,7 @@
           "source": "source/core/carrier/door/n.png",
           "processed": "packs/core/processed/carrier/door/n.png",
           "compressed": "packs/core/bundles/carrier/door/n.png.zst",
-          "hash": "d52875129d83da8b7e5d847aed952ed03d44c4c6f2ae4fbbbf066cce567fc4ce",
+          "hash": "a408b3e873bfdd4eeec724d28a077055a437d9fe474bf8feac964102cb33584e",
           "gameplay_affecting": false
         },
         {
@@ -239,7 +239,7 @@
           "source": "source/core/carrier/door/s.png",
           "processed": "packs/core/processed/carrier/door/s.png",
           "compressed": "packs/core/bundles/carrier/door/s.png.zst",
-          "hash": "77e35620708bf32b3f7cc1d519479452da86f6b0eae5eaefbdfeb1e9e5f48804",
+          "hash": "ca2fb97b3610849c247ebac3f12d5eedc4bdee5b1f70720fd64ed1fffb4432ee",
           "gameplay_affecting": false
         },
         {
@@ -257,7 +257,7 @@
           "source": "source/core/carrier/hull_floor.png",
           "processed": "packs/core/processed/carrier/hull_floor.png",
           "compressed": "packs/core/bundles/carrier/hull_floor.png.zst",
-          "hash": "5090a79a70f946b92047f4ea2472df224505d32f24f54825e55c0d96e27558c1",
+          "hash": "7d3a8a58837a29c45163e6f8e1ee334be4c63a2aa48b61ebb345dd3869dfcdde",
           "gameplay_affecting": false
         },
         {
@@ -491,7 +491,7 @@
           "source": "source/core/carrier/room/bridge.png",
           "processed": "packs/core/processed/carrier/room/bridge.png",
           "compressed": "packs/core/bundles/carrier/room/bridge.png.zst",
-          "hash": "194b7848944fd1c377635b2523aabc823d57ff701ff56d62794aa5f4658a4a8d",
+          "hash": "0674bbaf90c206c28a124de188e79f3a197d4f4df124bce1935f4d08c2b10d18",
           "gameplay_affecting": false
         },
         {
@@ -500,7 +500,7 @@
           "source": "source/core/carrier/room/crew_quarters.png",
           "processed": "packs/core/processed/carrier/room/crew_quarters.png",
           "compressed": "packs/core/bundles/carrier/room/crew_quarters.png.zst",
-          "hash": "4b3b3c210e9d24a030d1453daab0ba56bc1626ea261ae42dce72d3db7b7d8910",
+          "hash": "7dffe367fe29739081c696ec0d5dec6d4f9d5394b268dff38376ef71d6192f78",
           "gameplay_affecting": false
         },
         {
@@ -509,7 +509,7 @@
           "source": "source/core/carrier/room/dock.png",
           "processed": "packs/core/processed/carrier/room/dock.png",
           "compressed": "packs/core/bundles/carrier/room/dock.png.zst",
-          "hash": "cdd3e7f6b9011c7a4d0541ae907d65ad14fc85cbd42fd3184ef14bec20032a60",
+          "hash": "9db6f18b2485c0cdf8f6d203bdc699af9504519040de082804293e48c44c3502",
           "gameplay_affecting": false
         },
         {
@@ -518,7 +518,7 @@
           "source": "source/core/carrier/room/salvage_bay.png",
           "processed": "packs/core/processed/carrier/room/salvage_bay.png",
           "compressed": "packs/core/bundles/carrier/room/salvage_bay.png.zst",
-          "hash": "3e77329a1d1b92da6984d9a6c00f3c8c2667d8627f52c8cbce073a929518f396",
+          "hash": "052de2730bdc664abc42d3e5ab680fa5005d6776a655c1af9c6235f8d41d3e64",
           "gameplay_affecting": false
         },
         {
@@ -527,7 +527,7 @@
           "source": "source/core/carrier/room/training_room.png",
           "processed": "packs/core/processed/carrier/room/training_room.png",
           "compressed": "packs/core/bundles/carrier/room/training_room.png.zst",
-          "hash": "15a72df9be6ee9722074273cd0acca6d160bfa612d7442891a2f3d097ace94bf",
+          "hash": "2886d436db6878bd49cf2f1abec018e9484d5f174b4dd49267341631bed36db7",
           "gameplay_affecting": false
         },
         {
@@ -536,7 +536,7 @@
           "source": "source/core/carrier/room/workshop.png",
           "processed": "packs/core/processed/carrier/room/workshop.png",
           "compressed": "packs/core/bundles/carrier/room/workshop.png.zst",
-          "hash": "64f8a4556c4e926abcad9ac3cdc9801a98a550aed29def710036f91d19e9ce0a",
+          "hash": "dc41f6025a9653ecb8114792d90f4c2a8899c9fbed9dfb3745c781eeb13f5527",
           "gameplay_affecting": false
         },
         {
@@ -950,7 +950,7 @@
           "source": "source/core/result/backdrop.png",
           "processed": "packs/core/processed/result/backdrop.png",
           "compressed": "packs/core/bundles/result/backdrop.png.zst",
-          "hash": "5a413f67f5eca34cb56db5f4d0dd2d962c36935338229e42e40053ed71dc2f27",
+          "hash": "7d38359fd46174350b060fa159201d73cb2c794452c71b263030bf7f200f5161",
           "gameplay_affecting": false
         },
         {
@@ -959,7 +959,7 @@
           "source": "source/core/title/key_art.png",
           "processed": "packs/core/processed/title/key_art.png",
           "compressed": "packs/core/bundles/title/key_art.png.zst",
-          "hash": "fd735ef77ae6e361ec9b217510e9cf6c385c020007dbfd8d2c223268059388a3",
+          "hash": "f9c6368beea392d5c80b393e906daafd4a1f8d28233e9fe3a7a0c37f0c04e301",
           "gameplay_affecting": false
         },
         {

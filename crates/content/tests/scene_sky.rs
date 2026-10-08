@@ -68,3 +68,54 @@ fn scene_art_has_a_transparent_sky() {
         failures.join("\n")
     );
 }
+
+#[test]
+fn title_key_art_has_no_opaque_old_sky_pixels() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../assets/source/core/title/key_art.png");
+    let image = image::open(&path)
+        .unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+        .to_rgba8();
+    let mut offenders = Vec::new();
+    for (x, y, pixel) in image.enumerate_pixels() {
+        let [r, g, b, a] = pixel.0;
+        if a > 0 && is_old_sky_color(r, g, b) {
+            offenders.push((x, y, r, g, b, a));
+            if offenders.len() >= 12 {
+                break;
+            }
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "title/key_art.png contains opaque pixels in the old blue-violet sky range: {offenders:?}"
+    );
+}
+
+fn is_old_sky_color(r: u8, g: u8, b: u8) -> bool {
+    let (h, s, v) = rgb_to_hsv(r, g, b);
+    // The prior painted sky lived in saturated royal-blue through violet.
+    // Teal/cyan engine light is intentionally outside this hue band.
+    (220.0..=292.0).contains(&h) && s >= 0.32 && v >= 0.18
+}
+
+fn rgb_to_hsv(r: u8, g: u8, b: u8) -> (f32, f32, f32) {
+    let r = r as f32 / 255.0;
+    let g = g as f32 / 255.0;
+    let b = b as f32 / 255.0;
+    let max = r.max(g).max(b);
+    let min = r.min(g).min(b);
+    let delta = max - min;
+    let hue = if delta == 0.0 {
+        0.0
+    } else if max == r {
+        60.0 * (((g - b) / delta) % 6.0)
+    } else if max == g {
+        60.0 * (((b - r) / delta) + 2.0)
+    } else {
+        60.0 * (((r - g) / delta) + 4.0)
+    };
+    let hue = if hue < 0.0 { hue + 360.0 } else { hue };
+    let saturation = if max == 0.0 { 0.0 } else { delta / max };
+    (hue, saturation, max)
+}

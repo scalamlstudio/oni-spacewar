@@ -93,10 +93,11 @@ const SPRITE_MARGIN: u32 = 2;
 /// (The battle background tile was dropped for the procedural nebula sky,
 /// TAKOAI-58.) These demo-v3 transparent renders are 2000 x 1160, the largest
 /// window they have to stay crisp in, with sky areas cut out for the runtime
-/// nebula.
+/// nebula. The Title key art is a fresh transparent redraw (TAKOAI-85); do not
+/// restore the old mask-and-recolour export path.
 const BACKDROPS: [(&str, &str, u32, u32); 2] = [
     (
-        "demo-v3/title-key-art-v3-transparent",
+        "demo-v3/title-key-art-v4-transparent",
         "title/key_art",
         2000,
         1160,
