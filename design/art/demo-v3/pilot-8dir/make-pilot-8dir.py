@@ -17,6 +17,7 @@ ASSET_DIRS = ["s", "se", "e", "ne", "n"]
 SHEET_DIRS = ["s", "se", "e", "ne", "n", "sw", "w", "nw"]
 
 GENERATED_SHEET = HERE / "oni-pilot-8dir-generated-source-v2.png"
+BACK_SHEET = HERE / "oni-pilot-back-views-generated-source-v1.png"
 EAST_SHEET = ROOT / "design/art/demo/oni-pilot-walk-sheet-v1.png"
 
 
@@ -95,147 +96,6 @@ def fit_to_frame(sprite: Image.Image, target_height: int = TARGET_HEIGHT) -> Ima
     return canvas
 
 
-def add_back_ear_tips(cell: Image.Image) -> Image.Image:
-    cell = cell.convert("RGBA")
-    box = bbox_from_alpha(cell)
-    if box[1] > 0:
-        return cell
-
-    top_pad = 30
-    padded = Image.new("RGBA", (cell.width, cell.height + top_pad), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(padded, "RGBA")
-
-    x1, _, x2, _ = box
-    span = x2 - x1
-    head_left = x1 + round(span * 0.08)
-    head_right = x2 - round(span * 0.02)
-    base_y = top_pad + 7
-    tip_y = 5
-    outline = (73, 50, 38, 230)
-    dark = (150, 75, 31, 255)
-    orange = (238, 126, 37, 255)
-    light = (255, 171, 67, 245)
-
-    ears = [
-        ((head_left, base_y + 3), (head_left + 34, tip_y), (head_left + 72, base_y + 2)),
-        ((head_right - 76, base_y + 2), (head_right - 38, tip_y), (head_right, base_y + 3)),
-    ]
-    for points in ears:
-        draw.polygon(points, fill=orange, outline=outline)
-        draw.line(points + (points[0],), fill=outline, width=4, joint="curve")
-        draw.line((points[0], points[1], points[2]), fill=light, width=2, joint="curve")
-        draw.line((points[0][0] + 11, base_y, points[1][0], tip_y + 12), fill=dark, width=2)
-        draw.line((points[2][0] - 13, base_y, points[1][0], tip_y + 12), fill=dark, width=2)
-
-    padded.alpha_composite(cell, (0, top_pad))
-    return padded
-
-
-def draw_scaled(base: Image.Image, painter) -> None:
-    scale = 4
-    layer = Image.new("RGBA", (base.width * scale, base.height * scale), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(layer, "RGBA")
-
-    def sx(points):
-        if isinstance(points[0], tuple):
-            return tuple((x * scale, y * scale) for x, y in points)
-        return tuple(v * scale for v in points)
-
-    painter(draw, sx, scale)
-    layer = layer.resize(base.size, Image.Resampling.LANCZOS)
-    base.alpha_composite(layer)
-
-
-def make_ne_three_quarter(frame: Image.Image) -> Image.Image:
-    frame = frame.convert("RGBA")
-
-    body = frame.copy()
-    backpack = body.crop((52, 101, 108, 151))
-
-    out = Image.new("RGBA", frame.size, (0, 0, 0, 0))
-    out.alpha_composite(body)
-    out.alpha_composite(backpack, (47, 101))
-
-    def painter(draw, sx, scale):
-        outline = (71, 47, 34, 210)
-        orange = (240, 125, 36, 245)
-        light = (255, 182, 78, 220)
-        cream = (255, 231, 194, 230)
-        pink = (255, 121, 118, 190)
-        strap = (31, 39, 45, 235)
-        lens_dark = (18, 82, 88, 235)
-        lens = (64, 214, 203, 230)
-        shine = (199, 255, 239, 190)
-
-        draw.ellipse(sx((114, 69, 137, 96)), fill=outline)
-        draw.ellipse(sx((112, 68, 134, 95)), fill=orange)
-        draw.pieslice(sx((120, 78, 141, 101)), 90, 260, fill=cream)
-        draw.ellipse(sx((124, 90, 136, 100)), fill=pink)
-        draw.arc(sx((111, 65, 136, 96)), 285, 65, fill=light, width=2 * scale)
-
-        draw.line(sx(((91, 66), (111, 62), (137, 65))), fill=strap, width=5 * scale)
-        draw.rounded_rectangle(sx((116, 52, 139, 68)), radius=7 * scale, fill=(23, 29, 35, 245))
-        draw.rounded_rectangle(sx((120, 55, 136, 66)), radius=5 * scale, fill=lens_dark)
-        draw.ellipse(sx((121, 56, 134, 65)), fill=lens)
-        draw.ellipse(sx((126, 56, 136, 60)), fill=shine)
-
-        draw.arc(sx((36, 105, 85, 166)), 150, 250, fill=outline, width=9 * scale)
-        draw.arc(sx((38, 106, 83, 164)), 150, 250, fill=orange, width=7 * scale)
-        draw.arc(sx((41, 109, 79, 158)), 150, 235, fill=light, width=2 * scale)
-
-    draw_scaled(out, painter)
-    return out
-
-
-def borrow_front_ears(frame: Image.Image, front: Image.Image, turn: str) -> Image.Image:
-    frame = frame.convert("RGBA")
-    front = front.convert("RGBA")
-
-    pixels = frame.load()
-    for y in range(22, 69):
-        for x in range(30, 146):
-            r, g, b, a = pixels[x, y]
-            if a:
-                pixels[x, y] = (r, g, b, 0)
-
-    def head_painter(draw, sx, scale):
-        outline = (76, 49, 33, 210)
-        orange = (237, 119, 33, 255)
-        mid = (246, 143, 45, 255)
-        light = (255, 177, 69, 235)
-        head = (44, 47, 123, 90) if turn == "n" else (47, 47, 128, 90)
-        draw.ellipse(sx(head), fill=outline)
-        draw.ellipse(sx((head[0] + 3, head[1] + 2, head[2] - 3, head[3] + 5)), fill=orange)
-        draw.pieslice(sx((head[0] + 6, head[1] + 3, head[2] - 5, head[3] + 6)), 188, 352, fill=mid)
-        draw.ellipse(sx((head[0] + 7, head[1] + 16, head[2] - 7, head[3] + 9)), fill=(241, 132, 39, 238))
-        draw.arc(sx((head[0] + 5, head[1] + 4, head[2] - 5, head[3] + 7)), 190, 350, fill=light, width=2 * scale)
-        stripe_xs = [61, 72, 84, 96, 108] if turn == "n" else [65, 78, 92, 106, 118]
-        for i, x in enumerate(stripe_xs):
-            y0 = 51 + (i % 2) * 2
-            draw.polygon(sx(((x, y0), (x + 4, y0 + 2), (x + 1, y0 + 10), (x - 3, y0 + 3))), fill=(215, 93, 28, 70))
-
-    draw_scaled(frame, head_painter)
-
-    ear_layer = Image.new("RGBA", front.size, (0, 0, 0, 0))
-    ear_pixels = ear_layer.load()
-    src_pixels = front.load()
-    for y in range(26, 76):
-        for x in list(range(33, 76)) + list(range(94, 138)):
-            r, g, b, a = src_pixels[x, y]
-            if a > 20 and (r > 120 and g > 45 and b < 190):
-                ear_pixels[x, y] = (r, g, b, a)
-
-    if turn == "ne":
-        ear_layer = ear_layer.transform(
-            ear_layer.size,
-            Image.Transform.AFFINE,
-            (1.0, 0.0, 4.0, 0.0, 1.0, 0.0),
-            resample=Image.Resampling.BICUBIC,
-        )
-    frame.alpha_composite(ear_layer)
-    return frame
-
-
 def cut_generated_sheet() -> dict[tuple[str, str], Image.Image]:
     source = Image.open(GENERATED_SHEET).convert("RGBA")
     cell_w = source.width / 5
@@ -256,16 +116,46 @@ def cut_generated_sheet() -> dict[tuple[str, str], Image.Image]:
             alpha = cell.getchannel("A")
             cell.putalpha(alpha.point(lambda a: 0 if a < 24 else a))
             cell = keep_largest_alpha_component(cell)
-            if direction in {"ne", "n"}:
-                cell = add_back_ear_tips(cell)
             fitted = fit_to_frame(cell)
-            if direction == "n":
-                fitted = borrow_front_ears(fitted, result[("s", frame)], "n")
-            elif direction == "ne":
-                fitted = make_ne_three_quarter(fitted)
-                fitted = borrow_front_ears(fitted, result[("s", frame)], "ne")
             result[(direction, frame)] = fitted
     return result
+
+
+def fit_with_shared_scale(sprite: Image.Image, scale: float) -> Image.Image:
+    box = bbox_from_alpha(sprite)
+    sprite = sprite.crop(box)
+    new_size = (round(sprite.width * scale), round(sprite.height * scale))
+    sprite = sprite.resize(new_size, Image.Resampling.LANCZOS)
+    canvas = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    x = (W - sprite.width) // 2
+    y = BASELINE - sprite.height
+    canvas.alpha_composite(sprite, (x, y))
+    return canvas
+
+
+def cut_back_sheet() -> dict[tuple[str, str], Image.Image]:
+    source = Image.open(BACK_SHEET).convert("RGBA")
+    cell_w = source.width / len(FRAMES)
+    cell_h = source.height / 2
+    raw = {}
+    row_dirs = ["n", "ne"]
+    for row, direction in enumerate(row_dirs):
+        for col, frame in enumerate(FRAMES):
+            cell = source.crop(
+                (
+                    round(col * cell_w),
+                    round(row * cell_h),
+                    round((col + 1) * cell_w),
+                    round((row + 1) * cell_h),
+                )
+            )
+            alpha = cell.getchannel("A")
+            cell.putalpha(alpha.point(lambda a: 0 if a < 24 else a))
+            raw[(direction, frame)] = keep_largest_alpha_component(cell)
+
+    max_height = max(bbox_from_alpha(cell)[3] - bbox_from_alpha(cell)[1] for cell in raw.values())
+    shared_scale = TARGET_HEIGHT / max_height
+    return {key: fit_with_shared_scale(cell, shared_scale) for key, cell in raw.items()}
 
 
 def cut_east_sheet() -> dict[str, Image.Image]:
@@ -304,6 +194,32 @@ def make_contact_sheet(frames: dict[tuple[str, str], Image.Image]) -> None:
             sheet.alpha_composite(frames[(direction, frame)], (x, y + label_h))
             draw.text((x + 44, y + 4), frame, fill=(226, 238, 232, 255), font=font)
     sheet.save(HERE / "carrier-pilot-8dir-contact-sheet.png")
+    sheet.resize((sheet.width * 2, sheet.height * 2), Image.Resampling.NEAREST).save(
+        HERE / "carrier-pilot-8dir-contact-sheet-2x.png"
+    )
+
+
+def make_head_closeup(frames: dict[tuple[str, str], Image.Image]) -> None:
+    items = [
+        ("S", frames[("s", "idle")]),
+        ("N", frames[("n", "idle")]),
+        ("NE", frames[("ne", "idle")]),
+    ]
+    crop = (20, 20, 148, 112)
+    label_h = 18
+    scale = 4
+    width = (crop[2] - crop[0]) * len(items)
+    height = (crop[3] - crop[1]) + label_h
+    sheet = checkerboard((width, height), cell=8)
+    draw = ImageDraw.Draw(sheet)
+    font = ImageFont.load_default()
+    for i, (label, image) in enumerate(items):
+        x = i * (crop[2] - crop[0])
+        sheet.alpha_composite(image.crop(crop), (x, label_h))
+        draw.text((x + 6, 4), label, fill=(226, 238, 232, 255), font=font)
+    sheet.resize((width * scale, height * scale), Image.Resampling.NEAREST).save(
+        HERE / "pilot-n-ne-s-head-closeup-4x.png"
+    )
 
 
 def portrait_thumb(path: Path, height: int = 192) -> Image.Image:
@@ -341,13 +257,19 @@ def make_crew_compare(frames: dict[tuple[str, str], Image.Image]) -> None:
 
 def main() -> None:
     generated = cut_generated_sheet()
+    back = cut_back_sheet()
     east = cut_east_sheet()
     frames = {}
     for direction in ASSET_DIRS:
         (ASSET_ROOT / direction).mkdir(parents=True, exist_ok=True)
         (HERE / "frames" / direction).mkdir(parents=True, exist_ok=True)
         for frame in FRAMES:
-            image = east[frame] if direction == "e" else generated[(direction, frame)]
+            if direction == "e":
+                image = east[frame]
+            elif direction in {"n", "ne"}:
+                image = back[(direction, frame)]
+            else:
+                image = generated[(direction, frame)]
             frames[(direction, frame)] = image
             image.save(ASSET_ROOT / direction / f"{frame}.png")
             image.save(HERE / "frames" / direction / f"{frame}.png")
@@ -356,6 +278,7 @@ def main() -> None:
         frames[("sw", frame)] = ImageOps.mirror(frames[("se", frame)])
         frames[("nw", frame)] = ImageOps.mirror(frames[("ne", frame)])
     make_contact_sheet(frames)
+    make_head_closeup(frames)
     make_crew_compare(frames)
 
 
