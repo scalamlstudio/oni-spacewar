@@ -6,7 +6,7 @@
       "id": "core",
       "version": "0.2.0",
       "gameplay_affecting": false,
-      "content_hash": "a727f8e42f12e37adc76d2216e0b115d8c40807793c60b93fead24d8db008793",
+      "content_hash": "f8cc820368daaa7bf38f0e02d9276181d0a0e14c0a192c83d6bd82f06656925e",
       "assets": [
         {
           "id": "core.battle.enemy.void_spitter",
@@ -959,7 +959,7 @@
           "source": "source/core/title/key_art.png",
           "processed": "packs/core/processed/title/key_art.png",
           "compressed": "packs/core/bundles/title/key_art.png.zst",
-          "hash": "f3b36186f61b1ba8409dcce4942e8d8e3fdf5f8b2c3a87fad216217f6c4cd95b",
+          "hash": "0c2393af0b3faaca06f2e4281305f5c38ce155cc3c41cc60c90e0893bd5ae173",
           "gameplay_affecting": false
         },
         {
