@@ -171,11 +171,25 @@ pub fn extract_sprite(image: &RgbaImage, padding: u32) -> Result<RgbaImage, Stri
         .map(|region| region.bbox)
         .reduce(BBox::union)
         .ok_or("no foreground found")?;
-    let x0 = bbox.min_x.saturating_sub(padding);
-    let y0 = bbox.min_y.saturating_sub(padding);
-    let x1 = (bbox.max_x + padding).min(image.width() - 1);
-    let y1 = (bbox.max_y + padding).min(image.height() - 1);
-    Ok(image::imageops::crop_imm(&keyed, x0, y0, x1 - x0 + 1, y1 - y0 + 1).to_image())
+    // The padding is transparent canvas, even where the subject touches
+    // the source image's edge (design/ART_GUIDELINES.md § Cropping).
+    let cropped = image::imageops::crop_imm(
+        &keyed,
+        bbox.min_x,
+        bbox.min_y,
+        bbox.max_x - bbox.min_x + 1,
+        bbox.max_y - bbox.min_y + 1,
+    )
+    .to_image();
+    Ok(pad(&cropped, padding))
+}
+
+/// `image` on a canvas `margin` px larger on every side, the new border
+/// transparent.
+pub fn pad(image: &RgbaImage, margin: u32) -> RgbaImage {
+    let mut out = RgbaImage::new(image.width() + margin * 2, image.height() + margin * 2);
+    image::imageops::replace(&mut out, image, margin as i64, margin as i64);
+    out
 }
 
 /// Scale `image` down (never up) so it fits inside `max_w` x `max_h`,
@@ -748,6 +762,16 @@ mod tests {
         assert_eq!((sprite.width(), sprite.height()), (51, 35));
         assert_eq!(sprite.get_pixel(0, 0).0[3], 0);
         assert!(has_color(&sprite, [200, 60, 220]));
+    }
+
+    #[test]
+    fn padding_is_added_where_the_subject_touches_the_source_edge() {
+        let mut image = RgbaImage::from_pixel(60, 40, Rgba([16, 20, 32, 255]));
+        rect(&mut image, 0, 16, 20, 19, [230, 140, 40, 255]);
+        let sprite = extract_sprite(&image, 3).unwrap();
+        assert_eq!((sprite.width(), sprite.height()), (27, 10));
+        assert_eq!(sprite.get_pixel(0, 5).0[3], 0);
+        assert_eq!(sprite.get_pixel(3, 5).0[3], 255);
     }
 
     #[test]

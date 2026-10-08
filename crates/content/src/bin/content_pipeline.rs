@@ -31,23 +31,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         gameplay_affecting: false,
     });
 
-    for portrait in discover_images(&assets_root.join("source/core"))? {
-        let source_path = assets_root.join(&portrait.source);
-        let bytes = fs::read(&source_path)?;
-        write_bytes(&assets_root.join(&portrait.processed), &bytes)?;
-        compress_zstd(
-            &assets_root.join(&portrait.processed),
-            &assets_root.join(&portrait.compressed),
-        )?;
-        assets.push(ContentAsset {
-            id: portrait.id,
-            kind: "image/png".into(),
-            source: portrait.source,
-            processed: portrait.processed,
-            compressed: portrait.compressed,
-            hash: sha256_hex(&bytes),
-            gameplay_affecting: false,
-        });
+    for (extension, kind) in [("png", "image/png"), ("ttf", "font/ttf")] {
+        for file in discover(&assets_root.join("source/core"), extension)? {
+            let source_path = assets_root.join(&file.source);
+            let bytes = fs::read(&source_path)?;
+            write_bytes(&assets_root.join(&file.processed), &bytes)?;
+            compress_zstd(
+                &assets_root.join(&file.processed),
+                &assets_root.join(&file.compressed),
+            )?;
+            assets.push(ContentAsset {
+                id: file.id,
+                kind: kind.into(),
+                source: file.source,
+                processed: file.processed,
+                compressed: file.compressed,
+                hash: sha256_hex(&bytes),
+                gameplay_affecting: false,
+            });
+        }
     }
 
     assets.sort_by(|a, b| a.id.cmp(&b.id));
@@ -74,16 +76,21 @@ struct SourceAsset {
     compressed: String,
 }
 
-/// Every PNG under `source/core/`, with its stable ID taken from its path:
-/// `portraits/gunner/happy.png` -> `core.portraits.gunner.happy`.
-fn discover_images(root: &Path) -> io::Result<Vec<SourceAsset>> {
+/// Every `.<extension>` file under `source/core/`, with its stable ID taken
+/// from its path: `portraits/gunner/happy.png` -> `core.portraits.gunner.happy`.
+fn discover(root: &Path, extension: &str) -> io::Result<Vec<SourceAsset>> {
     let mut files = Vec::new();
-    collect_pngs(root, root, &mut files)?;
+    collect(root, root, extension, &mut files)?;
     files.sort_by(|a, b| a.id.cmp(&b.id));
     Ok(files)
 }
 
-fn collect_pngs(root: &Path, dir: &Path, files: &mut Vec<SourceAsset>) -> io::Result<()> {
+fn collect(
+    root: &Path,
+    dir: &Path,
+    extension: &str,
+    files: &mut Vec<SourceAsset>,
+) -> io::Result<()> {
     if !dir.exists() {
         return Ok(());
     }
@@ -91,10 +98,10 @@ fn collect_pngs(root: &Path, dir: &Path, files: &mut Vec<SourceAsset>) -> io::Re
         let entry = entry?;
         let path = entry.path();
         if entry.file_type()?.is_dir() {
-            collect_pngs(root, &path, files)?;
+            collect(root, &path, extension, files)?;
             continue;
         }
-        if path.extension().and_then(|extension| extension.to_str()) != Some("png") {
+        if path.extension().and_then(|e| e.to_str()) != Some(extension) {
             continue;
         }
         let relative = path
@@ -103,7 +110,7 @@ fn collect_pngs(root: &Path, dir: &Path, files: &mut Vec<SourceAsset>) -> io::Re
             .and_then(|p| p.to_str())
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "bad filename"))?
             .replace('\\', "/");
-        let stem = relative.trim_end_matches(".png");
+        let stem = relative.trim_end_matches(&format!(".{extension}"));
         files.push(SourceAsset {
             id: format!("core.{}", stem.replace('/', ".")),
             source: format!("source/core/{relative}"),

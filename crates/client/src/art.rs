@@ -1,5 +1,5 @@
-//! Shipped images by stable content ID. Each ID is resolved through
-//! `assets/manifest.json` to its processed PNG, decoded once and cached.
+//! Shipped images and fonts by stable content ID. Each ID is resolved through
+//! `assets/manifest.json` to its processed file, decoded once and cached.
 //! Client only; the sim never sees these.
 
 use std::collections::HashMap;
@@ -13,6 +13,7 @@ use content::ContentManifest;
 pub struct ContentImages {
     manifest: Option<ContentManifest>,
     loaded: HashMap<String, Option<Handle<Image>>>,
+    fonts: HashMap<String, Option<Handle<Font>>>,
 }
 
 impl ContentImages {
@@ -21,14 +22,8 @@ impl ContentImages {
         if let Some(handle) = self.loaded.get(id) {
             return handle.clone();
         }
-        if self.manifest.is_none() {
-            self.manifest = ContentManifest::load("assets/manifest.json").ok();
-        }
         let handle = self
-            .manifest
-            .as_ref()
-            .and_then(|m| m.processed_path("assets", id).ok())
-            .and_then(|path| std::fs::read(path).ok())
+            .read(id)
             .and_then(|bytes| {
                 Image::from_buffer(
                     &bytes,
@@ -48,6 +43,32 @@ impl ContentImages {
         handle
     }
 
+    /// The font shipped under `id`, or `None` (logged once) if it is missing.
+    pub fn font(&mut self, fonts: &mut Assets<Font>, id: &str) -> Option<Handle<Font>> {
+        if let Some(handle) = self.fonts.get(id) {
+            return handle.clone();
+        }
+        let handle = self
+            .read(id)
+            .map(|bytes| fonts.add(Font::from_bytes(bytes)));
+        if handle.is_none() {
+            warn!("font {id} unavailable");
+        }
+        self.fonts.insert(id.to_string(), handle.clone());
+        handle
+    }
+
+    /// The processed bytes shipped under `id`.
+    fn read(&mut self, id: &str) -> Option<Vec<u8>> {
+        if self.manifest.is_none() {
+            self.manifest = ContentManifest::load("assets/manifest.json").ok();
+        }
+        self.manifest
+            .as_ref()
+            .and_then(|m| m.processed_path("assets", id).ok())
+            .and_then(|path| std::fs::read(path).ok())
+    }
+
     /// Pixel size of a loaded image (for keeping aspect ratios).
     pub fn size(images: &Assets<Image>, handle: &Handle<Image>) -> Vec2 {
         images
@@ -63,6 +84,9 @@ pub mod ids {
     pub const ICON_VOID_CRYSTAL: &str = "core.ui.icon.void_crystal";
     pub const TITLE_KEY_ART: &str = "core.title.key_art";
     pub const RESULT_BACKDROP: &str = "core.result.backdrop";
+    /// Display font for the game name (Russo One, SIL OFL 1.1, see
+    /// `assets/source/core/fonts/OFL.txt`).
+    pub const FONT_DISPLAY: &str = "core.fonts.russo_one";
 }
 
 /// A small inline icon for UI rows.
@@ -92,6 +116,7 @@ mod tests {
             ids::ICON_VOID_CRYSTAL.into(),
             ids::TITLE_KEY_ART.into(),
             ids::RESULT_BACKDROP.into(),
+            ids::FONT_DISPLAY.into(),
         ];
         wanted.extend(crate::render::sprite_ids().iter().map(|s| s.to_string()));
         wanted.extend(crate::carrier::image_ids());
