@@ -1166,6 +1166,14 @@ fn empty_rows(image: Option<&Image>) -> (f32, f32) {
 /// the character doesn't change how big it looks, and anchored at its
 /// visible feet, so the entity's translation is where it stands (walking
 /// and collision read the Pilot's translation as its feet).
+///
+/// Size and anchor are measured once, from `id`, and kept when
+/// `animate_pilot` swaps frames: every frame of an 8-direction character
+/// shares one canvas size, feet baseline and visible height
+/// (`crates/content/tests/character_frames.rs`), so one measurement fits
+/// them all. Measuring each frame instead would rescale the body to fit a
+/// frame whose head is drawn lower. The anchor is centred horizontally, so
+/// `flip_x` (W, SW, NW) mirrors the frame about the feet.
 fn standing(
     art: &mut ContentImages,
     images: &mut Assets<Image>,

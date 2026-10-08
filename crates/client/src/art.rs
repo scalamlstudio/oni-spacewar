@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use bevy::asset::RenderAssetUsages;
 use bevy::image::{CompressedImageFormats, ImageSampler, ImageType};
 use bevy::prelude::*;
+use bevy::render::render_resource::TextureFormat;
 use content::ContentManifest;
 
 #[derive(Resource, Default)]
@@ -30,12 +31,15 @@ impl ContentImages {
                     ImageType::Extension("png"),
                     CompressedImageFormats::NONE,
                     true,
-                    ImageSampler::Default,
+                    ImageSampler::linear(),
                     RenderAssetUsages::default(),
                 )
                 .ok()
             })
-            .map(|image| images.add(image));
+            .map(|mut image| {
+                add_mips(&mut image);
+                images.add(image)
+            });
         if handle.is_none() {
             warn!("image {id} unavailable");
         }
@@ -78,6 +82,58 @@ impl ContentImages {
     }
 }
 
+/// Appends a full mip chain to an RGBA8 image. Painted sprites ship at a
+/// higher resolution than they are drawn (the Pilot's 192 px canvas is ~90
+/// px tall at Carrier zoom 1 and ~58 px at 0.65 on a 1x display), and a
+/// linear sampler without mips skips texels past 2x minification, so
+/// outlines shimmer while a character walks. Each level is a 2x2 box filter
+/// on premultiplied alpha, so the black RGB of fully transparent pixels
+/// doesn't darken the edges of smaller levels. Level 0 stays first in
+/// `data`, so CPU readers of the full-size pixels are unaffected.
+fn add_mips(image: &mut Image) {
+    if !matches!(
+        image.texture_descriptor.format,
+        TextureFormat::Rgba8UnormSrgb | TextureFormat::Rgba8Unorm
+    ) {
+        return;
+    }
+    let (mut w, mut h) = (image.width() as usize, image.height() as usize);
+    let Some(data) = image.data.as_mut() else {
+        return;
+    };
+    if data.len() != w * h * 4 {
+        return;
+    }
+    let mut level = data.clone();
+    let mut count = 1;
+    while w > 1 || h > 1 {
+        let (nw, nh) = ((w / 2).max(1), (h / 2).max(1));
+        let mut next = vec![0u8; nw * nh * 4];
+        for y in 0..nh {
+            for x in 0..nw {
+                let mut sum = [0u32; 4];
+                for (sx, sy) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+                    let i = (((2 * y + sy).min(h - 1)) * w + (2 * x + sx).min(w - 1)) * 4;
+                    let a = level[i + 3] as u32;
+                    for c in 0..3 {
+                        sum[c] += level[i + c] as u32 * a;
+                    }
+                    sum[3] += a;
+                }
+                let o = (y * nw + x) * 4;
+                for c in 0..3 {
+                    next[o + c] = (sum[c] + sum[3] / 2).checked_div(sum[3]).unwrap_or(0) as u8;
+                }
+                next[o + 3] = ((sum[3] + 2) / 4) as u8;
+            }
+        }
+        data.extend_from_slice(&next);
+        (level, w, h) = (next, nw, nh);
+        count += 1;
+    }
+    image.texture_descriptor.mip_level_count = count;
+}
+
 /// Image IDs shared by several scenes (`assets/source/core/ui/icon/`).
 pub mod ids {
     pub const ICON_CREDITS: &str = "core.ui.icon.credits";
@@ -105,6 +161,35 @@ pub fn icon_node(image: Handle<Image>, size: f32) -> impl Bundle {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bevy::render::render_resource::{Extent3d, TextureDimension};
+
+    #[test]
+    fn mips_ignore_the_colour_of_transparent_pixels() {
+        // 4x2: a white opaque pixel next to three transparent black ones.
+        let mut data = vec![0u8; 4 * 2 * 4];
+        data[..4].copy_from_slice(&[255, 255, 255, 255]);
+        let mut image = Image::new(
+            Extent3d {
+                width: 4,
+                height: 2,
+                depth_or_array_layers: 1,
+            },
+            TextureDimension::D2,
+            data.clone(),
+            TextureFormat::Rgba8UnormSrgb,
+            RenderAssetUsages::default(),
+        );
+        add_mips(&mut image);
+        // 4x2 -> 2x1 -> 1x1.
+        assert_eq!(image.texture_descriptor.mip_level_count, 3);
+        let all = image.data.as_ref().unwrap();
+        assert_eq!(all.len(), (8 + 2 + 1) * 4);
+        assert_eq!(&all[..32], &data[..], "level 0 unchanged");
+        // Quarter coverage, but still white, not grey.
+        assert_eq!(&all[32..36], &[255, 255, 255, 64]);
+        assert_eq!(&all[36..40], &[0, 0, 0, 0]);
+        assert_eq!(&all[40..44], &[255, 255, 255, 32]);
+    }
 
     /// Every image ID the client asks for ships in the manifest.
     #[test]

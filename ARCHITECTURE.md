@@ -11,7 +11,7 @@ is commit `b92126c`, its results are recorded on TAKOAI-18).
 |---|---|---|
 | `Cargo.toml`, `crates/` | Rust/Bevy workspace | foundation (TAKOAI-26) + Elimination mission (TAKOAI-41) |
 | `assets/` | source and shipped content packs | modular content-patch foundation (TAKOAI-30) |
-| `.github/workflows/`, `ci/` | CI: determinism gate for the sim; local P2P soak script | see § Verifying determinism, § Netcode |
+| `.github/workflows/`, `ci/` | CI: determinism gate for the sim, content checks; local P2P soak script | see § Verifying determinism, § Netcode |
 | `design/` | design docs, art guidelines and concept art | source of truth for gameplay and art direction |
 
 ## Rust workspace
@@ -33,6 +33,7 @@ crates/
   content/            package `oni-content`, lib `content` — content manifests, stable IDs, patch diffing
     src/lib.rs          manifest types, hash validation, stable-ID resolution, manifest diff
     tests/asset_crop.rs crop check: no opaque pixel of a cut-out under assets/source/core/ touches its canvas edge
+    tests/character_frames.rs  8-direction frame contract (canvas, feet baseline, visible height, margin) + processed == source
     src/bin/content_pipeline.rs        source -> processed asset + zstd bundle + manifest
     src/bin/content_manifest_diff.rs   compare manifests and list packs/assets a patch needs
     src/cutouts.rs                     background keying, sheet slicing, single-sprite crop, resize
@@ -40,7 +41,7 @@ crates/
     src/bin/demo_art_import.rs         design/art/demo (+ demo-v2 battle art and backdrops, carrier-2_5d-v2 pieces) -> battle / carrier / title / result / icon sources
   client/             package `oni-client`, bin `oni-spacewar` — everything else
     src/main.rs         CLI (synctest / p2p modes), app + GGRS session setup, ICE (STUN/TURN) config
-    src/art.rs          ContentImages: shipped images and fonts by stable content ID (manifest -> processed file), cached
+    src/art.rs          ContentImages: shipped images and fonts by stable content ID (manifest -> processed file), cached; linear sampler + CPU mip chain
     src/flow.rs         first-playable scene state machine, Title / Result UI, --autoplay QA driver: Title → Carrier → Battle → Result
     src/layout.rs       2.5D carrier layout rules, no Bevy: hull grid, room catalogue, corridor masks, connectivity, can_place / can_demolish, walkable rects, click-to-move pathing, save validation + v3 Dock split
     src/carrier.rs      Carrier scene: draws the layout, click-to-move + 8-direction WASD walking, crew dialogue, one-berth Docks (board a ship → briefing → launch), camera / zoom, Workshop panel (Upgrades + Build tabs), ONI-style Build mode screen (builder UI kit), clickable panels
@@ -252,6 +253,30 @@ and Result backdrops, carrier rooms / corridors / doors / dock / hull tiles,
 and the builder UI's 9-slice panels, module cards and grid overlay. Real
 clipped cut-outs waiting for an art fix go in `KNOWN_CLIPPED`, which fails
 once the asset is fixed so the entry is removed.
+
+**Character frame contract.** `crates/content/tests/character_frames.rs`
+finds every `<character>.<dir>.<frame>` image in the manifest (`<dir>` one of
+the 8 compass directions, at least 3 facings) and checks, per character, that
+all frames share one canvas size, the feet (lowest row with alpha > 8) sit
+within 2 px of the median baseline, the visible height is within 4 % of the
+median (so the head is the same size facing away as facing the camera) and
+nothing touches the canvas edge. The client relies on this: `standing()`
+in `carrier.rs` sizes and anchors a character once, from its S idle frame,
+and `animate_pilot` only swaps the image and `flip_x`. Frames waiting for an
+art fix go in `KNOWN_BAD`, which fails once they pass. The same file checks
+that every shipped PNG's processed copy and manifest hash match its source,
+so a source edit without a `content-pipeline` re-run fails instead of
+shipping the old art. `.github/workflows/content.yml` runs `oni-content`'s
+tests on any `assets/**` or `crates/content/**` change.
+
+**Sampling.** `ContentImages` loads images with `ImageSampler::linear()`
+(linear min / mag / mip) and appends a full mip chain built on the CPU
+(2×2 box filter on premultiplied alpha, so the black RGB of transparent
+pixels doesn't darken edges). Painted sprites are drawn 2–3× smaller than
+their canvas on a 1× display (the Pilot's 192 px canvas is ~90 px at
+Carrier zoom 1, ~58 px at 0.65); without mips that skips texels and outlines
+shimmer while walking. Level 0 stays first in `Image::data`, so CPU readers
+of the full-size pixels (e.g. `empty_rows`) are unaffected.
 
 ### How the sim plugs into rollback
 
