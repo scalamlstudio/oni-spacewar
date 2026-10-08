@@ -258,21 +258,6 @@ fn text_style(size: f32, color: Color) -> (TextFont, TextColor) {
     )
 }
 
-fn panel(commands: &mut Commands, title: &str, body: String) {
-    commands.spawn((
-        ScreenEntity,
-        Text::new(format!("{title}\n\n{body}")),
-        text_style(24.0, Color::srgb(0.9, 0.92, 0.95)),
-        Node {
-            position_type: PositionType::Absolute,
-            left: px(32),
-            top: px(28),
-            max_width: px(760),
-            ..default()
-        },
-    ));
-}
-
 fn button(commands: &mut Commands, action: DemoButton, label: &str, top: f32, enabled: bool) {
     let bg = if enabled {
         Color::srgb(0.12, 0.22, 0.28)
@@ -350,11 +335,99 @@ fn art_backdrop(
     }
 }
 
+/// The game name's height as a share of the window height, so it keeps the
+/// same place on the key art at every window size (the art is scaled to the
+/// window height).
+const TITLE_VH: f32 = 9.0;
+/// Outline thickness around the game name, also in window-height percent.
+const TITLE_OUTLINE_VH: f32 = 0.35;
+const TITLE_SUBTITLE_VH: f32 = 3.0;
+
+/// "ONI SPACEWAR" in the display font, drawn in the empty upper right of the
+/// text-free key art: eight dark copies around it make an outline, and a drop
+/// shadow lifts it off the nebula. Below it, the build name and save status.
+fn title_logo(commands: &mut Commands, font: Option<Handle<Font>>, status: &str) {
+    let name_font = |color: Color| {
+        (
+            TextFont {
+                font: font.clone().map(Into::into).unwrap_or_default(),
+                font_size: FontSize::Vh(TITLE_VH),
+                ..default()
+            },
+            TextColor(color),
+        )
+    };
+    let outline = Color::srgb(0.04, 0.02, 0.1);
+    let o = TITLE_OUTLINE_VH;
+    commands
+        .spawn((
+            ScreenEntity,
+            Node {
+                position_type: PositionType::Absolute,
+                right: vw(4),
+                top: vh(5),
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::FlexEnd,
+                row_gap: vh(1),
+                ..default()
+            },
+        ))
+        .with_children(|logo| {
+            logo.spawn(Node::default()).with_children(|name| {
+                for (dx, dy) in [
+                    (-o, -o),
+                    (0.0, -o),
+                    (o, -o),
+                    (-o, 0.0),
+                    (o, 0.0),
+                    (-o, o),
+                    (0.0, o),
+                    (o, o),
+                ] {
+                    name.spawn((
+                        Text::new(TITLE_TEXT),
+                        name_font(outline),
+                        Node {
+                            position_type: PositionType::Absolute,
+                            left: vh(dx),
+                            top: vh(dy),
+                            ..default()
+                        },
+                    ));
+                }
+                name.spawn((
+                    Text::new(TITLE_TEXT),
+                    name_font(Color::srgb(1.0, 0.86, 0.55)),
+                    TextShadow {
+                        offset: Vec2::new(0.0, 6.0),
+                        color: Color::srgba(0.0, 0.0, 0.0, 0.6),
+                    },
+                ));
+            });
+            logo.spawn((
+                Text::new(format!("First Playable Demo\n{status}")),
+                TextFont {
+                    font_size: FontSize::Vh(TITLE_SUBTITLE_VH),
+                    ..default()
+                },
+                TextColor(Color::srgb(0.9, 0.92, 0.95)),
+                TextLayout::justify(Justify::Right),
+                TextShadow {
+                    offset: Vec2::splat(2.0),
+                    color: Color::srgba(0.0, 0.0, 0.0, 0.85),
+                },
+            ));
+        });
+}
+
+const TITLE_TEXT: &str = "ONI SPACEWAR";
+
 fn enter_title(
     mut commands: Commands,
     save: Res<SaveSlot>,
     mut art: ResMut<ContentImages>,
     mut images: ResMut<Assets<Image>>,
+    mut fonts: ResMut<Assets<Font>>,
 ) {
     art_backdrop(
         &mut commands,
@@ -363,11 +436,8 @@ fn enter_title(
         crate::art::ids::TITLE_KEY_ART,
         Color::WHITE,
     );
-    panel(
-        &mut commands,
-        "Oni Spacewar",
-        format!("First Playable Demo\n{}", save.status),
-    );
+    let font = art.font(&mut fonts, crate::art::ids::FONT_DISPLAY);
+    title_logo(&mut commands, font, &save.status);
     button(
         &mut commands,
         DemoButton::NewGame,

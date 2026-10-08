@@ -32,6 +32,7 @@ crates/
     src/input.rs        NetInput: buttons (move, Q/W/E/R) + cursor target, exchanged per tick
   content/            package `oni-content`, lib `content` — content manifests, stable IDs, patch diffing
     src/lib.rs          manifest types, hash validation, stable-ID resolution, manifest diff
+    tests/asset_crop.rs crop check: no opaque pixel of a cut-out under assets/source/core/ touches its canvas edge
     src/bin/content_pipeline.rs        source -> processed asset + zstd bundle + manifest
     src/bin/content_manifest_diff.rs   compare manifests and list packs/assets a patch needs
     src/cutouts.rs                     background keying, sheet slicing, single-sprite crop, resize
@@ -39,7 +40,7 @@ crates/
     src/bin/demo_art_import.rs         design/art/demo (+ demo-v2 battle art and backdrops, carrier-2_5d-v2 pieces) -> battle / carrier / title / result / icon sources
   client/             package `oni-client`, bin `oni-spacewar` — everything else
     src/main.rs         CLI (synctest / p2p modes), app + GGRS session setup, ICE (STUN/TURN) config
-    src/art.rs          ContentImages: shipped images by stable content ID (manifest -> processed PNG), cached
+    src/art.rs          ContentImages: shipped images and fonts by stable content ID (manifest -> processed file), cached
     src/flow.rs         first-playable scene state machine, Title / Result UI, --autoplay QA driver: Title → Carrier → Battle → Result
     src/layout.rs       2.5D carrier layout rules, no Bevy: hull grid, room catalogue, corridor masks, connectivity, can_place / can_demolish, walkable rects, click-to-move pathing, save validation + v3 Dock split
     src/carrier.rs      Carrier scene: draws the layout, click-to-move + 8-direction WASD walking, crew dialogue, one-berth Docks (board a ship → briefing → launch), camera / zoom, Workshop panel (Upgrades + Build tabs), ONI-style Build mode screen (builder UI kit), clickable panels
@@ -157,8 +158,10 @@ The target shipped formats are:
   build-time conversion once the art volume justifies it. The checked-in
   `content-pipeline` is deliberately small: it copies every PNG under
   `assets/source/core/` (stable ID from its path, e.g.
-  `battle/ship/kite.png` -> `core.battle.ship.kite`) plus the HUD text, and
-  writes the zstd bundles and manifest. Images ship as PNG for now.
+  `battle/ship/kite.png` -> `core.battle.ship.kite`), every TTF font the
+  same way (`fonts/russo_one.ttf` -> `core.fonts.russo_one`, kind
+  `font/ttf`, licence text next to it) plus the HUD text, and writes the
+  zstd bundles and manifest. Images ship as PNG for now.
 
 Run the current pipeline after editing pack source files:
 
@@ -220,7 +223,8 @@ cargo run --release --bin content-pipeline -- .
 `demo-art-import` keys out each image's flat background (art that already
 has a transparent background is only cropped), cuts the icon sheet (5 icons) with the same
 sheet slicer as the portraits, scales everything down to its in-game size
-and writes `assets/source/core/{battle,carrier,title,ui/icon}/...`. Restyled
+(single sprites get a `SPRITE_MARGIN` transparent border after scaling, so
+nothing touches the canvas edge) and writes `assets/source/core/{battle,carrier,title,ui/icon}/...`. Restyled
 pieces from `design/art/demo-v2/` are rows in its `SPRITES` table. The 2.5D
 carrier's modular pieces (the detailed set in `design/art/carrier-2_5d-v2/`,
 TAKOAI-69, on the TAKOAI-55 grid; `CARRIER_DIR`) are rows in `CARRIER_2_5D`,
@@ -239,6 +243,15 @@ when characters appear, and composition that leaves calm areas for UI text. The
 import also writes `target/demo-art-contact-sheet.png` for a visual check. The
 file names and target sizes are tables at the top of the tool; a new art file
 means a new table row.
+
+**Crop check.** `crates/content/tests/asset_crop.rs` (part of `cargo test`)
+loads every PNG under `assets/source/core/` and fails if a pixel with
+alpha > 8 touches the canvas edge (design/ART_GUIDELINES.md § Cropping).
+Art meant to fill its canvas is listed by path in `FULL_BLEED`: the title
+and Result backdrops, carrier rooms / corridors / doors / dock / hull tiles,
+and the builder UI's 9-slice panels, module cards and grid overlay. Real
+clipped cut-outs waiting for an art fix go in `KNOWN_CLIPPED`, which fails
+once the asset is fixed so the entry is removed.
 
 ### How the sim plugs into rollback
 
@@ -386,7 +399,11 @@ means a new table row.
   Ship facing is visual-only client state (from the move target / dash).
   Player bolts are a generated soft glow tinted per player; shields, the
   Shockwave ring, hull bars and the move marker stay gizmo effects. The
-  Title shows `core.title.key_art`, the Result screen a lightly dimmed
+  Title shows `core.title.key_art` with the game name drawn over it by
+  the game (`flow::title_logo`: "ONI SPACEWAR" in `core.fonts.russo_one`
+  in the art's empty upper right, a dark 8-copy outline and a drop shadow,
+  sized in window-height units like the art so it fits from 1000 × 580 to
+  2000 × 1160; the images themselves carry no text), the Result screen a lightly dimmed
   `core.result.backdrop` (the bridge window), and the Workshop rows, Dock berths and Carrier
   wallet show icons / ship art.
 - **Fissures and the spawn director** (`state.rs`, numbers in `tuning.rs`):

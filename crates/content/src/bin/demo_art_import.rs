@@ -8,7 +8,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use content::cutouts::{extract_expression_cutout_sheet, extract_sprite, fit_within};
+use content::cutouts::{extract_expression_cutout_sheet, extract_sprite, fit_within, pad};
 use image::RgbaImage;
 
 /// Single sprites: design file stem, pack-relative output, max width/height.
@@ -84,6 +84,11 @@ const CARRIER_2_5D: [(&str, &str, u32, u32); 28] = [
     ("build-slot", "carrier/build_slot", 256, 256),
 ];
 
+/// Transparent margin (px, after scaling) around every single sprite, so no
+/// opaque pixel touches the canvas edge (design/ART_GUIDELINES.md § Cropping;
+/// checked by `crates/content/tests/asset_crop.rs`).
+const SPRITE_MARGIN: u32 = 2;
+
 /// Full-frame images (no background to key): stem, output, max size.
 /// (The battle background tile was dropped for the procedural nebula sky,
 /// TAKOAI-58.) These painted demo-v3 renders are 2000 x 1160, the largest
@@ -129,7 +134,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for (stem, out, max_w, max_h) in SPRITES {
         let sheet = open(&root, stem)?;
         let sprite = extract_sprite(&sheet, 4).map_err(|e| format!("{stem}: {e}"))?;
-        write(&root, out, fit_within(&sprite, max_w, max_h), &mut contact)?;
+        let m = SPRITE_MARGIN;
+        let sprite = pad(&fit_within(&sprite, max_w - 2 * m, max_h - 2 * m), m);
+        write(&root, out, sprite, &mut contact)?;
     }
     for (stem, out, max_w, max_h) in BACKDROPS {
         write(

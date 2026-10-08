@@ -6,7 +6,7 @@
       "id": "core",
       "version": "0.2.0",
       "gameplay_affecting": false,
-      "content_hash": "baab643dc2cbd5747e7263829f4a4662aff3eebee4d28261ed8a3ed0287e81ea",
+      "content_hash": "a727f8e42f12e37adc76d2216e0b115d8c40807793c60b93fead24d8db008793",
       "assets": [
         {
           "id": "core.battle.enemy.void_spitter",
@@ -14,7 +14,7 @@
           "source": "source/core/battle/enemy/void_spitter.png",
           "processed": "packs/core/processed/battle/enemy/void_spitter.png",
           "compressed": "packs/core/bundles/battle/enemy/void_spitter.png.zst",
-          "hash": "f0510e8966264c8cb8f0dbc484d4c28dad04b1e838e2588b8d972b1d055b9261",
+          "hash": "63fb5de79e65d1c0227ce1fcc7b4a6ee410789f73e473c7c3234e08495ab088e",
           "gameplay_affecting": false
         },
         {
@@ -23,7 +23,7 @@
           "source": "source/core/battle/enemy/void_swarmer.png",
           "processed": "packs/core/processed/battle/enemy/void_swarmer.png",
           "compressed": "packs/core/bundles/battle/enemy/void_swarmer.png.zst",
-          "hash": "4ab1129a7ea256d28c06f97fb57a62bef4a9061736959d987af4dcf00b9d0a98",
+          "hash": "60b6afbc4f14724c227980bc9b82257c18ce692c2dfe374483f8e5dd879a597e",
           "gameplay_affecting": false
         },
         {
@@ -32,7 +32,7 @@
           "source": "source/core/battle/env/void_fissure.png",
           "processed": "packs/core/processed/battle/env/void_fissure.png",
           "compressed": "packs/core/bundles/battle/env/void_fissure.png.zst",
-          "hash": "24e62f7b3800aa95f9f9fbc9574b533686f733224eb6187c328e6e92881daf41",
+          "hash": "31aaa4dc9a5a3cce48195c976f9633a280d2600966ec3ae534280945f7735874",
           "gameplay_affecting": false
         },
         {
@@ -41,7 +41,7 @@
           "source": "source/core/battle/fx/spit.png",
           "processed": "packs/core/processed/battle/fx/spit.png",
           "compressed": "packs/core/bundles/battle/fx/spit.png.zst",
-          "hash": "0586ceb0b5a7122a91a87e70df7ed4d24cb79670200b2855c2552839061f15f9",
+          "hash": "b465ae78550be4937cd853ba29da20c6f5400848c146a56fc7769933b6ef53c4",
           "gameplay_affecting": false
         },
         {
@@ -50,7 +50,7 @@
           "source": "source/core/battle/ship/bulwark.png",
           "processed": "packs/core/processed/battle/ship/bulwark.png",
           "compressed": "packs/core/bundles/battle/ship/bulwark.png.zst",
-          "hash": "52ecce14ddeb43a5672ba8c6afa933c14367143a2a1794c91660c8c424180d08",
+          "hash": "2fc7d3535e6b2c1c89c555db1e41e35a0031107c4460bb33c4053a1cf40b4f2b",
           "gameplay_affecting": false
         },
         {
@@ -59,7 +59,7 @@
           "source": "source/core/battle/ship/kite.png",
           "processed": "packs/core/processed/battle/ship/kite.png",
           "compressed": "packs/core/bundles/battle/ship/kite.png.zst",
-          "hash": "e793ef65f5659f84e95b052ed7c0c8a0490cc8ad19987d466b9de8f4fe8b10de",
+          "hash": "8f7a7e4048f913702c0bfb5ecfeafe752982a7448a1d4252838be1e44818e4fb",
           "gameplay_affecting": false
         },
         {
@@ -537,6 +537,15 @@
           "processed": "packs/core/processed/carrier/room/workshop.png",
           "compressed": "packs/core/bundles/carrier/room/workshop.png.zst",
           "hash": "64f8a4556c4e926abcad9ac3cdc9801a98a550aed29def710036f91d19e9ce0a",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.fonts.russo_one",
+          "kind": "font/ttf",
+          "source": "source/core/fonts/russo_one.ttf",
+          "processed": "packs/core/processed/fonts/russo_one.ttf",
+          "compressed": "packs/core/bundles/fonts/russo_one.ttf.zst",
+          "hash": "bc0abcc660bd8b7ad3000ecb2898a27c58a29a50f7ec81652fa12e75148d09df",
           "gameplay_affecting": false
         },
         {
