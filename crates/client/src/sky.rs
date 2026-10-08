@@ -1,8 +1,10 @@
 //! The procedural "magical night sky with nebula" background (TAKOAI-58):
 //! one `Material2d` (`sky.wgsl`) on a quad that always covers the camera's
-//! view. Shared by the battle and the Carrier (behind the hull). Runs in
-//! `Update`, outside rollback, and never touches the sim: it reads only the
-//! camera and wall-clock time, which is fine for visuals.
+//! view. One sky for every scene (TAKOAI-83): behind the battle, the
+//! Carrier's hull, and the Title and Result art (whose skies are
+//! transparent). A new scene gets it without any code. Runs outside rollback
+//! and never touches the sim: it reads only the camera and wall-clock time,
+//! which is fine for visuals.
 
 use bevy::asset::{embedded_asset, embedded_path, AssetPath};
 use bevy::prelude::*;
@@ -10,9 +12,6 @@ use bevy::render::render_resource::{AsBindGroup, ShaderType};
 use bevy::shader::ShaderRef;
 use bevy::sprite_render::{Material2d, Material2dPlugin};
 use bevy::window::PrimaryWindow;
-
-use crate::flow::GameScreen;
-use crate::rollback::SimWorld;
 
 pub struct SkyPlugin;
 
@@ -26,7 +25,7 @@ impl Plugin for SkyPlugin {
 }
 
 /// Behind everything: the Carrier's hull starts at z -30, the battle's
-/// sprites at z >= 0.
+/// sprites at z >= 0, and UI (Title / Result art) draws over all of it.
 const Z_SKY: f32 = -500.0;
 /// The quad covers the view plus this fraction, so it never shows an edge
 /// while the camera moves within a frame.
@@ -77,52 +76,25 @@ fn spawn_sky(
             },
         })),
         Transform::from_xyz(0.0, 0.0, Z_SKY),
-        Visibility::Hidden,
     ));
 }
 
-/// Where the sky shows: in a battle (any mode with a sim world) and on the
-/// Carrier. Title and Result have their own full-screen art.
-pub fn sky_visible(screen: Option<GameScreen>, battle: bool) -> bool {
-    battle || screen == Some(GameScreen::Carrier)
-}
-
-/// Keep the quad over the camera's view and feed the shader the camera
-/// position (for parallax) and the time (for drift and twinkle).
+/// Keep the quad over the camera's view (at any window size, also while
+/// resizing) and feed the shader the camera position (for parallax) and the
+/// time (for drift and twinkle). Menu screens never move the camera, so
+/// there the sky only drifts.
 fn follow_view(
-    world: Option<Res<SimWorld>>,
-    screen: Option<Res<State<GameScreen>>>,
     time: Res<Time>,
     windows: Query<&Window, With<PrimaryWindow>>,
     camera: CameraView,
-    mut sky: Query<
-        (
-            &mut Transform,
-            &mut Visibility,
-            &MeshMaterial2d<SkyMaterial>,
-        ),
-        With<Sky>,
-    >,
+    mut sky: Query<(&mut Transform, &MeshMaterial2d<SkyMaterial>), With<Sky>>,
     mut materials: ResMut<Assets<SkyMaterial>>,
 ) {
-    let Ok((mut tf, mut vis, material)) = sky.single_mut() else {
+    let (Ok((mut tf, material)), Ok(window), Ok((cam, projection))) =
+        (sky.single_mut(), windows.single(), camera.single())
+    else {
         return;
     };
-    let show = sky_visible(screen.map(|s| *s.get()), world.is_some());
-    let want = if show {
-        Visibility::Visible
-    } else {
-        Visibility::Hidden
-    };
-    if *vis != want {
-        *vis = want;
-    }
-    let (Ok(window), Ok((cam, projection))) = (windows.single(), camera.single()) else {
-        return;
-    };
-    if !show {
-        return;
-    }
     let scale = match projection {
         Projection::Orthographic(o) => o.scale,
         _ => 1.0,
@@ -133,19 +105,5 @@ fn follow_view(
     if let Some(mut m) = materials.get_mut(&material.0) {
         m.params.camera = centre;
         m.params.time = time.elapsed_secs();
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn sky_shows_in_battle_and_on_the_carrier_only() {
-        assert!(sky_visible(Some(GameScreen::Battle), true));
-        assert!(sky_visible(None, true)); // synctest / p2p
-        assert!(sky_visible(Some(GameScreen::Carrier), false));
-        assert!(!sky_visible(Some(GameScreen::Title), false));
-        assert!(!sky_visible(Some(GameScreen::Result), false));
     }
 }

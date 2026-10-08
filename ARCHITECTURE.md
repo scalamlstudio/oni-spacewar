@@ -55,7 +55,7 @@ crates/
     src/stats.rs        rollback / frame-time / desync measurement + report (from the spike)
     src/pacing.rs       frame-pacing profiler (windowed): main / render / swapchain-acquire split + OS-stall probe
     src/render.rs       battle sprites keyed by stable content IDs + gizmo FX, fissure pointers, camera follow, battle HUD (Update, outside rollback)
-    src/sky.rs          procedural nebula sky: SkyMaterial (Material2d, `sky.wgsl`) on a quad that follows the camera; battle + Carrier backdrop
+    src/sky.rs          procedural nebula sky: SkyMaterial (Material2d, `sky.wgsl`) on a quad that follows the camera; one sky behind every scene
 ```
 
 Dependency direction is one-way for gameplay: `client → sim`, while content
@@ -453,9 +453,14 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   (`Material2d`, shader embedded with `embedded_asset!`) on a unit quad that
   `follow_view` (PostUpdate) moves and scales to cover the camera's view
   each frame, passing the camera centre (parallax) and elapsed time
-  (nebula drift, twinkle) as a uniform. Visible while a `SimWorld` exists
-  (battle, synctest / p2p) or on the Carrier, where it replaces the old
-  tiled space behind the hull. Added by `RenderPlugin`, so headless runs
+  (nebula drift, twinkle) as a uniform. One entity, always visible, so every
+  scene shares the same live sky and a new scene gets it with no code
+  (TAKOAI-83): behind the battle, the Carrier's hull, and the Title key art
+  and Result backdrop (UI images with a transparent sky, drawn over it; the
+  menu screens never move the camera, so there the sky only drifts and
+  twinkles, with no parallax). `content/tests/scene_sky.rs` keeps those two
+  images' skies transparent (Title corners, Result window panes at alpha 0).
+  Added by `RenderPlugin`, so headless runs
   never build it. Floats and wall-clock time are fine here: it is purely
   visual and never reads or writes sim state.
 - `oni-spacewar --autoplay [--ship kite|bulwark] [--missions N] [--continue]

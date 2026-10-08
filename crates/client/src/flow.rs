@@ -1109,19 +1109,21 @@ fn autoplay_flow(
     let n = autoplay.flown;
     match state.get() {
         GameScreen::Title => {
+            let name = if autoplay.reloaded {
+                "90-title-reloaded"
+            } else if autoplay.resume {
+                "01-title-continue"
+            } else {
+                "01-title"
+            };
             if at(1.0) {
-                autoplay.shoot(
-                    &mut commands,
-                    if autoplay.reloaded {
-                        "90-title-reloaded"
-                    } else if autoplay.resume {
-                        "01-title-continue"
-                    } else {
-                        "01-title"
-                    },
-                );
+                autoplay.shoot(&mut commands, name);
             }
-            if at(1.5) {
+            // The same view later, to show the nebula sky drifting.
+            if at(3.5) {
+                autoplay.shoot(&mut commands, &format!("{name}-later"));
+            }
+            if at(4.0) {
                 if autoplay.resume || autoplay.reloaded {
                     println!("autoplay: continue ({})", save.status);
                     next.set(transition(
