@@ -51,32 +51,6 @@
     <g id="star"><path d="M0 -14 L4 -4 L14 0 L4 4 L0 14 L-4 4 L-14 0 L-4 -4 Z"/></g>
   </defs>
 
-  <!-- sky: flat bands, no gradients -->
-  <rect width="2000" height="1160" fill="#1b0d2e"/>
-  <path d="M900 0 L2000 0 L2000 700 C1820 560, 1620 640, 1420 520 C1220 400, 1100 260, 900 0 Z" fill="#2c1550"/>
-  <path d="M1250 0 L2000 0 L2000 380 C1860 300, 1720 340, 1600 250 C1480 160, 1400 90, 1250 0 Z" fill="#3d1d6e"/>
-  <path d="M0 980 C260 900, 520 960, 760 900 C900 866, 1000 900, 1100 1160 L0 1160 Z" fill="#241040"/>
-  <!-- void rift, lower right -->
-  <ellipse cx="1800" cy="1030" rx="210" ry="96" fill="#5b27a3" stroke="#241032" stroke-width="18"/>
-  <ellipse cx="1800" cy="1030" rx="140" ry="60" fill="#8b3fe1" stroke="#241032" stroke-width="14"/>
-  <ellipse cx="1800" cy="1030" rx="70" ry="28" fill="#f238df" stroke="#241032" stroke-width="12"/>
-  <!-- stars -->
-  <g fill="#fff6d8">
-    <use href="#star" x="120" y="420"/><use href="#star" x="610" y="360"/><use href="#star" x="380" y="760"/>
-    <use href="#star" x="980" y="90"/><use href="#star" x="1300" y="300"/><use href="#star" x="1880" y="420"/>
-    <use href="#star" x="700" y="980"/><use href="#star" x="200" y="1060"/>
-  </g>
-  <g fill="#bfa8ff">
-    <circle cx="80" cy="640" r="5"/><circle cx="260" cy="560" r="4"/><circle cx="520" cy="620" r="5"/>
-    <circle cx="700" cy="520" r="4"/><circle cx="450" cy="900" r="5"/><circle cx="760" cy="760" r="4"/>
-    <circle cx="840" cy="200" r="5"/><circle cx="1120" cy="200" r="4"/><circle cx="1480" cy="420" r="5"/>
-    <circle cx="1960" cy="620" r="4"/><circle cx="1100" cy="1100" r="5"/><circle cx="60" cy="860" r="4"/>
-  </g>
-  <!-- planet, bottom centre -->
-  <circle cx="1060" cy="1220" r="260" fill="#2b9fd0" stroke="#241032" stroke-width="20"/>
-  <path d="M820 1110 C900 1080, 1000 1120, 1090 1090 C1180 1060, 1260 1080, 1310 1110" fill="none" stroke="#7ff5f0" stroke-width="26" stroke-linecap="round"/>
-  <path d="M860 1030 C940 1010, 1040 1040, 1120 1010" fill="none" stroke="#1d6f99" stroke-width="22" stroke-linecap="round"/>
-
   <!-- carrier: nose points left, hull runs off the right edge -->
   <g stroke="#241032" stroke-linejoin="round">
     <rect x="1240" y="250" width="22" height="90" fill="#5d6772" stroke-width="10"/>
@@ -129,9 +103,4 @@
     <path d="M-160 0 L-200 0" stroke-width="14" stroke-linecap="round"/>
   </g>
 
-  <!-- logo, top right above the carrier -->
-  <g font-family="Arial Black, Arial, Helvetica, sans-serif" font-weight="900" text-anchor="middle">
-    <text x="1490" y="170" font-size="132" fill="#ffc432" stroke="#241032" stroke-width="22" paint-order="stroke" letter-spacing="6">ONI</text>
-    <text x="1490" y="270" font-size="92" fill="#7ff5f0" stroke="#241032" stroke-width="18" paint-order="stroke" letter-spacing="10">SPACEWAR</text>
-  </g>
 </svg>

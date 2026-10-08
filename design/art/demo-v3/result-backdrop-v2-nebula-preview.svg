@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="580" viewBox="0 0 1000 580">
+  <defs>
+    <radialGradient id="magenta" cx="76%" cy="42%" r="45%">
+      <stop offset="0" stop-color="#e24cff"/>
+      <stop offset="0.4" stop-color="#6d2dd4"/>
+      <stop offset="1" stop-color="#101533"/>
+    </radialGradient>
+    <radialGradient id="teal" cx="24%" cy="72%" r="56%">
+      <stop offset="0" stop-color="#23d3d9"/>
+      <stop offset="0.48" stop-color="#2850a8"/>
+      <stop offset="1" stop-color="#080c20"/>
+    </radialGradient>
+    <g id="star"><path d="M0 -7 L2 -2 L7 0 L2 2 L0 7 L-2 2 L-7 0 L-2 -2 Z"/></g>
+  </defs>
+  <rect width="1000" height="580" fill="#080c20"/>
+  <rect width="1000" height="580" fill="url(#teal)" opacity="0.62"/>
+  <rect width="1000" height="580" fill="url(#magenta)" opacity="0.7"/>
+  <path d="M50 380 C210 260, 340 340, 500 240 C630 160, 780 160, 1000 40 L1000 260 C830 360, 700 355, 550 430 C390 510, 230 465, 50 560 Z" fill="#8d35e8" opacity="0.28"/>
+  <path d="M680 80 C790 125, 840 190, 930 178 C960 174, 985 180, 1000 195 L1000 360 C900 320, 835 285, 750 300 C650 318, 592 250, 560 190 C535 140, 585 70, 680 80 Z" fill="#f03ff1" opacity="0.24"/>
+  <g fill="#f8f0ff" opacity="0.85">
+    <use href="#star" x="90" y="120"/><use href="#star" x="220" y="250"/><use href="#star" x="390" y="150"/>
+    <use href="#star" x="510" y="300"/><use href="#star" x="640" y="110"/><use href="#star" x="820" y="210"/>
+    <use href="#star" x="150" y="480"/><use href="#star" x="730" y="430"/><use href="#star" x="930" y="500"/>
+  </g>
+  <image href="result-backdrop-v2-transparent.png" x="0" y="0" width="1000" height="580" preserveAspectRatio="none"/>
+</svg>

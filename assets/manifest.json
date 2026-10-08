@@ -6,7 +6,7 @@
       "id": "core",
       "version": "0.2.0",
       "gameplay_affecting": false,
-      "content_hash": "1c0fe90f0e2af82f4d6976c308d77be2b8e4ae497da78fea39ea563bd6e1d6ad",
+      "content_hash": "93ddb4cceef8c3faf3f97b360db566fd9862df1b5cd2dbf07a66bf1cd18f6980",
       "assets": [
         {
           "id": "core.battle.enemy.void_spitter",
@@ -950,7 +950,7 @@
           "source": "source/core/result/backdrop.png",
           "processed": "packs/core/processed/result/backdrop.png",
           "compressed": "packs/core/bundles/result/backdrop.png.zst",
-          "hash": "174349fc9349860e49c1d8cc507281f551f2e320b3cee5d84766a03bb8c09aee",
+          "hash": "5a413f67f5eca34cb56db5f4d0dd2d962c36935338229e42e40053ed71dc2f27",
           "gameplay_affecting": false
         },
         {
@@ -959,7 +959,7 @@
           "source": "source/core/title/key_art.png",
           "processed": "packs/core/processed/title/key_art.png",
           "compressed": "packs/core/bundles/title/key_art.png.zst",
-          "hash": "0c2393af0b3faaca06f2e4281305f5c38ce155cc3c41cc60c90e0893bd5ae173",
+          "hash": "1ae21ca6c2f3e1ca0436eeb9837cfdcad77928998d755eb61399874c176c4d71",
           "gameplay_affecting": false
         },
         {

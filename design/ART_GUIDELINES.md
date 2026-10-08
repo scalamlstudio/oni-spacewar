@@ -35,6 +35,13 @@ Do not paint text into image assets. No titles, logos, labels, numbers or UI
 words belong in the pixels. Leave calm space where needed and let the game lay
 out text in the UI. Icons and non-word glyphs are allowed.
 
+## Scene Backdrops
+
+Title, Result and later full-screen scene art must not paint the space sky.
+The shared runtime nebula shader owns the sky, so scene art should contain only
+subjects, interiors, frames, foreground debris and local glows on transparent
+pixels where space shows through.
+
 ## Cropping
 
 Every sprite or frame must keep the whole subject inside its canvas with a

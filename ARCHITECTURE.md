@@ -213,7 +213,7 @@ detected pose count differs from the provided expression count.
 The First Playable art set (`design/art/demo/*-v1.png`, with the restyled
 battle art from `design/art/demo-v2/` replacing the Swarmer, Spitter, Spitter
 shot and loot icons under the same stable IDs, plus the void fissure, and
-painted text-free full-screen backdrops from `design/art/demo-v3/`) is imported
+transparent text-free scene art from `design/art/demo-v3/`) is imported
 with:
 
 ```sh
@@ -236,11 +236,12 @@ already transparent and authored at 2× on a 256 px-per-cell grid, so they are
 copied unchanged after a size check, as `core.carrier.room.<id>`,
 `core.carrier.door.<n|e|s|w>`, `core.carrier.corridor.<mask>`,
 `core.carrier.hull_floor` and `core.carrier.build_slot` (drawn at 1×, 128 px
-per cell). The full-screen backdrops (`BACKDROPS`) are the demo-v3 title key
-art and Result backdrop (`core.title.key_art`, `core.result.backdrop`), shipped
-at 2000 × 1160 so they stay crisp up to that window size. They follow
-`design/ART_GUIDELINES.md`: painted detail, no in-image text, concept crew only
-when characters appear, and composition that leaves calm areas for UI text. The
+per cell). The scene backdrops (`BACKDROPS`) are the transparent demo-v3 title
+key art and Result backdrop (`core.title.key_art`, `core.result.backdrop`),
+shipped at 2000 × 1160 so they stay crisp up to that window size while the
+runtime nebula shader shows through. They follow `design/ART_GUIDELINES.md`:
+no painted sky, no in-image text, concept crew only when characters appear, and
+composition that leaves calm areas for UI text. The
 import also writes `target/demo-art-contact-sheet.png` for a visual check. The
 file names and target sizes are tables at the top of the tool; a new art file
 means a new table row.
@@ -248,8 +249,8 @@ means a new table row.
 **Crop check.** `crates/content/tests/asset_crop.rs` (part of `cargo test`)
 loads every PNG under `assets/source/core/` and fails if a pixel with
 alpha > 8 touches the canvas edge (design/ART_GUIDELINES.md § Cropping).
-Art meant to fill its canvas is listed by path in `FULL_BLEED`: the title
-and Result backdrops, carrier rooms / corridors / doors / dock / hull tiles,
+Art allowed to touch its canvas edge is listed by path in `FULL_BLEED`: the
+transparent title and Result scene art, carrier rooms / corridors / doors / dock / hull tiles,
 and the builder UI's 9-slice panels, module cards and grid overlay. Real
 clipped cut-outs waiting for an art fix go in `KNOWN_CLIPPED`, which fails
 once the asset is fixed so the entry is removed.
@@ -424,12 +425,14 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   Ship facing is visual-only client state (from the move target / dash).
   Player bolts are a generated soft glow tinted per player; shields, the
   Shockwave ring, hull bars and the move marker stay gizmo effects. The
-  Title shows `core.title.key_art` with the game name drawn over it by
+  Title shows the transparent `core.title.key_art` over the shared nebula
+  shader, with the game name drawn over it by
   the game (`flow::title_logo`: "ONI SPACEWAR" in `core.fonts.russo_one`
   in the art's empty upper right, a dark 8-copy outline and a drop shadow,
   sized in window-height units like the art so it fits from 1000 × 580 to
-  2000 × 1160; the images themselves carry no text), the Result screen a lightly dimmed
-  `core.result.backdrop` (the bridge window), and the Workshop rows, Dock berths and Carrier
+  2000 × 1160; the images themselves carry no text), the Result screen a
+  lightly dimmed transparent `core.result.backdrop` (the bridge window over
+  the shared nebula shader), and the Workshop rows, Dock berths and Carrier
   wallet show icons / ship art.
 - **Fissures and the spawn director** (`state.rs`, numbers in `tuning.rs`):
   `SimState::fissures` is placed once in `with_loadouts` from the seeded RNG

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="1160" viewBox="0 0 2000 1160">
+  <defs>
+    <mask id="window-cutouts" maskUnits="userSpaceOnUse">
+      <rect width="2000" height="1160" fill="white"/>
+      <path d="M96 238 L302 101 L626 101 L626 852 L149 852 L94 786 Z" fill="black"/>
+      <path d="M626 101 L1376 101 L1376 852 L626 852 Z" fill="black"/>
+      <path d="M1376 101 L1900 101 L1900 880 L1376 880 Z" fill="black"/>
+    </mask>
+  </defs>
+  <image href="result-backdrop-v2.png" x="0" y="0" width="2000" height="1160" preserveAspectRatio="none" mask="url(#window-cutouts)"/>
+  <g stroke-linejoin="round">
+    <rect x="598" y="84" width="102" height="790" rx="8" fill="#172231" stroke="#26113a" stroke-width="18"/>
+    <rect x="633" y="106" width="34" height="752" fill="#237a8e"/>
+    <rect x="1288" y="84" width="102" height="790" rx="8" fill="#172231" stroke="#26113a" stroke-width="18"/>
+    <rect x="1323" y="106" width="34" height="752" fill="#237a8e"/>
+  </g>
+</svg>

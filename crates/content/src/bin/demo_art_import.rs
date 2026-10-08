@@ -89,13 +89,24 @@ const CARRIER_2_5D: [(&str, &str, u32, u32); 28] = [
 /// checked by `crates/content/tests/asset_crop.rs`).
 const SPRITE_MARGIN: u32 = 2;
 
-/// Full-frame images (no background to key): stem, output, max size.
+/// Full-frame transparent scene images (no background to key): stem, output, max size.
 /// (The battle background tile was dropped for the procedural nebula sky,
-/// TAKOAI-58.) These painted demo-v3 renders are 2000 x 1160, the largest
-/// window they have to stay crisp in.
+/// TAKOAI-58.) These demo-v3 transparent renders are 2000 x 1160, the largest
+/// window they have to stay crisp in, with sky areas cut out for the runtime
+/// nebula.
 const BACKDROPS: [(&str, &str, u32, u32); 2] = [
-    ("demo-v3/title-key-art-v3", "title/key_art", 2000, 1160),
-    ("demo-v3/result-backdrop-v2", "result/backdrop", 2000, 1160),
+    (
+        "demo-v3/title-key-art-v3-transparent",
+        "title/key_art",
+        2000,
+        1160,
+    ),
+    (
+        "demo-v3/result-backdrop-v2-transparent",
+        "result/backdrop",
+        2000,
+        1160,
+    ),
 ];
 
 /// Row sheets: stem, output directory, frame names left to right, max frame
