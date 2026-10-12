@@ -71,8 +71,8 @@ fn scene_art_has_a_transparent_sky() {
 
 #[test]
 fn title_key_art_has_no_opaque_old_sky_pixels() {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../assets/source/core/title/key_art.png");
+    let path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/source/core/title/key_art.png");
     let image = image::open(&path)
         .unwrap_or_else(|e| panic!("{}: {e}", path.display()))
         .to_rgba8();

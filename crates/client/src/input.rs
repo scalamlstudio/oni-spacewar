@@ -3,7 +3,8 @@
 //! simulation.
 //!
 //! Controls (`design/DESIGN.md` § Player): left mouse button = click-to-move
-//! (hold to keep steering), Q/W = the battleship's two skills aimed at the
+//! (hold to keep steering; [`MovePress`] is shared with the carrier's
+//! Pilot so the two can't drift apart), Q/W = the battleship's two skills aimed at the
 //! cursor (E/R are unused so far); the basic attack fires on its own.
 
 use bevy::platform::collections::HashMap;
@@ -14,6 +15,44 @@ use sim::input::{INPUT_MOVE, INPUT_SKILL_E, INPUT_SKILL_Q, INPUT_SKILL_R, INPUT_
 use sim::NetInput;
 
 use crate::rollback::GameConfig;
+
+/// The move button's state this frame, shared by the battle and the
+/// carrier: a press starts a move toward the cursor and holding it keeps
+/// following the cursor (TAKOAI-87).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum MovePress {
+    Idle,
+    /// Pressed this frame.
+    Start,
+    /// Held since an earlier frame.
+    Hold,
+}
+
+impl MovePress {
+    pub const BUTTON: MouseButton = MouseButton::Left;
+
+    pub fn read(mouse: &ButtonInput<MouseButton>) -> Self {
+        if mouse.just_pressed(Self::BUTTON) {
+            MovePress::Start
+        } else if mouse.pressed(Self::BUTTON) {
+            MovePress::Hold
+        } else {
+            MovePress::Idle
+        }
+    }
+
+    /// Whether the player is steering toward the cursor.
+    pub fn held(self) -> bool {
+        self != MovePress::Idle
+    }
+}
+
+/// The cursor in world pixels, if it is over the window.
+pub fn cursor_world(window: &Window, camera: &Camera, cam_tf: &GlobalTransform) -> Option<Vec2> {
+    window
+        .cursor_position()
+        .and_then(|c| camera.viewport_to_world_2d(cam_tf, c).ok())
+}
 
 /// Whether the first local player uses mouse + keyboard (`false` = all bots).
 #[derive(Resource, Clone, Copy)]
@@ -72,7 +111,7 @@ fn human_input(
     cursor: IVec2,
 ) -> NetInput {
     let mut buttons = 0;
-    if mouse.pressed(MouseButton::Left) {
+    if MovePress::read(mouse).held() {
         buttons |= INPUT_MOVE;
     }
     for (key, bit) in [
@@ -106,10 +145,7 @@ pub fn read_local_inputs(
 ) {
     // Cursor in world pixels; keep the last value while it is off-window.
     if let (Ok(window), Ok((camera, cam_tf))) = (windows.single(), cameras.single()) {
-        if let Some(p) = window
-            .cursor_position()
-            .and_then(|c| camera.viewport_to_world_2d(cam_tf, c).ok())
-        {
+        if let Some(p) = cursor_world(window, camera, cam_tf) {
             *last_cursor = p.round().as_ivec2();
         }
     }
@@ -126,4 +162,25 @@ pub fn read_local_inputs(
         local_inputs.insert(*handle, input);
     }
     commands.insert_resource(LocalInputs::<GameConfig>(local_inputs));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn move_press_starts_then_holds_until_release() {
+        let mut mouse = ButtonInput::<MouseButton>::default();
+        assert_eq!(MovePress::read(&mouse), MovePress::Idle);
+        mouse.press(MovePress::BUTTON);
+        assert_eq!(MovePress::read(&mouse), MovePress::Start);
+        mouse.clear();
+        assert_eq!(MovePress::read(&mouse), MovePress::Hold);
+        assert!(MovePress::read(&mouse).held());
+        mouse.release(MovePress::BUTTON);
+        assert_eq!(MovePress::read(&mouse), MovePress::Idle);
+        // Other buttons don't move.
+        mouse.press(MouseButton::Right);
+        assert!(!MovePress::read(&mouse).held());
+    }
 }

@@ -44,7 +44,7 @@ crates/
     src/art.rs          ContentImages: shipped images and fonts by stable content ID (manifest -> processed file), cached; linear sampler + CPU mip chain
     src/flow.rs         first-playable scene state machine, Title / Result UI, --autoplay QA driver: Title → Carrier → Battle → Result
     src/layout.rs       2.5D carrier layout rules, no Bevy: hull grid, room catalogue, corridor masks, connectivity, can_place / can_demolish, walkable rects, click-to-move pathing, save validation + v3 Dock split
-    src/carrier.rs      Carrier scene: draws the layout, click-to-move + 8-direction WASD walking, crew dialogue, one-berth Docks (board a ship → briefing → launch), camera / zoom, Workshop panel (Upgrades + Build tabs), ONI-style Build mode screen (builder UI kit), clickable panels
+    src/carrier.rs      Carrier scene: draws the layout, click-to-move / hold-to-drag + 8-direction WASD walking, crew dialogue, one-berth Docks (board a ship → briefing → launch), camera / zoom, Workshop panel (Upgrades + Build tabs), ONI-style Build mode screen (builder UI kit), clickable panels
     src/workshop.rs     Workshop rules: upgrade costs / levels / buy(), and Build: build_lock / can_build / build / demolish (full refund)
     src/hints.rs        one-time tutorial hints: triggers, display queue, seen IDs in the save
     src/save.rs         versioned JSON save data in the OS data directory (override: ONI_SAVE_DIR) + migration
@@ -322,8 +322,17 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   a left click into a `WalkOrder` (`order_walk`: the floor point, or the
   `APPROACH` spot in front of a clicked ship / crew member / bench with the
   hotspot to use on arrival); `carrier_input` follows it (`follow`, still
-  through `walk`) and interacts on arrival when in reach. WASD cancels the
-  order; Build mode keeps its own clicks (`build_click`). The destination is
+  through `walk`) and interacts on arrival when in reach. **Hold-to-move**
+  (TAKOAI-87): the battle and the carrier read the button through one
+  helper, `input::MovePress` (Start / Hold / Idle), so they can't drift
+  apart. A press on the floor also starts a `PilotDrag`; while the button
+  is held `drag_pilot` re-paths to the cursor whenever it has moved
+  `DRAG_REPATH` (8 px) from the last target, and a cursor within
+  `DRAG_DEAD_ZONE` (12 px) of the Pilot's feet stops it instead, so the
+  facing doesn't jitter (`drag_step`). A press on a ship / crew member /
+  bench stays a click; presses and drags over UI nodes (any non-`None`
+  `Interaction`) are ignored; opening a panel or pausing ends the drag.
+  WASD cancels the order; Build mode keeps its own clicks (`build_click`). The destination is
   drawn with the battle's move marker (`render::move_marker`). `sync_layout` redraws the scene whenever the saved
   layout changes, recomputing the walkable rects and the hotspots (crew, the
   Workshop bench, one per Dock). Characters and docked ships are y-sorted

@@ -23,6 +23,7 @@ use sim::{Loadout, ShipKind, ShipSheet, Upgrades};
 use crate::art::{self, icon_node, ContentImages};
 use crate::flow::{self, GameScreen, PauseMenu, SaveSlot, ScreenEntity};
 use crate::hints::{Hint, Hints};
+use crate::input::{self, MovePress};
 use crate::layout::{
     self, room_px, CarrierLayout, Cell, Piece, PlaceError, PlacedRoom, Rect, RoomId, Side, CELL,
     HULL_H, HULL_W,
@@ -455,6 +456,26 @@ pub const PILOT_TOUR: [(Vec2, &str); 8] = [
     (Vec2::new(340.0, 340.0), "s"),
 ];
 
+/// The autoplay's hold-to-move drag (TAKOAI-87), after the tour ends at
+/// its last stop: the held cursor sweeps west, north, then east along these
+/// Bridge floor points (grid px), one leg per `PILOT_DRAG_LEG` s, faster
+/// than the Pilot walks so it trails the cursor.
+pub const PILOT_DRAG: [Vec2; 4] = [
+    Vec2::new(340.0, 340.0),
+    Vec2::new(192.0, 340.0),
+    Vec2::new(192.0, 192.0),
+    Vec2::new(340.0, 192.0),
+];
+pub const PILOT_DRAG_LEG: f32 = 0.7;
+
+/// The autoplay drag's cursor `t` s after the press.
+pub fn drag_cursor(t: f32) -> Vec2 {
+    let legs = (PILOT_DRAG.len() - 1) as f32;
+    let at = (t / PILOT_DRAG_LEG).clamp(0.0, legs);
+    let i = (at as usize).min(PILOT_DRAG.len() - 2);
+    PILOT_DRAG[i].lerp(PILOT_DRAG[i + 1], at - i as f32)
+}
+
 /// Room-local spot (cell, then px inside it) of a crew member's feet:
 /// design/READINESS.md § Room catalogue.
 const CREW_SPOTS: [(RoomId, Crew, (i32, i32)); 3] = [
@@ -785,6 +806,43 @@ pub struct WalkOrder {
     pub interact: Option<Hotspot>,
 }
 
+/// Hold-to-move (TAKOAI-87), the same as steering the battleship: after a
+/// press on the floor and while the button stays down, the cursor (grid px)
+/// the Pilot follows, and where it was last sent. The autoplay sets
+/// `cursor` directly.
+#[derive(Resource, Default, Clone, Copy, PartialEq, Debug)]
+pub struct PilotDrag {
+    pub cursor: Option<Vec2>,
+    ordered: Option<Vec2>,
+}
+
+/// How far (px) the held cursor moves before the Pilot is re-pathed.
+const DRAG_REPATH: f32 = 8.0;
+/// A held cursor this close (px) to the Pilot's feet stops it, so a cursor
+/// resting on the Pilot doesn't flip its facing back and forth.
+const DRAG_DEAD_ZONE: f32 = 12.0;
+
+/// What a held drag does this frame.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum DragStep {
+    /// The cursor is still near where the Pilot was sent.
+    Keep,
+    /// The cursor is on the Pilot: stand.
+    Stop,
+    /// Walk to the cursor.
+    Walk,
+}
+
+pub fn drag_step(feet: Vec2, cursor: Vec2, ordered: Option<Vec2>) -> DragStep {
+    if ordered.is_some_and(|o| o.distance(cursor) < DRAG_REPATH) {
+        DragStep::Keep
+    } else if feet.distance(cursor) <= DRAG_DEAD_ZONE {
+        DragStep::Stop
+    } else {
+        DragStep::Walk
+    }
+}
+
 /// Where the Pilot stands to use a hotspot: in front of (south of) a crew
 /// member or the bench, on the walkway edge of a berth pad.
 const APPROACH: f32 = 24.0;
@@ -1096,6 +1154,7 @@ impl Plugin for CarrierPlugin {
             .init_resource::<CarrierView>()
             .init_resource::<BuildCursor>()
             .init_resource::<WalkOrder>()
+            .init_resource::<PilotDrag>()
             .add_systems(
                 OnEnter(GameScreen::Carrier),
                 spawn_carrier.after(flow::enter_carrier),
@@ -1106,6 +1165,7 @@ impl Plugin for CarrierPlugin {
                 (
                     sync_layout,
                     click_to_move,
+                    drag_pilot,
                     carrier_input,
                     build_click,
                     zoom_wheel,
@@ -1481,12 +1541,14 @@ fn sync_layout(
 fn leave_carrier(
     mut overlay: ResMut<Overlay>,
     mut order: ResMut<WalkOrder>,
+    mut drag: ResMut<PilotDrag>,
     mut arrival: ResMut<CarrierArrival>,
     mut scene: ResMut<CarrierScene>,
     mut camera: Query<(&mut Transform, &mut Projection), With<Camera2d>>,
 ) {
     *overlay = Overlay::None;
     *order = WalkOrder::default();
+    *drag = PilotDrag::default();
     arrival.from_mission = false;
     scene.drawn = None;
     if let Ok((mut cam, mut projection)) = camera.single_mut() {
@@ -1863,31 +1925,52 @@ fn cursor_world(
     let (Ok(window), Ok((camera, cam_tf))) = (windows.single(), camera.single()) else {
         return None;
     };
-    window
-        .cursor_position()
-        .and_then(|c| camera.viewport_to_world_2d(cam_tf, c).ok())
+    input::cursor_world(window, camera, cam_tf)
 }
 
-/// Left click, the same as in battle: on the floor, the Pilot walks there
-/// along the corridors and rooms; on a docked battleship, a crew member or
-/// the bench, it walks up and uses it on arrival (like walking up and
-/// pressing E). Build mode handles its own clicks (`build_click`).
+/// Left button, the same as in battle ([`MovePress`]): a press on the
+/// floor walks the Pilot there along the corridors and rooms, and holding
+/// it keeps following the cursor (`drag_pilot`); a press on a docked
+/// battleship, a crew member or the bench walks up and uses it on arrival
+/// (like walking up and pressing E). Presses and drags over the HUD or a
+/// panel are the UI's; Build mode handles its own clicks (`build_click`).
 #[allow(clippy::too_many_arguments)]
 fn click_to_move(
     mouse: Res<ButtonInput<MouseButton>>,
     pause: Res<PauseMenu>,
     overlay: Res<Overlay>,
     scene: Res<CarrierScene>,
+    autoplay: Option<Res<flow::Autoplay>>,
     windows: Query<&Window, With<PrimaryWindow>>,
     camera: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
+    ui: Query<&Interaction>,
     ships: Query<(&GlobalTransform, &DockedShip)>,
     pilot: Query<&Transform, With<Pilot>>,
     mut order: ResMut<WalkOrder>,
+    mut drag: ResMut<PilotDrag>,
 ) {
-    if pause.open || *overlay != Overlay::None || !mouse.just_pressed(MouseButton::Left) {
+    // The autoplay drives the Pilot itself.
+    if autoplay.is_some() {
         return;
     }
-    let (Some(p), Ok(pilot)) = (cursor_world(&windows, &camera), pilot.single()) else {
+    let press = MovePress::read(&mouse);
+    if pause.open || *overlay != Overlay::None || !press.held() {
+        if *drag != PilotDrag::default() {
+            *drag = PilotDrag::default();
+        }
+        return;
+    }
+    let over_ui = ui.iter().any(|i| *i != Interaction::None);
+    let Some(p) = cursor_world(&windows, &camera).filter(|_| !over_ui) else {
+        return;
+    };
+    if press == MovePress::Hold {
+        if drag.cursor.is_some_and(|c| c != grid(p)) {
+            drag.cursor = Some(grid(p));
+        }
+        return;
+    }
+    let Ok(pilot) = pilot.single() else {
         return;
     };
     let docked = ships
@@ -1900,6 +1983,52 @@ fn click_to_move(
     if let Some(o) = order_walk(&scene.walkable, &scene.hotspots, feet, grid(p), hotspot) {
         *order = o;
     }
+    // Only a press on the floor drags; one on something to use stays a click.
+    *drag = match hotspot {
+        None => PilotDrag {
+            cursor: Some(grid(p)),
+            ordered: Some(grid(p)),
+        },
+        Some(_) => PilotDrag::default(),
+    };
+}
+
+/// Hold-to-move: re-paths the Pilot to the held cursor when it has moved,
+/// and stops it when the cursor rests on it.
+fn drag_pilot(
+    pause: Res<PauseMenu>,
+    overlay: Res<Overlay>,
+    scene: Res<CarrierScene>,
+    pilot: Query<&Transform, With<Pilot>>,
+    mut order: ResMut<WalkOrder>,
+    mut drag: ResMut<PilotDrag>,
+) {
+    let Some(cursor) = drag.cursor else {
+        return;
+    };
+    if pause.open || *overlay != Overlay::None {
+        *drag = PilotDrag::default();
+        return;
+    }
+    let Ok(pilot) = pilot.single() else {
+        return;
+    };
+    let feet = grid(pilot.translation.truncate());
+    match drag_step(feet, cursor, drag.ordered) {
+        DragStep::Keep => return,
+        DragStep::Stop => {
+            if *order != WalkOrder::default() {
+                *order = WalkOrder::default();
+            }
+        }
+        DragStep::Walk => {
+            // Off the floor (deep space): keep walking to the last spot.
+            if let Some(o) = order_walk(&scene.walkable, &scene.hotspots, feet, cursor, None) {
+                *order = o;
+            }
+        }
+    }
+    drag.ordered = Some(cursor);
 }
 
 /// The click-to-move destination marker, the same one the battle draws.
@@ -3181,6 +3310,91 @@ mod tests {
         let floor = order_walk(&rects, &spots, start, cell_centre((3, 4)), None).unwrap();
         assert_eq!(floor.interact, None);
         assert!(order_walk(&rects, &spots, start, cell_centre((10, 0)), None).is_none());
+    }
+
+    #[test]
+    fn holding_the_button_keeps_the_pilot_following_the_cursor() {
+        let l = CarrierLayout::starting();
+        let rects = l.walkable();
+        let spots = hotspots(&l);
+        // Where the tour leaves the Pilot, which is where the drag starts.
+        let mut feet = PILOT_TOUR[PILOT_TOUR.len() - 1].0;
+        assert_eq!(feet, PILOT_DRAG[0]);
+        let mut order = WalkOrder::default();
+        let mut ordered = None;
+        let mut facings = Vec::new();
+        let mut walks = 0;
+        let end = (PILOT_DRAG.len() - 1) as f32 * PILOT_DRAG_LEG;
+        // Held for the sweep, then released once the cursor stops: the
+        // Pilot finishes walking to the last cursor spot.
+        for frame in 0..60 * 5 {
+            let t = frame as f32 / 60.0;
+            if t <= end {
+                let cursor = drag_cursor(t);
+                let step = drag_step(feet, cursor, ordered);
+                match step {
+                    DragStep::Keep => {}
+                    DragStep::Stop => order = WalkOrder::default(),
+                    DragStep::Walk => {
+                        order = order_walk(&rects, &spots, feet, cursor, None).expect("floor");
+                        walks += 1;
+                    }
+                }
+                if step != DragStep::Keep {
+                    ordered = Some(cursor);
+                }
+            }
+            let before = feet;
+            (feet, _) = follow(&rects, &mut order, feet, WALK_SPEED / 60.0);
+            assert!(layout::can_stand(&rects, feet.x, feet.y), "{feet}");
+            if let Some(f) = Facing::of(feet - before) {
+                if facings.last() != Some(&f) {
+                    facings.push(f);
+                }
+            }
+        }
+        assert!(feet.distance(PILOT_DRAG[3]) < 0.5, "ends at {feet}");
+        // Re-pathed all along the sweep, not once per press.
+        assert!(walks > 20, "{walks} walks");
+        // West, then turning north, then east, without flip-flopping.
+        assert_eq!(facings.first(), Some(&Facing::W), "{facings:?}");
+        assert_eq!(facings.last(), Some(&Facing::E), "{facings:?}");
+        assert!(facings.len() <= 6, "{facings:?}");
+    }
+
+    #[test]
+    fn a_cursor_resting_on_the_pilot_stands_it_still() {
+        let feet = Vec2::new(192.0, 192.0);
+        // Held right on the Pilot after a drag: it stops, once.
+        assert_eq!(
+            drag_step(
+                feet,
+                feet + Vec2::new(3.0, -2.0),
+                Some(feet + Vec2::X * 80.0)
+            ),
+            DragStep::Stop
+        );
+        // Small wobbles around it never send it walking (no facing jitter).
+        let mut ordered = Some(feet + Vec2::new(3.0, -2.0));
+        for d in [
+            (5.0, 5.0),
+            (-6.0, 4.0),
+            (0.0, -11.0),
+            (-8.0, -8.0),
+            (11.0, 0.0),
+        ] {
+            let cursor = feet + Vec2::from(d);
+            let step = drag_step(feet, cursor, ordered);
+            assert_ne!(step, DragStep::Walk, "{d:?}");
+            if step != DragStep::Keep {
+                ordered = Some(cursor);
+            }
+        }
+        // Moving it away walks again.
+        assert_eq!(
+            drag_step(feet, feet + Vec2::new(40.0, 0.0), ordered),
+            DragStep::Walk
+        );
     }
 
     #[test]
