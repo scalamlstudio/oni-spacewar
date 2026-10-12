@@ -57,7 +57,7 @@ impl Hint {
     pub fn text(self) -> &'static str {
         match self {
             Hint::CarrierWalk => {
-                "Click to walk. Click a crew member, ship or the Workshop bench to use it."
+                "Click or hold to walk. Click a crew member, ship or the Workshop bench to use it."
             }
             Hint::CarrierInteract => {
                 "Click what the label points at to use it. E works too when you stand next to it."
@@ -71,7 +71,7 @@ impl Hint {
             Hint::CarrierBuild => {
                 "Click a glowing slot to build. Rooms need a corridor at one of their doors."
             }
-            Hint::BattleMove => "Click to move. Your guns fire on their own.",
+            Hint::BattleMove => "Click or hold to move. Your guns fire on their own.",
             Hint::BattleSkills => "Q / W use skills. Watch the cooldowns.",
             Hint::BattleLoot => "Fly over drops to collect them.",
         }
@@ -288,9 +288,13 @@ mod tests {
     #[test]
     fn carrier_walk_hint_leads_with_click_to_move() {
         // TAKOAI-62: click-to-move is the main Carrier control; WASD is a
-        // secondary input and no longer the headline.
+        // secondary input and no longer the headline. TAKOAI-87: holding
+        // keeps walking, the same as steering in battle.
         let text = Hint::CarrierWalk.text();
-        assert!(text.starts_with("Click to walk."));
+        assert!(text.starts_with("Click or hold to walk."));
         assert!(!text.contains("WASD"));
+        assert!(Hint::BattleMove
+            .text()
+            .starts_with("Click or hold to move."));
     }
 }

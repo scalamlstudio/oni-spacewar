@@ -10,10 +10,11 @@ use sim::{FxVec2, NetInput, SimState, SUB};
 
 use crate::art::ContentImages;
 use crate::carrier::{
-    self, BuildCursor, CarrierArrival, CarrierScene, CarrierView, Hotspot, Overlay, Pilot, Tool,
-    WalkOrder, WorkshopTab,
+    self, BuildCursor, CarrierArrival, CarrierScene, CarrierView, Hotspot, Overlay, Pilot,
+    PilotDrag, Tool, WalkOrder, WorkshopTab,
 };
 use crate::hints::{Hint, Hints};
+use crate::input::{self, MovePress};
 use crate::layout::{Piece, RoomId};
 use crate::mission::{self, MissionOutcome, MissionRequest, MissionResult};
 use crate::rollback::SimWorld;
@@ -155,6 +156,11 @@ impl Autoplay {
 /// and the time per walk (the longest, a 209 px diagonal, takes 1.3 s).
 const TOUR_START: f32 = 3.5;
 const TOUR_LEG: f32 = 1.4;
+/// Then the hold-to-move drag: pressed after the tour, released once the
+/// cursor has swept all its legs.
+const DRAG_START: f32 = TOUR_START + carrier::PILOT_TOUR.len() as f32 * TOUR_LEG + 0.2;
+const DRAG_END: f32 =
+    DRAG_START + (carrier::PILOT_DRAG.len() - 1) as f32 * carrier::PILOT_DRAG_LEG + 0.3;
 
 /// Upgrade preference for the autoplay pilot: the spec's most visible first
 /// buy first.
@@ -971,10 +977,7 @@ fn step_demo_battle(
         return;
     };
     if let (Ok(window), Ok((camera, cam_tf))) = (windows.single(), cameras.single()) {
-        if let Some(p) = window
-            .cursor_position()
-            .and_then(|c| camera.viewport_to_world_2d(cam_tf, c).ok())
-        {
+        if let Some(p) = input::cursor_world(window, camera, cam_tf) {
             *last_cursor = p.round().as_ivec2();
         }
     }
@@ -982,7 +985,7 @@ fn step_demo_battle(
         autopilot(&world)
     } else {
         let mut buttons = 0;
-        if mouse.pressed(MouseButton::Left) {
+        if MovePress::read(&mouse).held() {
             buttons |= INPUT_MOVE;
         }
         if keys.pressed(KeyCode::KeyQ) {
@@ -1091,6 +1094,7 @@ fn autoplay_flow(
         ResMut<WalkOrder>,
         Res<CarrierScene>,
     ),
+    mut drag: ResMut<PilotDrag>,
     pilot: Query<(&Transform, &Pilot)>,
     mut launch: MessageWriter<MissionRequest>,
     mut exit: MessageWriter<AppExit>,
@@ -1258,6 +1262,29 @@ fn autoplay_flow(
                         autoplay.shoot(&mut commands, &format!("11c-pilot-walk-{name}"));
                     }
                 }
+                // Then hold the button and sweep the cursor around the
+                // Bridge (TAKOAI-87): the Pilot follows it, shot mid-drag.
+                if before >= DRAG_START && *since < DRAG_END {
+                    let held = Some(carrier::drag_cursor(*since - DRAG_START));
+                    if drag.cursor != held {
+                        drag.cursor = held;
+                    }
+                }
+                if at(DRAG_START + 1.0) {
+                    if let Ok((tf, p)) = pilot.single() {
+                        println!(
+                            "autoplay: pilot drag at {} cursor {} facing {:?} walking {}",
+                            carrier::grid(tf.translation.truncate()).round(),
+                            drag.cursor.unwrap_or_default().round(),
+                            p.facing,
+                            !walk.path.is_empty()
+                        );
+                    }
+                    autoplay.shoot(&mut commands, "11d-pilot-drag");
+                }
+                if at(DRAG_END) {
+                    *drag = PilotDrag::default();
+                }
             }
             // Between missions: build the spec's example Salvage Bay (and its
             // corridor) when it's affordable and not built yet, else buy the
@@ -1378,11 +1405,7 @@ fn autoplay_flow(
             }
             let berth = carrier::ship_index(&autoplay.ship);
             // The first visit's Pilot tour runs past the usual 7.5 s.
-            let dock = if first_visit {
-                TOUR_START + carrier::PILOT_TOUR.len() as f32 * TOUR_LEG + 0.4
-            } else {
-                7.5
-            };
+            let dock = if first_visit { DRAG_END + 0.6 } else { 7.5 };
             if at(dock) {
                 // Click the ship: the Pilot walks to its Dock and boards it
                 // on arrival (selects it and starts the briefing).
