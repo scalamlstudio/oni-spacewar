@@ -220,3 +220,30 @@ _Running log of what's decided and what's built. Newest entries on top._
 - Save version 3 adds the carrier layout; v1/v2 saves get the starting
   layout. design/READINESS.md § Demo Spec › Carrier holds the numbers, the
   Stage 7 art list and the Stage 8 engineer scope.
+
+## 2026-10-12
+
+- **Carrier interior Revision 2, proposed** (TAKOAI-88, awaiting Wei's
+  approval). Wei's direction: stop drawing whole rooms; draw lots of
+  furniture and work stations and let players place them freely. The
+  room-and-corridor model of TAKOAI-52/56 is retired. Mika chose the rest as
+  defaults: ONI-style floor tiles (walls are whatever isn't floor, doors are
+  one-tile walls between two floors), 64 px tiles in a 24 × 16 hull, items
+  with footprints, four facings and three layers (object, floor, wall),
+  "against a wall" / "on a wall" placement, and a front strip that must stay
+  clear and reachable from the Command Console.
+- Every Revision 1 room becomes a station: Bridge → Command Console,
+  Workshop → Upgrade Bench, Dock → one Berth per battleship, Crew Quarters →
+  Sample Analyzer (the Researcher's post), Salvage Bay → Salvage Sorter,
+  Training Room → Combat Simulator (same effects and prices). 19 furniture
+  and decor pieces, cosmetic only; comfort and room bonuses are deferred to
+  TAKOAI-4.
+- Build mode opens anywhere with B and places instantly (no walking, no
+  build time). Everything is unlocked; removing refunds in full; starter
+  pieces refund nothing.
+- Save version 5 stores a tile map and an item list. Older saves get the
+  starting carrier and a full refund of everything they built.
+- Updated DESIGN.md § Carrier and § Player, READINESS.md § Demo Spec ›
+  Carrier (catalogue, rules, starting layout, art spec, retired code and
+  art, engineer scope) and OPEN_QUESTIONS.md. Starting-layout mock and
+  checker: `design/art/carrier-furniture/`.

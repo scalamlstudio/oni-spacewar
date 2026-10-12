@@ -42,14 +42,20 @@ level design), and the rest left scope with manufacturing and the research loop
   time, something else? _(§ Crew Skill Trees, § Ship Modules)_
   `Deferred` · TAKOAI-8 — the First Playable Demo has no research loop; loot
   is spent at the Workshop instead.
-- **Carrier building placement & crew task assignment:** the main character
-  walks around the carrier between missions (decided 2026-10-03), and builds
-  rooms and corridors on a grid at the Workshop (decided 2026-10-04, DESIGN.md
-  § Carrier). Still open: how the player places manufacturing buildings inside
-  rooms, how they assign companions their jobs, and whether/how the carrier
-  itself "moves". _(§ Player, § Crew / Companions, § Carrier)_
+- **Crew task assignment:** the main character walks around the carrier
+  between missions (decided 2026-10-03), and the player lays floor and
+  places stations and furniture freely (proposed 2026-10-12, TAKOAI-88,
+  DESIGN.md § Carrier). Manufacturing stations will use the same placement.
+  Still open: how the player assigns companions their jobs, whether crew
+  carry out construction (the demo places instantly), and whether/how the
+  carrier itself "moves". _(§ Player, § Crew / Companions, § Carrier)_
   `Deferred` · TAKOAI-2 — the First Playable Demo has neither manufacturing
   nor companion jobs.
+- **Room bonuses and comfort:** should an enclosed area count as a room type
+  from the furniture in it (ONI room bonuses), and should furniture feed a
+  comfort or morale stat? The tile-and-item model allows both without a
+  save change. _(§ Carrier)_
+  `Deferred` · TAKOAI-4 — furniture is cosmetic in the First Playable Demo.
 - **Key-resource trading target:** does trading for key resources unlock ship
   *modules*, or feed the *recipes* crew leveling unlocks, or both?
   _(§ Ship Modules)_
@@ -61,9 +67,9 @@ level design), and the rest left scope with manufacturing and the research loop
 - **Ship size extension:** mechanically, how does adding a module grow the
   carrier's buildable space — new rooms/tiles attached to the existing layout, a
   pre-designed set of expansion shapes, something else? _(§ Ship Modules)_
-  `Deferred` · TAKOAI-4 — the first playable builds rooms and corridors
-  inside a fixed 12 × 8-cell hull (DESIGN.md § Carrier); growing the hull
-  itself is still open.
+  `Deferred` · TAKOAI-4 — the first playable builds floor, stations and
+  furniture inside a fixed 24 × 16-tile hull (DESIGN.md § Carrier); growing
+  the hull itself is still open.
 - **Resource categories:** raw/refined/key-trade breakdown feeding ship
   progression. _(§ Ship Modules)_
   `Deferred` · TAKOAI-8 — the First Playable Demo has only Credits and Void

@@ -48,16 +48,16 @@ segment (see § Missions, § Ship Modules).
 - Progression: earn credits via faction missions and resource-gathering, spend on
   growing/upgrading the carrier (see § Hub, § Economy).
 - **Aboard the carrier (outside missions):** the player walks the main
-  character around the carrier interior — a 3/4 top-down (2.5D) view of a
-  grid of rooms and corridors — talks to crew and walks up to a module to use
-  it (WASD to walk in 8 directions, E to interact). Launching a mission is one
-  of those modules: the Dock, i.e. the Docking Module (see § Missions). The
-  player grows the carrier by building rooms and corridors at the Workshop
-  (see § Carrier). The click-to-move/ability scheme above is only for piloting
-  the battleship in a mission. How the player places manufacturing buildings
-  and assigns crew tasks is left for when manufacturing and companion jobs
-  come back into scope (see design/OPEN_QUESTIONS.md); the First Playable Demo
-  has neither.
+  character around the carrier interior — a 3/4 top-down (2.5D) view of
+  floor tiles furnished with work stations and furniture — talks to crew and
+  walks up to a station to use it (click, press-and-hold or WASD to walk, E
+  or a click to use). Launching a mission is one of those stations: a ship's
+  Berth, from the Docking Module (see § Missions). The player shapes the
+  carrier by laying floor and placing stations and furniture freely in Build
+  mode (see § Carrier). The ability scheme above is only for piloting the
+  battleship in a mission. Manufacturing stations will go through the same
+  placement; how the player assigns crew tasks is left for when companion
+  jobs come back into scope (see design/OPEN_QUESTIONS.md).
 
 ## Crew / Companions
 
@@ -73,7 +73,7 @@ segment (see § Missions, § Ship Modules).
   than being directly piloted. They can be trained (skills/roles improve over time,
   ONI-dupe-style), and their combat skills auto-trigger on condition rather than
   being manually activated (see § Crew Skill Trees). In the First Playable Demo
-  companions only stand in their rooms and talk (short lines with expression
+  companions only stand at their stations and talk (short lines with expression
   portraits); task assignment and coming along on missions are deferred.
 
 ## Crew Skill Trees
@@ -209,7 +209,9 @@ Numbers (wave plan, kill target, drop rates): design/READINESS.md § Demo Spec.
        layer: the player spends Credits and Void Crystal on upgrades that
        apply to every battleship (Hull Plating, Weapon Tuning, Thruster
        Tuning). See design/READINESS.md § Demo Spec.
-     Other modules beyond these are still open.
+     Other modules beyond these are still open. On the carrier a module is
+     a set of **work stations** the player places (see § Carrier), not a
+     pre-drawn room.
   2. **Buildings & recipes within a module** — the actual depth/progression,
      unlocked by leveling up crew members via their skill trees (see § Crew
      Skill Trees). E.g. once Manufacturing is unlocked, further crew leveling is
@@ -236,66 +238,65 @@ Numbers (wave plan, kill target, drop rates): design/READINESS.md § Demo Spec.
 
 ## Carrier
 
-_Decided 2026-10-04 (TAKOAI-52, Revision 1 of the First Playable Demo).
-Replaces the one-deck side-view corridor. Numbers, the starting layout, the
-art list and the build scope: design/READINESS.md § Demo Spec › Carrier._
+_Revision 2 (TAKOAI-88, 2026-10-12), **proposed, awaiting Wei's approval**.
+It replaces Revision 1 (TAKOAI-52, 2026-10-04): a grid of pre-drawn rooms
+joined by corridors. Wei's direction: stop drawing whole rooms; draw lots of
+furniture and work stations and let players place them freely. Numbers, the
+catalogue, the starting layout, the art spec and the build scope:
+design/READINESS.md § Demo Spec › Carrier._
 
-The carrier interior is a **dungeon-builder layout**: a grid of cells inside
-the carrier's hull, filled with **rooms** and **corridors**. The player starts
-with four connected rooms and grows the carrier by building more rooms and
-corridors between missions. Rooms are a layout plus an effect; they are not a
-production chain (manufacturing and conveyors stay out of scope).
+The carrier interior is built **ONI-style**: the player lays floor tiles
+inside the hull, and everything that isn't floor is wall. On that floor they
+place **work stations** (things that do something) and **furniture and
+decor** (things that make it theirs). There are no room assets and no
+corridors: a "room" is just floor the player has walled off and furnished.
 
-- **View:** 3/4 top-down (2.5D), as in Zelda or Stardew Valley — square grid
-  cells seen from above, with each wall's front face visible. Orthographic,
-  axis-aligned (no diamond isometric), lit from the top left. North (back)
-  walls show their face; south (front) walls are cut away to a thin lip so
-  the room's inside stays visible; side walls show only their top. Sprites
-  are drawn in order of their feet's y, so the Pilot walks behind furniture
-  further south.
-- **Camera:** follows the Pilot, clamped to the hull. The mouse wheel steps
-  through three zoom levels (Overview, Normal, Close). Build mode switches to
-  Overview and lets the player pan.
-- **Walking:** the same controls as in battle: left-click the floor and the
-  Pilot walks there along the rooms and corridors; left-click a crew member,
-  a bench or a ship to walk up and use it. WASD / arrow keys also walk, in 8
-  directions (diagonals normalised), with collision against walls. The Pilot can only stand on
-  room floors and corridors and passes between them only through doors.
-  E uses the nearest hotspot in reach (crew, a bench, a ship in its berth).
-- **Layout model:** each hull cell is empty, a corridor cell or part of a
-  room. A room has a fixed rectangular footprint and a fixed list of **door
-  sockets** (a cell on its edge plus a side). Rooms do not rotate. A corridor
-  is a 1×1 piece whose shape (end, straight, corner, T, crossroad) is picked
-  automatically from its neighbours: it opens toward every adjacent corridor
-  cell and every room socket that faces it. A room socket with a corridor in
-  front of it becomes a door; an unused socket stays a plain wall. Rooms never
-  connect directly to each other, only through corridors.
-- **Connectivity:** the Bridge is the root. Every room and corridor must be
-  reachable from the Bridge through corridors and doors. A new piece is legal
-  only if it fits inside the hull, covers only empty cells and touches the
-  existing network: a corridor next to an existing corridor or a free room
-  socket, or a room with one of its sockets facing an existing corridor.
-- **Building:** done at the Workshop bench, which gets a Build tab next to the
-  upgrades. The player picks a piece, the game switches to Build mode, a
-  ghost of the piece follows the mouse snapped to the grid (tinted green if
-  legal, red with a one-line reason if not), and a click pays the cost and
-  places it. Corridors stay selected for repeated placement; rooms place
-  once. Pieces the player built can be **demolished for a full refund**, as
-  long as removing them leaves everything else connected; the starting rooms
-  and corridors are fixed. "Moving" a room is demolish, then build.
-- **Room effects:** a built room's effect is on as long as the room exists
-  (every room is connected by construction). Each buildable room type can be
-  built once in the demo; effects do not stack. Effects that change battle
-  numbers reach the battle through the battleship's `Loadout`, so they stay
-  inside the deterministic `sim`; economy effects stay in `client`.
-- **Dock and berths:** each berth holds exactly one battleship, drawn with its
-  combat sprite. Walking up to a ship and pressing E (or clicking it) selects
-  it and opens the briefing and launch. Each Dock room has one berth, and
-  the carrier has one Dock per battleship (two in the demo). More berths come from a future
-  Hangar Bay room when the battleship roster grows; the demo has no third
-  ship, so no Hangar Bay.
-- **Hull:** the hull is a fixed-size grid in the demo. Growing the hull itself
-  (the "ship size extension" question) stays deferred.
+- **View:** 3/4 top-down (2.5D), as in Zelda or Stardew Valley,
+  orthographic and axis-aligned, lit from the top left. A wall tile with
+  floor south of it shows its front face; other walls show only their top.
+  Sprites are drawn in order of their feet's y.
+- **Camera and walking:** unchanged from Revision 1. The camera follows the
+  Pilot with three zoom levels; the Pilot walks by click, press-and-hold
+  or WASD, the same controls as in battle, and uses stations and talks to
+  crew with a click or E.
+- **Grid:** 64 px tiles (the Pilot is about one tile tall) in a fixed hull.
+  Each tile is floor, door or wall. A door is a one-tile wall between two
+  floors. Walls are auto-tiled; the player never places them.
+- **Items:** every item has a footprint (1 × 1, 2 × 1, 2 × 2, 4 × 4…), a
+  facing (four directions, turned with R) and a layer: **object** (blocks
+  walking), **floor** (rugs, walkable) or **wall** (screens and lights hung
+  on a wall face). Placement rules are "on floor", "against a wall" (its
+  back touches a wall) or "on a wall".
+- **Use and pathing:** a station has a **front strip**, the tiles in front
+  of it, which must stay clear and be reachable from the Command Console.
+  Any edit that would block a station or cut it off is refused with a
+  reason. Pathing runs over the walkable tiles; doors are walkable.
+- **Stations** keep every function the demo has. The Command Console
+  (where the Pilot starts), the Upgrade Bench (Workshop upgrades), one
+  Berth per battleship (board, briefing, launch) and the Sample Analyzer
+  (the Researcher's post) are in the starting carrier: they can be moved
+  but not removed. The Salvage Sorter and the Combat Simulator are bought
+  once and carry the old Salvage Bay and Training Room effects.
+- **Furniture and decor** are cosmetic in the demo: beds, lockers, tables,
+  sofas, plants, lamps, an aquarium, cat beds and cat trees, wall screens
+  and lights. A comfort stat is deferred to the economy pass (TAKOAI-4).
+- **Building:** B opens Build mode anywhere aboard. It uses the ONI-style
+  builder screen: categories (Structure, Stations, Furniture, Decor), a
+  ghost that shows green or red with one reason, R to rotate, plus Move and
+  Remove tools. Placement is instant: the Pilot doesn't walk there and
+  nothing takes time to build. Crew carrying out construction comes with
+  companion jobs. Everything is unlocked from the start; placing costs
+  credits (two stations also cost Void Crystal), removing refunds in full,
+  moving is free, and the starting pieces refund nothing.
+- **Rooms and room bonuses:** not tracked in the demo. Enclosed areas can
+  be detected from the tiles later, so ONI-style room bonuses ("two beds and
+  a locker make a Bunk Room") can be added without changing the save.
+  Deferred to TAKOAI-4.
+- **Battle effects** still reach the battle only through the battleship's
+  `Loadout`, so they stay inside the deterministic `sim`. Economy effects
+  stay in `client`.
+- **Hull:** fixed size in the demo. Growing it (the "ship size extension"
+  question) stays deferred.
 
 ## Enemies / Opposition
 
@@ -315,8 +316,8 @@ production chain (manufacturing and conveyors stay out of scope).
 
 ## World / Levels
 
-- **Carrier interior:** the player's persistent base — modules, rooms, and
-  systems to fix, build out, and upgrade over the course of the game (see
+- **Carrier interior:** the player's persistent base — floor, stations,
+  furniture and systems to fix, build out, and upgrade over the course of the game (see
   § Carrier, § Ship Modules).
 - **Hub:** dev-managed MMO social/trade space; not player-buildable.
 - **Space / missions:** discrete, self-contained mission instances (see
