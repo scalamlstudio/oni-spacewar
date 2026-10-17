@@ -3,7 +3,7 @@
 //! the battle reads those IDs through `mission::upgrade_levels` into the sim
 //! `Loadout`, so the effect itself lives in `sim` and stays deterministic.
 
-use crate::layout::{DemolishError, Piece, PlaceError};
+use crate::layout_v1::{DemolishError, Piece, PlaceError};
 use crate::mission::VOID_CRYSTAL_ID;
 use crate::save::SaveGame;
 use sim::tuning::MAX_UPGRADE_LEVEL;
@@ -149,7 +149,7 @@ fn refund(save: &mut SaveGame, cost: Cost) {
 /// afford), or `None` when it can.
 pub fn build_lock(save: &SaveGame, piece: Piece) -> Option<PlaceError> {
     if let Piece::Room(id) = piece {
-        if save.carrier.has_room(id) {
+        if save.carrier_rev1.has_room(id) {
             return Some(PlaceError::AlreadyBuilt);
         }
     }
@@ -160,7 +160,7 @@ pub fn build_lock(save: &SaveGame, piece: Piece) -> Option<PlaceError> {
 /// Whether `piece` can be built at (x, y) now: the layout rules, then the
 /// wallet.
 pub fn can_build(save: &SaveGame, piece: Piece, x: i32, y: i32) -> Result<(), PlaceError> {
-    save.carrier.can_place(piece, x, y)?;
+    save.carrier_rev1.can_place(piece, x, y)?;
     match build_lock(save, piece) {
         Some(e) => Err(e),
         None => Ok(()),
@@ -171,15 +171,18 @@ pub fn can_build(save: &SaveGame, piece: Piece, x: i32, y: i32) -> Result<(), Pl
 pub fn build(save: &mut SaveGame, piece: Piece, x: i32, y: i32) -> Result<(), PlaceError> {
     can_build(save, piece, x, y)?;
     spend(save, piece.cost());
-    save.carrier.place(piece, x, y);
+    save.carrier_rev1.place(piece, x, y);
     Ok(())
 }
 
 /// Demolish the player-built piece on cell (x, y) for a full refund. The
 /// caller saves.
 pub fn demolish(save: &mut SaveGame, x: i32, y: i32) -> Result<Piece, DemolishError> {
-    save.carrier.can_demolish(x, y)?;
-    let piece = save.carrier.demolish(x, y).ok_or(DemolishError::Nothing)?;
+    save.carrier_rev1.can_demolish(x, y)?;
+    let piece = save
+        .carrier_rev1
+        .demolish(x, y)
+        .ok_or(DemolishError::Nothing)?;
     refund(save, piece.cost());
     Ok(piece)
 }
@@ -236,7 +239,7 @@ mod tests {
 
     #[test]
     fn building_pays_and_demolishing_refunds_in_full() {
-        use crate::layout::{CarrierLayout, RoomId};
+        use crate::layout_v1::{CarrierLayout, RoomId};
         let bay = Piece::Room(RoomId::SalvageBay);
         let mut save = rich(129, 3);
         assert_eq!(build(&mut save, Piece::Corridor, 8, 6), Ok(()));
@@ -262,7 +265,7 @@ mod tests {
         assert_eq!(demolish(&mut save, 9, 5), Ok(bay));
         assert_eq!(demolish(&mut save, 8, 6), Ok(Piece::Corridor));
         assert_eq!((save.credits, void_crystal(&save)), (130, 3));
-        assert_eq!(save.carrier, CarrierLayout::starting());
+        assert_eq!(save.carrier_rev1, CarrierLayout::starting());
         assert_eq!(demolish(&mut save, 3, 4), Err(DemolishError::Starting));
     }
 }

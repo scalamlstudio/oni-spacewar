@@ -136,7 +136,10 @@ pub struct MissionRequest {
 /// Dock card and the Workshop preview all read this list.
 pub fn upgrade_ids(save: &SaveGame) -> Vec<String> {
     let mut ids: Vec<String> = save.purchased_upgrades.iter().cloned().collect();
-    if save.carrier.has_room(crate::layout::RoomId::TrainingRoom) {
+    if save
+        .carrier_rev1
+        .has_room(crate::layout_v1::RoomId::TrainingRoom)
+    {
         ids.push(format!("{TRAINING_ROOM_PREFIX}_1"));
     }
     ids
@@ -278,11 +281,12 @@ mod tests {
 
     #[test]
     fn training_room_reaches_the_sim_through_the_upgrade_ids() {
-        use crate::layout::{Piece, RoomId};
+        use crate::layout_v1::{Piece, RoomId};
         let mut save = SaveGame::default();
         assert!(upgrade_ids(&save).is_empty());
-        save.carrier.place(Piece::Corridor, 6, 1);
-        save.carrier.place(Piece::Room(RoomId::TrainingRoom), 7, 0);
+        save.carrier_rev1.place(Piece::Corridor, 6, 1);
+        save.carrier_rev1
+            .place(Piece::Room(RoomId::TrainingRoom), 7, 0);
         let config = config_from_save(&save, sim::tuning::KILL_TARGET);
         assert_eq!(config.ship_loadouts[0].upgrade_ids, ["training_room_1"]);
         assert_eq!(sim_loadouts(&config)[0].upgrades.training, 1);

@@ -1,419 +1,1682 @@
-//! The 2.5D carrier's layout rules (design/READINESS.md § Carrier › Layout
-//! model, Building, Room catalogue, Starting layout, Save). Pure data, no
-//! Bevy: the hull grid, the room catalogue, corridor masks, connectivity,
-//! what may be built or demolished where and why, and the walkable area.
+//! The carrier interior's layout rules, Revision 3 (design/READINESS.md
+//! § Demo Spec › Carrier: Rooms, Items, Item catalogue, Cost, Construction
+//! time, Starting layout, Save). Pure data, no Bevy and no clock: rooms and
+//! the tiles, walls and doorways derived from them, the item catalogue,
+//! construction sites advanced by an explicit [`Carrier::tick`], what may
+//! be placed, moved or removed where and why, reachability, the walkable
+//! area, crew posts, save validation and refunds. Also the click-to-move
+//! pathing over walkable rectangles (`find_path`, `walk`, `can_stand`),
+//! which the Revision 1 scene (`crate::layout_v1`) still shares.
 //!
-//! Grid coordinates: cell (0,0) is the hull's north-west corner, x grows
+//! Grid coordinates: tile (0,0) is the hull's north-west corner, x grows
 //! east, y grows south. "Grid px" are world px in the same orientation
-//! (`CELL` per cell); the Carrier scene flips y for Bevy.
+//! ([`TILE`] per tile); the Carrier scene flips y for Bevy.
 
-use std::collections::BTreeSet;
+// The Revision 3 scene and Build mode (TAKOAI-88, Engineer B) are the first
+// callers of most of this; until then only the save and the tests use it.
+#![allow(dead_code)]
+
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
+use crate::mission::{BULWARK_ID, KITE_ID};
 use crate::workshop::Cost;
 
-/// Hull size in cells (fixed in the demo).
-pub const HULL_W: i32 = 12;
-pub const HULL_H: i32 = 8;
-/// One cell in world px.
-pub const CELL: f32 = 128.0;
-/// The back-wall face at the top of a room's top row.
-pub const BACK_WALL: f32 = 48.0;
-/// Side walls and the front lip.
-pub const WALL: f32 = 12.0;
-/// Door and corridor lane width, centred on the cell edge.
-pub const LANE_X0: f32 = 32.0;
-pub const LANE_X1: f32 = 96.0;
-/// A corridor's centre square, cell-local y (and the E / W lanes' span).
-pub const LANE_Y0: f32 = 48.0;
-pub const LANE_Y1: f32 = 116.0;
+/// Hull size in tiles (fixed in the demo, one deck).
+pub const HULL_W: i32 = 36;
+pub const HULL_H: i32 = 22;
+/// One tile in world px.
+pub const TILE: f32 = 64.0;
+/// A station's use point sits this far south of its front edge, px.
+pub const USE_POINT_OFFSET: f32 = 24.0;
+/// The battleships the demo owns; one berth each.
+pub const SHIPS: [&str; 2] = [KITE_ID, BULWARK_ID];
 
-/// The side of a cell a door or corridor opening faces.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Side {
-    N,
-    E,
-    S,
-    W,
-}
+/// A hull tile, (x, y).
+pub type Tile = (i32, i32);
 
-impl Side {
-    /// n-e-s-w, the order corridor masks are named in.
-    pub const ALL: [Side; 4] = [Side::N, Side::E, Side::S, Side::W];
-
-    pub fn delta(self) -> (i32, i32) {
-        match self {
-            Side::N => (0, -1),
-            Side::E => (1, 0),
-            Side::S => (0, 1),
-            Side::W => (-1, 0),
-        }
-    }
-
-    pub fn opposite(self) -> Side {
-        match self {
-            Side::N => Side::S,
-            Side::E => Side::W,
-            Side::S => Side::N,
-            Side::W => Side::E,
-        }
-    }
-
-    pub fn letter(self) -> char {
-        match self {
-            Side::N => 'n',
-            Side::E => 'e',
-            Side::S => 's',
-            Side::W => 'w',
-        }
-    }
-
-    fn bit(self) -> u8 {
-        match self {
-            Side::N => 1,
-            Side::E => 2,
-            Side::S => 4,
-            Side::W => 8,
-        }
+const fn cost(credits: u32, void_crystal: u32) -> Cost {
+    Cost {
+        credits,
+        void_crystal,
     }
 }
 
-/// A corridor's openings, one bit per [`Side`].
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
-pub struct Mask(u8);
+const FREE: Cost = cost(0, 0);
 
-impl Mask {
-    pub fn has(self, side: Side) -> bool {
-        self.0 & side.bit() != 0
-    }
-
-    /// Sides in n-e-s-w order, e.g. `nes`; the corridor art's name.
-    pub fn name(self) -> String {
-        Side::ALL
-            .iter()
-            .filter(|s| self.has(**s))
-            .map(|s| s.letter())
-            .collect()
-    }
+fn add(total: &mut Cost, c: Cost) {
+    total.credits = total.credits.saturating_add(c.credits);
+    total.void_crystal = total.void_crystal.saturating_add(c.void_crystal);
 }
 
+pub fn in_hull((x, y): Tile) -> bool {
+    (0..HULL_W).contains(&x) && (0..HULL_H).contains(&y)
+}
+
+/// The tile under grid px (x, y).
+pub fn tile_at(x: f32, y: f32) -> Tile {
+    ((x / TILE).floor() as i32, (y / TILE).floor() as i32)
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
+// ---------------------------------------------------------------- rooms
+
+/// The two buildable room shells (§ Rooms).
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum RoomId {
-    Bridge,
-    CrewQuarters,
-    Workshop,
-    Dock,
-    SalvageBay,
-    TrainingRoom,
-    /// Anything a save names that this build doesn't know. Never valid in a
-    /// layout; `validate` resets the layout when it sees one.
+pub enum RoomSize {
+    Small,
+    Large,
+    /// Anything a save names that this build doesn't know. Never valid;
+    /// `validate` resets the layout when it sees one.
     #[serde(other)]
     Unknown,
 }
 
-/// A door socket: a cell on the room's edge (room-local) and the side the
-/// door faces.
-pub type Socket = (i32, i32, Side);
+impl RoomSize {
+    pub const ALL: [RoomSize; 2] = [RoomSize::Small, RoomSize::Large];
 
-impl RoomId {
-    pub const BUILDABLE: [RoomId; 2] = [RoomId::SalvageBay, RoomId::TrainingRoom];
-
-    /// Stable ID (save file, content IDs).
+    /// Catalogue ID.
     pub fn id(self) -> &'static str {
         match self {
-            RoomId::Bridge => "bridge",
-            RoomId::CrewQuarters => "crew_quarters",
-            RoomId::Workshop => "workshop",
-            RoomId::Dock => "dock",
-            RoomId::SalvageBay => "salvage_bay",
-            RoomId::TrainingRoom => "training_room",
-            RoomId::Unknown => "unknown",
+            RoomSize::Small => "small_room",
+            RoomSize::Large => "large_room",
+            RoomSize::Unknown => "unknown",
         }
     }
 
     pub fn name(self) -> &'static str {
         match self {
-            RoomId::Bridge => "Bridge",
-            RoomId::CrewQuarters => "Crew Quarters",
-            RoomId::Workshop => "Workshop",
-            RoomId::Dock => "Dock",
-            RoomId::SalvageBay => "Salvage Bay",
-            RoomId::TrainingRoom => "Training Room",
-            RoomId::Unknown => "?",
+            RoomSize::Small => "Small Room",
+            RoomSize::Large => "Large Room",
+            RoomSize::Unknown => "?",
         }
     }
 
-    /// Width × depth in cells.
-    pub fn footprint(self) -> (i32, i32) {
+    /// Floor width × depth in tiles; the wall ring adds one tile all round.
+    pub fn floor(self) -> (i32, i32) {
         match self {
-            RoomId::Bridge | RoomId::Workshop => (3, 2),
-            RoomId::Dock => (2, 3),
-            RoomId::CrewQuarters | RoomId::SalvageBay | RoomId::TrainingRoom => (2, 2),
-            RoomId::Unknown => (0, 0),
-        }
-    }
-
-    pub fn sockets(self) -> &'static [Socket] {
-        use Side::*;
-        match self {
-            RoomId::Bridge => &[(1, 1, S), (2, 0, E)],
-            RoomId::CrewQuarters => &[(0, 1, S), (0, 0, W), (1, 0, E)],
-            RoomId::Workshop => &[(1, 0, N), (2, 1, E)],
-            RoomId::Dock => &[(0, 2, W), (1, 2, E), (0, 2, S)],
-            RoomId::SalvageBay | RoomId::TrainingRoom => {
-                &[(0, 0, N), (1, 0, E), (1, 1, S), (0, 1, W)]
-            }
-            RoomId::Unknown => &[],
-        }
-    }
-
-    /// Build cost; `None` for the starting rooms.
-    pub fn cost(self) -> Option<Cost> {
-        match self {
-            RoomId::SalvageBay => Some(Cost {
-                credits: 120,
-                void_crystal: 3,
-            }),
-            RoomId::TrainingRoom => Some(Cost {
-                credits: 200,
-                void_crystal: 6,
-            }),
-            _ => None,
-        }
-    }
-
-    pub fn effect(self) -> &'static str {
-        match self {
-            RoomId::SalvageBay => "+25% credits and Void Crystal from every successful mission",
-            RoomId::TrainingRoom => "-15% Q and W cooldowns on every battleship",
-            RoomId::Dock => "launches missions",
-            _ => "",
-        }
-    }
-
-    pub fn content_id(self) -> String {
-        format!("core.carrier.room.{}", self.id())
-    }
-}
-
-pub const CORRIDOR_COST: Cost = Cost {
-    credits: 10,
-    void_crystal: 0,
-};
-
-/// Something the Build tab can place.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Piece {
-    Corridor,
-    Room(RoomId),
-}
-
-impl Piece {
-    /// Build tab order: corridor first, then the buildable rooms.
-    pub const BUILDABLE: [Piece; 3] = [
-        Piece::Corridor,
-        Piece::Room(RoomId::SalvageBay),
-        Piece::Room(RoomId::TrainingRoom),
-    ];
-
-    pub fn name(self) -> &'static str {
-        match self {
-            Piece::Corridor => "Corridor",
-            Piece::Room(r) => r.name(),
-        }
-    }
-
-    pub fn footprint(self) -> (i32, i32) {
-        match self {
-            Piece::Corridor => (1, 1),
-            Piece::Room(r) => r.footprint(),
+            RoomSize::Small => (6, 4),
+            RoomSize::Large => (13, 9),
+            RoomSize::Unknown => (0, 0),
         }
     }
 
     pub fn cost(self) -> Cost {
         match self {
-            Piece::Corridor => CORRIDOR_COST,
-            Piece::Room(r) => r.cost().unwrap_or(Cost {
-                credits: 0,
-                void_crystal: 0,
-            }),
+            RoomSize::Small => cost(60, 1),
+            RoomSize::Large => cost(220, 4),
+            RoomSize::Unknown => FREE,
         }
     }
 
-    pub fn effect(self) -> &'static str {
+    pub fn build_seconds(self) -> u32 {
         match self {
-            Piece::Corridor => "connects rooms",
-            Piece::Room(r) => r.effect(),
+            RoomSize::Small => 5,
+            RoomSize::Large => 8,
+            RoomSize::Unknown => 0,
         }
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
-pub struct PlacedRoom {
-    pub id: RoomId,
-    /// Anchor: the room's north-west cell.
+/// A room: its size and anchor (the north-west wall tile).
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub struct Room {
+    pub size: RoomSize,
     pub x: i32,
     pub y: i32,
+    /// Part of the starting carrier: can't be removed.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub starter: bool,
+    /// A construction site: ms left to build. `None` means finished.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub build_left_ms: Option<u32>,
 }
 
-impl PlacedRoom {
-    pub fn contains(&self, x: i32, y: i32) -> bool {
-        let (w, d) = self.id.footprint();
-        x >= self.x && x < self.x + w && y >= self.y && y < self.y + d
+impl Room {
+    /// A finished, player-built room.
+    pub fn new(size: RoomSize, x: i32, y: i32) -> Self {
+        Self {
+            size,
+            x,
+            y,
+            starter: false,
+            build_left_ms: None,
+        }
     }
 
-    /// Sockets in hull cells: the socket cell and the side it faces.
-    pub fn sockets(&self) -> impl Iterator<Item = (i32, i32, Side)> + '_ {
-        self.id
-            .sockets()
+    fn starter(size: RoomSize, x: i32, y: i32) -> Self {
+        Self {
+            starter: true,
+            ..Self::new(size, x, y)
+        }
+    }
+
+    pub fn finished(&self) -> bool {
+        self.build_left_ms.is_none()
+    }
+
+    /// The wall ring's corners, inclusive: (x0, y0, x1, y1).
+    pub fn bounds(&self) -> (i32, i32, i32, i32) {
+        let (w, d) = self.size.floor();
+        (self.x, self.y, self.x + w + 1, self.y + d + 1)
+    }
+
+    pub fn contains(&self, (x, y): Tile) -> bool {
+        let (x0, y0, x1, y1) = self.bounds();
+        (x0..=x1).contains(&x) && (y0..=y1).contains(&y)
+    }
+
+    pub fn is_floor(&self, (x, y): Tile) -> bool {
+        let (x0, y0, x1, y1) = self.bounds();
+        x > x0 && x < x1 && y > y0 && y < y1
+    }
+
+    pub fn is_ring(&self, t: Tile) -> bool {
+        self.contains(t) && !self.is_floor(t)
+    }
+
+    /// Every tile, walls included, row by row.
+    pub fn tiles(&self) -> impl Iterator<Item = Tile> {
+        let (x0, y0, x1, y1) = self.bounds();
+        (y0..=y1).flat_map(move |y| (x0..=x1).map(move |x| (x, y)))
+    }
+
+    /// The anchor for a room whose middle floor tile (rounded north-west)
+    /// is `t`: Build mode's mouse tile.
+    pub fn anchor_for(size: RoomSize, (x, y): Tile) -> Tile {
+        let (w, d) = size.floor();
+        (x - (w - 1) / 2 - 1, y - (d - 1) / 2 - 1)
+    }
+}
+
+/// A doorway between two rooms: two tiles across their shared wall.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Doorway {
+    pub tiles: [Tile; 2],
+    /// The two rooms (indices into [`Carrier::rooms`]).
+    pub rooms: (usize, usize),
+    /// True when the wall runs north–south (the doorway opens east–west).
+    pub vertical: bool,
+}
+
+impl Doorway {
+    /// The floor tile on each side of each doorway tile (§ Doorway
+    /// clearance).
+    pub fn clearance(&self) -> [Tile; 4] {
+        let [(ax, ay), (bx, by)] = self.tiles;
+        if self.vertical {
+            [(ax - 1, ay), (ax + 1, ay), (bx - 1, by), (bx + 1, by)]
+        } else {
+            [(ax, ay - 1), (ax, ay + 1), (bx, by - 1), (bx, by + 1)]
+        }
+    }
+}
+
+/// The doorway two rooms get from a shared straight wall with at least 2
+/// floor tiles facing each other across it, at the middle of the facing
+/// stretch (rounded north or west).
+fn doorway_between(a: &Room, b: &Room) -> Option<([Tile; 2], bool)> {
+    let (ax0, ay0, ax1, ay1) = a.bounds();
+    let (bx0, by0, bx1, by1) = b.bounds();
+    let (at, lo, hi, vertical) = if ax0 == bx1 || ax1 == bx0 {
+        let at = if ax0 == bx1 { ax0 } else { ax1 };
+        (at, ay0.max(by0) + 1, ay1.min(by1) - 1, true)
+    } else if ay0 == by1 || ay1 == by0 {
+        let at = if ay0 == by1 { ay0 } else { ay1 };
+        (at, ax0.max(bx0) + 1, ax1.min(bx1) - 1, false)
+    } else {
+        return None;
+    };
+    if hi - lo + 1 < 2 {
+        return None;
+    }
+    let s = lo + (hi - lo + 1 - 2) / 2;
+    Some(if vertical {
+        ([(at, s), (at, s + 1)], true)
+    } else {
+        ([(s, at), (s + 1, at)], false)
+    })
+}
+
+/// What a hull tile is, derived from the rooms.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TileKind {
+    /// Outside every room: drawn, not walkable, free for new rooms.
+    Hull,
+    Wall,
+    Floor,
+    Doorway,
+}
+
+/// The tile map the rooms make (§ Grid and view › Tile kinds).
+#[derive(Clone, Debug)]
+pub struct TileMap {
+    kinds: Vec<TileKind>,
+    /// The room whose floor a tile is.
+    floor_of: Vec<Option<usize>>,
+    pub doorways: Vec<Doorway>,
+    clearance: BTreeSet<Tile>,
+    /// Doorway tiles of a finished pair of rooms.
+    open: BTreeSet<Tile>,
+    finished: Vec<bool>,
+}
+
+fn index((x, y): Tile) -> usize {
+    (y * HULL_W + x) as usize
+}
+
+impl TileMap {
+    pub fn new(rooms: &[Room]) -> Self {
+        let n = (HULL_W * HULL_H) as usize;
+        let mut map = Self {
+            kinds: vec![TileKind::Hull; n],
+            floor_of: vec![None; n],
+            doorways: Vec::new(),
+            clearance: BTreeSet::new(),
+            open: BTreeSet::new(),
+            finished: rooms.iter().map(Room::finished).collect(),
+        };
+        for (i, room) in rooms.iter().enumerate() {
+            for t in room.tiles().filter(|t| in_hull(*t)) {
+                let k = index(t);
+                if room.is_floor(t) {
+                    map.kinds[k] = TileKind::Floor;
+                    map.floor_of[k] = Some(i);
+                } else if map.kinds[k] == TileKind::Hull {
+                    map.kinds[k] = TileKind::Wall;
+                }
+            }
+        }
+        for i in 0..rooms.len() {
+            for j in i + 1..rooms.len() {
+                if let Some((tiles, vertical)) = doorway_between(&rooms[i], &rooms[j]) {
+                    let d = Doorway {
+                        tiles,
+                        rooms: (i, j),
+                        vertical,
+                    };
+                    for t in tiles.into_iter().filter(|t| in_hull(*t)) {
+                        map.kinds[index(t)] = TileKind::Doorway;
+                        if map.finished[i] && map.finished[j] {
+                            map.open.insert(t);
+                        }
+                    }
+                    map.clearance.extend(d.clearance());
+                    map.doorways.push(d);
+                }
+            }
+        }
+        map
+    }
+
+    pub fn kind(&self, t: Tile) -> TileKind {
+        if in_hull(t) {
+            self.kinds[index(t)]
+        } else {
+            TileKind::Hull
+        }
+    }
+
+    /// The room whose floor `t` is.
+    pub fn room_at(&self, t: Tile) -> Option<usize> {
+        if in_hull(t) {
+            self.floor_of[index(t)]
+        } else {
+            None
+        }
+    }
+
+    /// Floor of a finished room.
+    pub fn is_finished_floor(&self, t: Tile) -> bool {
+        self.room_at(t).is_some_and(|r| self.finished[r])
+    }
+
+    /// A wall tile with floor directly south: it shows its face.
+    pub fn is_wall_face(&self, (x, y): Tile) -> bool {
+        self.kind((x, y)) == TileKind::Wall && self.kind((x, y + 1)) == TileKind::Floor
+    }
+
+    /// A floor tile beside a doorway, kept free of objects.
+    pub fn is_clearance(&self, t: Tile) -> bool {
+        self.clearance.contains(&t)
+    }
+
+    /// A doorway between two finished rooms (one under construction stays
+    /// shut).
+    pub fn is_open_doorway(&self, t: Tile) -> bool {
+        self.open.contains(&t)
+    }
+
+    /// The 4-bit mask of wall neighbours (n-e-s-w: 1, 2, 4, 8) the wall art
+    /// is picked by.
+    pub fn wall_mask(&self, (x, y): Tile) -> u8 {
+        [(0, -1), (1, 0), (0, 1), (-1, 0)]
             .iter()
-            .map(|&(sx, sy, side)| (self.x + sx, self.y + sy, side))
-    }
-
-    /// The cell each socket faces (where its corridor would go).
-    pub fn socket_fronts(&self) -> impl Iterator<Item = (i32, i32, Side)> + '_ {
-        self.sockets().map(|(x, y, side)| {
-            let (dx, dy) = side.delta();
-            (x + dx, y + dy, side)
-        })
-    }
-
-    fn cells(&self) -> impl Iterator<Item = (i32, i32)> {
-        let (w, d) = self.id.footprint();
-        let (x0, y0) = (self.x, self.y);
-        (y0..y0 + d).flat_map(move |y| (x0..x0 + w).map(move |x| (x, y)))
+            .enumerate()
+            .filter(|(_, (dx, dy))| self.kind((x + dx, y + dy)) == TileKind::Wall)
+            .fold(0, |m, (i, _)| m | 1 << i)
     }
 }
 
-/// What occupies a hull cell.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Cell {
-    Empty,
-    Corridor,
-    /// Index into [`CarrierLayout::rooms`].
-    Room(usize),
+// ---------------------------------------------------------------- items
+
+/// Each tile holds at most one item per layer (§ Items).
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub enum Layer {
+    /// Stations and most furniture. Blocks walking.
+    Object,
+    /// Rugs. Walkable; an object may stand on top.
+    Floor,
+    /// Wall-mounted decor on a wall face. Never blocks.
+    Wall,
 }
 
-/// Why a piece can't go somewhere (the build ghost's red line).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum PlaceError {
+pub enum Placement {
+    /// Every footprint tile is floor of a finished room.
+    Free,
+    /// Free, and every tile directly north of the footprint is wall.
+    AgainstWall,
+    /// Every footprint tile is a wall face.
+    OnWall,
+}
+
+impl Placement {
+    pub fn label(self) -> &'static str {
+        match self {
+            Placement::Free => "Free",
+            Placement::AgainstWall => "Against a wall",
+            Placement::OnWall => "On a wall",
+        }
+    }
+}
+
+/// How many of an item the carrier may hold.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Count {
+    /// Exactly one, from the starting carrier: move only.
+    Exactly1,
+    /// One per battleship, from the starting carrier: move only.
+    PerShip,
+    /// At most one, bought.
+    BuyOnce,
+    Any,
+}
+
+impl Count {
+    /// Fixed-count stations can be moved but not bought or removed.
+    pub fn fixed(self) -> bool {
+        matches!(self, Count::Exactly1 | Count::PerShip)
+    }
+}
+
+/// Build mode category.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Category {
+    Station,
+    Furniture,
+    /// Rugs and wall-mounted pieces.
+    Decor,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ItemId {
+    CommandConsole,
+    UpgradeBench,
+    Berth,
+    SampleAnalyzer,
+    SalvageSorter,
+    CombatSimulator,
+    BunkBed,
+    Locker,
+    Table,
+    Stool,
+    Sofa,
+    CatBed,
+    CatTree,
+    ScratchPost,
+    FoodBowls,
+    CrateStack,
+    SnackDispenser,
+    Aquarium,
+    PottedPlant,
+    HydroPlanter,
+    FloorLamp,
+    Rug,
+    WallScreen,
+    WallLight,
+    ToolRack,
+    /// Anything a save names that this build doesn't know. Never valid.
+    #[serde(other)]
+    Unknown,
+}
+
+/// One catalogue entry (§ Item catalogue). Every item faces S.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ItemDef {
+    pub id: ItemId,
+    /// Stable ID (save file, content IDs).
+    pub key: &'static str,
+    pub name: &'static str,
+    /// Footprint width × depth in tiles.
+    pub size: (i32, i32),
+    pub layer: Layer,
+    pub placement: Placement,
+    pub category: Category,
+    pub count: Count,
+    /// Build cost; starter-only stations cost nothing (they can't be bought).
+    pub cost: Cost,
+    pub build_seconds: u32,
+    pub effect: &'static str,
+}
+
+impl ItemDef {
+    /// Stations have a front strip, must stay reachable and can be used.
+    pub fn station(&self) -> bool {
+        self.category == Category::Station
+    }
+}
+
+const STATION_SECS: u32 = 4;
+const FURNITURE_SECS: u32 = 2;
+
+#[allow(clippy::too_many_arguments)]
+const fn station(
+    id: ItemId,
+    key: &'static str,
+    name: &'static str,
+    size: (i32, i32),
+    placement: Placement,
+    count: Count,
+    cost: Cost,
+    effect: &'static str,
+) -> ItemDef {
+    ItemDef {
+        id,
+        key,
+        name,
+        size,
+        layer: Layer::Object,
+        placement,
+        category: Category::Station,
+        count,
+        cost,
+        build_seconds: STATION_SECS,
+        effect,
+    }
+}
+
+const fn furniture(
+    id: ItemId,
+    key: &'static str,
+    name: &'static str,
+    size: (i32, i32),
+    placement: Placement,
+    layer: Layer,
+    credits: u32,
+) -> ItemDef {
+    ItemDef {
+        id,
+        key,
+        name,
+        size,
+        layer,
+        placement,
+        category: match layer {
+            Layer::Object => Category::Furniture,
+            _ => Category::Decor,
+        },
+        count: Count::Any,
+        cost: cost(credits, 0),
+        build_seconds: FURNITURE_SECS,
+        effect: "",
+    }
+}
+
+use Placement::{AgainstWall, Free, OnWall};
+
+/// The catalogue, in Build mode order.
+pub const CATALOGUE: [ItemDef; 25] = [
+    station(
+        ItemId::CommandConsole,
+        "command_console",
+        "Command Console",
+        (2, 1),
+        AgainstWall,
+        Count::Exactly1,
+        FREE,
+        "The Gunner's post",
+    ),
+    station(
+        ItemId::UpgradeBench,
+        "upgrade_bench",
+        "Upgrade Bench",
+        (2, 1),
+        AgainstWall,
+        Count::Exactly1,
+        FREE,
+        "Workshop upgrades. The Engineer's post",
+    ),
+    station(
+        ItemId::Berth,
+        "berth",
+        "Berth",
+        (4, 4),
+        Free,
+        Count::PerShip,
+        FREE,
+        "Holds one battleship. Board it to launch a mission",
+    ),
+    station(
+        ItemId::SampleAnalyzer,
+        "sample_analyzer",
+        "Sample Analyzer",
+        (2, 1),
+        AgainstWall,
+        Count::Exactly1,
+        FREE,
+        "The Researcher's post",
+    ),
+    station(
+        ItemId::SalvageSorter,
+        "salvage_sorter",
+        "Salvage Sorter",
+        (2, 2),
+        Free,
+        Count::BuyOnce,
+        cost(120, 3),
+        "+25% Credits and Void Crystal from every successful mission",
+    ),
+    station(
+        ItemId::CombatSimulator,
+        "combat_simulator",
+        "Combat Simulator",
+        (2, 2),
+        Free,
+        Count::BuyOnce,
+        cost(200, 6),
+        "-15% Q and W cooldowns on every battleship",
+    ),
+    furniture(
+        ItemId::BunkBed,
+        "bunk_bed",
+        "Bunk bed",
+        (1, 2),
+        AgainstWall,
+        Layer::Object,
+        40,
+    ),
+    furniture(
+        ItemId::Locker,
+        "locker",
+        "Locker",
+        (1, 1),
+        AgainstWall,
+        Layer::Object,
+        20,
+    ),
+    furniture(
+        ItemId::Table,
+        "table",
+        "Table",
+        (2, 1),
+        Free,
+        Layer::Object,
+        25,
+    ),
+    furniture(
+        ItemId::Stool,
+        "stool",
+        "Stool",
+        (1, 1),
+        Free,
+        Layer::Object,
+        10,
+    ),
+    furniture(
+        ItemId::Sofa,
+        "sofa",
+        "Sofa",
+        (2, 1),
+        AgainstWall,
+        Layer::Object,
+        40,
+    ),
+    furniture(
+        ItemId::CatBed,
+        "cat_bed",
+        "Cat bed",
+        (1, 1),
+        Free,
+        Layer::Object,
+        15,
+    ),
+    furniture(
+        ItemId::CatTree,
+        "cat_tree",
+        "Cat tree",
+        (1, 1),
+        Free,
+        Layer::Object,
+        30,
+    ),
+    furniture(
+        ItemId::ScratchPost,
+        "scratch_post",
+        "Scratching post",
+        (1, 1),
+        Free,
+        Layer::Object,
+        10,
+    ),
+    furniture(
+        ItemId::FoodBowls,
+        "food_bowls",
+        "Food and water bowls",
+        (1, 1),
+        Free,
+        Layer::Object,
+        10,
+    ),
+    furniture(
+        ItemId::CrateStack,
+        "crate_stack",
+        "Crate stack",
+        (1, 1),
+        Free,
+        Layer::Object,
+        10,
+    ),
+    furniture(
+        ItemId::SnackDispenser,
+        "snack_dispenser",
+        "Snack dispenser",
+        (1, 1),
+        AgainstWall,
+        Layer::Object,
+        30,
+    ),
+    furniture(
+        ItemId::Aquarium,
+        "aquarium",
+        "Aquarium",
+        (2, 1),
+        AgainstWall,
+        Layer::Object,
+        60,
+    ),
+    furniture(
+        ItemId::PottedPlant,
+        "potted_plant",
+        "Potted plant",
+        (1, 1),
+        Free,
+        Layer::Object,
+        15,
+    ),
+    furniture(
+        ItemId::HydroPlanter,
+        "hydro_planter",
+        "Hydroponic planter",
+        (2, 1),
+        Free,
+        Layer::Object,
+        35,
+    ),
+    furniture(
+        ItemId::FloorLamp,
+        "floor_lamp",
+        "Floor lamp",
+        (1, 1),
+        Free,
+        Layer::Object,
+        15,
+    ),
+    furniture(ItemId::Rug, "rug", "Rug", (2, 2), Free, Layer::Floor, 20),
+    furniture(
+        ItemId::WallScreen,
+        "wall_screen",
+        "Wall screen (star map)",
+        (2, 1),
+        OnWall,
+        Layer::Wall,
+        25,
+    ),
+    furniture(
+        ItemId::WallLight,
+        "wall_light",
+        "Wall light",
+        (1, 1),
+        OnWall,
+        Layer::Wall,
+        10,
+    ),
+    furniture(
+        ItemId::ToolRack,
+        "tool_rack",
+        "Tool rack",
+        (1, 1),
+        OnWall,
+        Layer::Wall,
+        15,
+    ),
+];
+
+impl ItemId {
+    pub fn def(self) -> Option<&'static ItemDef> {
+        CATALOGUE.iter().find(|d| d.id == self)
+    }
+
+    pub fn key(self) -> &'static str {
+        self.def().map_or("unknown", |d| d.key)
+    }
+
+    pub fn name(self) -> &'static str {
+        self.def().map_or("?", |d| d.name)
+    }
+
+    pub fn content_id(self) -> String {
+        format!("core.carrier.item.{}", self.key())
+    }
+}
+
+/// A placed item: a catalogue ID and its anchor (the footprint's
+/// north-west tile).
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub struct Item {
+    pub id: ItemId,
+    pub x: i32,
+    pub y: i32,
+    /// A berth's battleship.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ship: Option<String>,
+    /// Part of the starting carrier: refunds nothing. Kept when it moves.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub starter: bool,
+    /// A construction site: ms left to build. `None` means finished.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub build_left_ms: Option<u32>,
+}
+
+impl Item {
+    /// A finished, player-built item.
+    pub fn new(id: ItemId, x: i32, y: i32) -> Self {
+        Self {
+            id,
+            x,
+            y,
+            ship: None,
+            starter: false,
+            build_left_ms: None,
+        }
+    }
+
+    fn starter(id: ItemId, x: i32, y: i32) -> Self {
+        Self {
+            starter: true,
+            ..Self::new(id, x, y)
+        }
+    }
+
+    pub fn finished(&self) -> bool {
+        self.build_left_ms.is_none()
+    }
+
+    fn size(&self) -> (i32, i32) {
+        self.id.def().map_or((0, 0), |d| d.size)
+    }
+
+    pub fn layer(&self) -> Layer {
+        self.id.def().map_or(Layer::Object, |d| d.layer)
+    }
+
+    pub fn is_station(&self) -> bool {
+        self.id.def().is_some_and(ItemDef::station)
+    }
+
+    /// Footprint tiles, row by row.
+    pub fn tiles(&self) -> impl Iterator<Item = Tile> {
+        footprint(self.size(), self.x, self.y)
+    }
+
+    /// A station's front strip: the row directly south of its footprint.
+    /// Empty for anything else.
+    pub fn front_strip(&self) -> Vec<Tile> {
+        if !self.is_station() {
+            return Vec::new();
+        }
+        let (w, d) = self.size();
+        (self.x..self.x + w).map(|x| (x, self.y + d)).collect()
+    }
+
+    /// Where a station is used from, in grid px: 24 px south of its front
+    /// edge, at the middle of its front strip.
+    pub fn use_point(&self) -> (f32, f32) {
+        let (w, d) = self.size();
+        (
+            (self.x as f32 + w as f32 / 2.0) * TILE,
+            (self.y + d) as f32 * TILE + USE_POINT_OFFSET,
+        )
+    }
+
+    /// What it refunds when removed: nothing for starter pieces or unknown
+    /// IDs, else its full cost (sites included).
+    pub fn refund(&self) -> Cost {
+        match self.id.def() {
+            Some(d) if !self.starter => d.cost,
+            _ => FREE,
+        }
+    }
+
+    fn sort_key(&self) -> (i32, i32, Layer, &'static str) {
+        (self.y, self.x, self.layer(), self.id.key())
+    }
+}
+
+fn footprint((w, d): (i32, i32), x: i32, y: i32) -> impl Iterator<Item = Tile> {
+    (y..y + d).flat_map(move |ty| (x..x + w).map(move |tx| (tx, ty)))
+}
+
+impl Room {
+    /// What it refunds when removed (a site included): its full cost,
+    /// nothing for a starter room.
+    pub fn refund(&self) -> Cost {
+        if self.starter {
+            FREE
+        } else {
+            self.size.cost()
+        }
+    }
+}
+
+/// The crew members with a post (§ Walking and interaction › Crew posts).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Crew {
+    Gunner,
+    Engineer,
+    Researcher,
+}
+
+impl Crew {
+    pub const ALL: [Crew; 3] = [Crew::Gunner, Crew::Engineer, Crew::Researcher];
+
+    pub fn post(self) -> ItemId {
+        match self {
+            Crew::Gunner => ItemId::CommandConsole,
+            Crew::Engineer => ItemId::UpgradeBench,
+            Crew::Researcher => ItemId::SampleAnalyzer,
+        }
+    }
+}
+
+// ---------------------------------------------------------------- reasons
+
+/// Why an edit is refused: the ghost's line and the error tooltip
+/// (§ Building, Reasons).
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum Reason {
     OutsideHull,
+    OverlapsRoom,
+    MustShareWall,
+    /// The new doorways would land on these items (indices into
+    /// [`Carrier::items`]); they flash.
+    ClearDoorway(Vec<usize>),
+    RoomNotEmpty,
+    WouldCutOffRoom,
+    NeedsFloor,
+    StillBeingBuilt,
     Blocked,
+    KeepDoorwayClear,
+    NeedsWallBehind,
+    NeedsWallFace,
+    KeepFrontClear,
+    /// A station's front strip would be unreachable from the Command
+    /// Console.
+    WouldCutOff(ItemId),
+    PilotInTheWay,
+    Need(Cost),
     AlreadyBuilt,
-    MustConnect,
-    CantAfford(Cost),
+    MoveItInstead,
+    StarterPiece,
 }
 
-impl fmt::Display for PlaceError {
+impl fmt::Display for Reason {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            PlaceError::OutsideHull => write!(f, "Outside the hull"),
-            PlaceError::Blocked => write!(f, "Blocked"),
-            PlaceError::AlreadyBuilt => write!(f, "Already built"),
-            PlaceError::MustConnect => write!(f, "Must connect to a corridor"),
-            PlaceError::CantAfford(c) if c.void_crystal > 0 => {
+            Reason::OutsideHull => write!(f, "Outside the hull"),
+            Reason::OverlapsRoom => write!(f, "Overlaps a room"),
+            Reason::MustShareWall => write!(f, "Must share a wall with a room"),
+            Reason::ClearDoorway(_) => write!(f, "Clear the doorway first"),
+            Reason::RoomNotEmpty => write!(f, "Room isn't empty"),
+            Reason::WouldCutOffRoom => write!(f, "Would cut off a room"),
+            Reason::NeedsFloor => write!(f, "Needs floor"),
+            Reason::StillBeingBuilt => write!(f, "Still being built"),
+            Reason::Blocked => write!(f, "Blocked"),
+            Reason::KeepDoorwayClear => write!(f, "Keep the doorway clear"),
+            Reason::NeedsWallBehind => write!(f, "Needs a wall behind it"),
+            Reason::NeedsWallFace => write!(f, "Needs a wall face"),
+            Reason::KeepFrontClear => write!(f, "Keep the front clear"),
+            Reason::WouldCutOff(id) => write!(f, "Would cut off the {}", id.name()),
+            Reason::PilotInTheWay => write!(f, "The Pilot is in the way"),
+            Reason::Need(c) if c.void_crystal > 0 => {
                 write!(f, "Need {} cr + {} VC", c.credits, c.void_crystal)
             }
-            PlaceError::CantAfford(c) => write!(f, "Need {} cr", c.credits),
+            Reason::Need(c) => write!(f, "Need {} cr", c.credits),
+            Reason::AlreadyBuilt => write!(f, "Already built"),
+            Reason::MoveItInstead => write!(f, "Move it instead"),
+            Reason::StarterPiece => write!(f, "Part of the starting carrier"),
         }
     }
 }
 
-/// Why a piece can't be demolished.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum DemolishError {
-    Nothing,
-    Starting,
-    WouldDisconnect,
-}
-
-impl fmt::Display for DemolishError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            DemolishError::Nothing => write!(f, "Nothing to demolish"),
-            DemolishError::Starting => write!(f, "Part of the original carrier"),
-            DemolishError::WouldDisconnect => write!(f, "Something would be cut off"),
-        }
+/// Whether `wallet` covers `price`; the reason names the full price.
+pub fn afford(price: Cost, wallet: Cost) -> Result<(), Reason> {
+    if wallet.credits >= price.credits && wallet.void_crystal >= price.void_crystal {
+        Ok(())
+    } else {
+        Err(Reason::Need(price))
     }
 }
 
-/// Why a saved layout was rejected on load.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+/// Why a saved layout was rejected on load (§ Save › Validation on load).
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum LayoutError {
-    UnknownRoom,
-    OutsideHull,
-    Overlap,
-    MissingStart,
-    Duplicate,
-    Disconnected,
+    UnknownId,
+    /// A room outside the hull or overlapping another off its walls.
+    BadRoom(usize),
+    /// A room not connected to the Command Console's room.
+    Disconnected(usize),
+    /// An item breaking its placement rule, a layer clash, doorway
+    /// clearance or a front strip.
+    BadItem(usize, Reason),
+    /// A station's front strip can't be reached.
+    Unreachable(usize),
+    /// Wrong number of a counted station, or berths not one per ship.
+    Count(ItemId),
+    MissingStarterRoom,
 }
 
-/// The carrier: rooms and corridor cells on the hull grid. Stored in the
-/// save as-is; rooms sorted by id and corridors by (x, y), so the same
-/// layout always writes the same bytes.
+// ---------------------------------------------------------------- carrier
+
+/// The carrier: rooms and items. Stored in the save as-is (§ Save
+/// (version 5)); tiles and doorways are rebuilt from the rooms. Rooms are
+/// sorted by (y, x), items by (y, x, layer, id), so the same layout always
+/// writes the same bytes. Item and room indices change when an edit
+/// re-sorts them; the edit functions return the new index.
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
-pub struct CarrierLayout {
-    pub rooms: Vec<PlacedRoom>,
-    pub corridors: Vec<(i32, i32)>,
+pub struct Carrier {
+    pub rooms: Vec<Room>,
+    pub items: Vec<Item>,
 }
 
-impl Default for CarrierLayout {
+impl Default for Carrier {
     fn default() -> Self {
         Self::starting()
     }
 }
 
-/// Two one-berth Docks side by side (v4, TAKOAI-60): Dock A (Kite) and
-/// Dock B (Bulwark). They fill the old two-berth Dock's 4 × 3 footprint, so
-/// a v3 layout converts in place ([`CarrierLayout::split_v3_dock`]).
-const STARTING_ROOMS: [PlacedRoom; 5] = [
-    PlacedRoom {
-        id: RoomId::Bridge,
-        x: 0,
-        y: 1,
-    },
-    PlacedRoom {
-        id: RoomId::CrewQuarters,
-        x: 4,
-        y: 1,
-    },
-    PlacedRoom {
-        id: RoomId::Workshop,
-        x: 0,
-        y: 4,
-    },
-    PlacedRoom {
-        id: RoomId::Dock,
-        x: 4,
-        y: 4,
-    },
-    PlacedRoom {
-        id: RoomId::Dock,
-        x: 6,
-        y: 4,
-    },
+/// Bridge, Quarters, Lab, Hangar, Workshop (§ Starting layout).
+const STARTING_ROOMS: [(RoomSize, i32, i32); 5] = [
+    (RoomSize::Small, 0, 0),
+    (RoomSize::Small, 7, 0),
+    (RoomSize::Small, 14, 0),
+    (RoomSize::Large, 0, 5),
+    (RoomSize::Small, 14, 5),
 ];
 
-/// The corridor along y = 7 joins the two Docks' S doors.
-const STARTING_CORRIDORS: [(i32, i32); 10] = [
-    (1, 3),
-    (2, 3),
-    (3, 3),
-    (4, 3),
-    (3, 4),
-    (3, 5),
-    (3, 6),
-    (4, 7),
-    (5, 7),
-    (6, 7),
+const STARTING_ITEMS: [(ItemId, i32, i32); 21] = [
+    // Bridge
+    (ItemId::CommandConsole, 3, 1),
+    (ItemId::WallScreen, 5, 0),
+    (ItemId::PottedPlant, 1, 1),
+    (ItemId::FloorLamp, 6, 1),
+    // Quarters
+    (ItemId::BunkBed, 9, 1),
+    (ItemId::BunkBed, 10, 1),
+    (ItemId::Locker, 12, 1),
+    (ItemId::CatBed, 13, 1),
+    (ItemId::Rug, 10, 3),
+    (ItemId::Table, 10, 3),
+    // Lab
+    (ItemId::SampleAnalyzer, 17, 1),
+    (ItemId::PottedPlant, 15, 1),
+    (ItemId::HydroPlanter, 19, 1),
+    // Hangar (the berths get their ships below)
+    (ItemId::Berth, 2, 8),
+    (ItemId::Berth, 8, 8),
+    (ItemId::WallLight, 6, 5),
+    (ItemId::WallLight, 13, 5),
+    // Workshop
+    (ItemId::UpgradeBench, 15, 6),
+    (ItemId::ToolRack, 20, 5),
+    (ItemId::CrateStack, 19, 9),
+    (ItemId::CrateStack, 20, 9),
 ];
 
-pub fn in_hull(x: i32, y: i32) -> bool {
-    (0..HULL_W).contains(&x) && (0..HULL_H).contains(&y)
+/// Tile → item index, per layer.
+type Occupancy = BTreeMap<(Layer, Tile), usize>;
+
+impl Carrier {
+    /// The starting carrier: five rooms, six doorways, everything starter.
+    pub fn starting() -> Self {
+        let rooms = STARTING_ROOMS
+            .iter()
+            .map(|&(s, x, y)| Room::starter(s, x, y))
+            .collect();
+        let mut ships = SHIPS.iter();
+        let items = STARTING_ITEMS
+            .iter()
+            .map(|&(id, x, y)| Item {
+                ship: (id == ItemId::Berth)
+                    .then(|| ships.next().map(|s| s.to_string()))
+                    .flatten(),
+                ..Item::starter(id, x, y)
+            })
+            .collect();
+        let mut c = Self { rooms, items };
+        c.normalize();
+        c
+    }
+
+    /// Canonical order: rooms by (y, x), items by (y, x, layer, id).
+    pub fn normalize(&mut self) {
+        self.rooms.sort_by(|a, b| {
+            (a.y, a.x, a.size)
+                .cmp(&(b.y, b.x, b.size))
+                .then_with(|| (a.starter, a.build_left_ms).cmp(&(b.starter, b.build_left_ms)))
+        });
+        self.items.sort_by(|a, b| {
+            a.sort_key().cmp(&b.sort_key()).then_with(|| {
+                (&a.ship, a.starter, a.build_left_ms).cmp(&(&b.ship, b.starter, b.build_left_ms))
+            })
+        });
+    }
+
+    pub fn tile_map(&self) -> TileMap {
+        TileMap::new(&self.rooms)
+    }
+
+    fn occupancy(&self, skip: Option<usize>) -> Occupancy {
+        let mut occ = Occupancy::new();
+        for (i, item) in self.items.iter().enumerate() {
+            if Some(i) == skip {
+                continue;
+            }
+            for t in item.tiles() {
+                occ.entry((item.layer(), t)).or_insert(i);
+            }
+        }
+        occ
+    }
+
+    /// The item on `layer` covering `t`.
+    pub fn item_at(&self, t: Tile, layer: Layer) -> Option<usize> {
+        self.items
+            .iter()
+            .position(|i| i.layer() == layer && i.tiles().any(|q| q == t))
+    }
+
+    /// What a click on `t` picks: a wall-mounted item, else an object,
+    /// else a rug.
+    pub fn pick_item(&self, t: Tile) -> Option<usize> {
+        [Layer::Wall, Layer::Object, Layer::Floor]
+            .into_iter()
+            .find_map(|l| self.item_at(t, l))
+    }
+
+    /// The room whose floor `t` is.
+    pub fn room_at(&self, t: Tile) -> Option<usize> {
+        self.rooms.iter().position(|r| r.is_floor(t))
+    }
+
+    /// The first `id` on board, finished or not.
+    pub fn find(&self, id: ItemId) -> Option<usize> {
+        self.items.iter().position(|i| i.id == id)
+    }
+
+    /// Whether a finished `id` is on board (an item's effect is off while
+    /// it is being built).
+    pub fn has_finished(&self, id: ItemId) -> bool {
+        self.items.iter().any(|i| i.id == id && i.finished())
+    }
+
+    /// The berth holding `ship`.
+    pub fn berth_of(&self, ship: &str) -> Option<usize> {
+        self.items
+            .iter()
+            .position(|i| i.id == ItemId::Berth && i.ship.as_deref() == Some(ship))
+    }
+
+    /// Walkable tiles (§ Walking and interaction › Walkable): floor of a
+    /// finished room or an open doorway, with no object on it.
+    fn walkable_tiles(&self, map: &TileMap, occ: &Occupancy) -> BTreeSet<Tile> {
+        (0..HULL_H)
+            .flat_map(|y| (0..HULL_W).map(move |x| (x, y)))
+            .filter(|&t| {
+                (map.is_finished_floor(t) || map.is_open_doorway(t))
+                    && !occ.contains_key(&(Layer::Object, t))
+            })
+            .collect()
+    }
+
+    /// Tiles reachable by walking (4-neighbour) from the Command Console's
+    /// front strip, the root.
+    pub fn reachable(&self) -> BTreeSet<Tile> {
+        let map = self.tile_map();
+        let walk = self.walkable_tiles(&map, &self.occupancy(None));
+        let mut seen = BTreeSet::new();
+        let mut queue = VecDeque::new();
+        if let Some(c) = self.find(ItemId::CommandConsole) {
+            for t in self.items[c].front_strip() {
+                if walk.contains(&t) && seen.insert(t) {
+                    queue.push_back(t);
+                }
+            }
+        }
+        while let Some((x, y)) = queue.pop_front() {
+            for n in [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)] {
+                if walk.contains(&n) && seen.insert(n) {
+                    queue.push_back(n);
+                }
+            }
+        }
+        seen
+    }
+
+    /// The first station whose front strip can't be reached from the root.
+    fn cut_off(&self) -> Option<usize> {
+        let seen = self.reachable();
+        self.items
+            .iter()
+            .position(|i| i.is_station() && !i.front_strip().iter().any(|t| seen.contains(t)))
+    }
+
+    /// The first room not connected (through doorways) to the room holding
+    /// the Command Console; every room when there is no console.
+    fn disconnected_room(&self) -> Option<usize> {
+        let root = self
+            .find(ItemId::CommandConsole)
+            .and_then(|c| self.room_at((self.items[c].x, self.items[c].y)));
+        let Some(root) = root else {
+            return (!self.rooms.is_empty()).then_some(0);
+        };
+        let mut seen = vec![false; self.rooms.len()];
+        seen[root] = true;
+        let mut queue = VecDeque::from([root]);
+        while let Some(i) = queue.pop_front() {
+            for (j, other) in self.rooms.iter().enumerate() {
+                if !seen[j] && doorway_between(&self.rooms[i], other).is_some() {
+                    seen[j] = true;
+                    queue.push_back(j);
+                }
+            }
+        }
+        seen.iter().position(|s| !s)
+    }
+
+    /// Where a crew member stands: the first walkable tile east of their
+    /// post's front strip, else west of it, else south of its first tile.
+    pub fn crew_post(&self, crew: Crew) -> Option<Tile> {
+        let post = &self.items[self.find(crew.post())?];
+        let strip = post.front_strip();
+        let (&(lx, y), &(rx, _)) = (strip.first()?, strip.last()?);
+        let map = self.tile_map();
+        let walk = self.walkable_tiles(&map, &self.occupancy(None));
+        [(rx + 1, y), (lx - 1, y), (lx, y + 1)]
+            .into_iter()
+            .find(|t| walk.contains(t))
+    }
+
+    /// Where the Pilot can stand, in grid px: the walkable tiles merged
+    /// into rectangles (runs along each row, stacked when rows match).
+    pub fn walkable(&self) -> Vec<Rect> {
+        let map = self.tile_map();
+        let walk = self.walkable_tiles(&map, &self.occupancy(None));
+        let mut done: Vec<(i32, i32, i32, i32)> = Vec::new();
+        // Open rectangles by (x0, x1): (y0, y1), tiles inclusive.
+        let mut open: BTreeMap<(i32, i32), (i32, i32)> = BTreeMap::new();
+        for y in 0..HULL_H {
+            let mut runs = Vec::new();
+            let mut x = 0;
+            while x < HULL_W {
+                if walk.contains(&(x, y)) {
+                    let x0 = x;
+                    while x < HULL_W && walk.contains(&(x, y)) {
+                        x += 1;
+                    }
+                    runs.push((x0, x - 1));
+                } else {
+                    x += 1;
+                }
+            }
+            let mut next = BTreeMap::new();
+            for run in runs {
+                let span = match open.remove(&run) {
+                    Some((y0, _)) => (y0, y),
+                    None => (y, y),
+                };
+                next.insert(run, span);
+            }
+            done.extend(
+                open.into_iter()
+                    .map(|((x0, x1), (y0, y1))| (x0, y0, x1, y1)),
+            );
+            open = next;
+        }
+        done.extend(
+            open.into_iter()
+                .map(|((x0, x1), (y0, y1))| (x0, y0, x1, y1)),
+        );
+        done.sort_by_key(|&(x0, y0, _, _)| (y0, x0));
+        done.into_iter()
+            .map(|(x0, y0, x1, y1)| Rect {
+                x0: x0 as f32 * TILE,
+                y0: y0 as f32 * TILE,
+                x1: (x1 + 1) as f32 * TILE,
+                y1: (y1 + 1) as f32 * TILE,
+            })
+            .collect()
+    }
+
+    // ------------------------------------------------------------ rooms
+
+    /// Whether a room of `size` can be built with its anchor (north-west
+    /// wall tile) at (x, y), and paid for from `wallet`.
+    pub fn can_place_room(
+        &self,
+        size: RoomSize,
+        x: i32,
+        y: i32,
+        wallet: Cost,
+    ) -> Result<(), Reason> {
+        if size == RoomSize::Unknown {
+            return Err(Reason::Blocked);
+        }
+        let room = Room {
+            build_left_ms: Some(size.build_seconds() * 1000),
+            ..Room::new(size, x, y)
+        };
+        if !room.tiles().all(in_hull) {
+            return Err(Reason::OutsideHull);
+        }
+        let map = self.tile_map();
+        for t in room.tiles() {
+            match map.kind(t) {
+                TileKind::Hull => {}
+                TileKind::Wall if room.is_ring(t) => {}
+                _ => return Err(Reason::OverlapsRoom),
+            }
+        }
+        let doors: Vec<Doorway> = self
+            .rooms
+            .iter()
+            .enumerate()
+            .filter_map(|(i, r)| {
+                doorway_between(&room, r).map(|(tiles, vertical)| Doorway {
+                    tiles,
+                    rooms: (i, self.rooms.len()),
+                    vertical,
+                })
+            })
+            .collect();
+        if doors.is_empty() {
+            return Err(Reason::MustShareWall);
+        }
+        let mut blockers = BTreeSet::new();
+        for d in &doors {
+            for t in d.tiles {
+                blockers.extend(
+                    (0..self.items.len()).filter(|&i| self.items[i].tiles().any(|q| q == t)),
+                );
+            }
+            for t in d.clearance() {
+                if let Some(i) = self.item_at(t, Layer::Object) {
+                    blockers.insert(i);
+                }
+            }
+        }
+        if !blockers.is_empty() {
+            return Err(Reason::ClearDoorway(blockers.into_iter().collect()));
+        }
+        // Nothing else should change, but every item must still hold.
+        let mut after = self.clone();
+        after.rooms.push(room);
+        let amap = after.tile_map();
+        for (i, item) in self.items.iter().enumerate() {
+            if after.check_spot(&amap, item, Some(i), None).is_err() {
+                return Err(Reason::ClearDoorway(vec![i]));
+            }
+        }
+        if let Some(i) = after.cut_off() {
+            return Err(Reason::WouldCutOff(after.items[i].id));
+        }
+        afford(size.cost(), wallet)
+    }
+
+    /// Starts building a room (no checks; see [`Self::can_place_room`]).
+    /// Returns its index.
+    pub fn place_room(&mut self, size: RoomSize, x: i32, y: i32) -> usize {
+        let ms = size.build_seconds() * 1000;
+        self.rooms.push(Room {
+            build_left_ms: (ms > 0).then_some(ms),
+            ..Room::new(size, x, y)
+        });
+        self.normalize();
+        self.rooms
+            .iter()
+            .position(|r| (r.size, r.x, r.y) == (size, x, y))
+            .unwrap_or(0)
+    }
+
+    /// Whether room `i` can be removed; `Ok` holds its refund.
+    pub fn can_remove_room(&self, i: usize) -> Result<Cost, Reason> {
+        let room = self.rooms.get(i).ok_or(Reason::Blocked)?;
+        if room.starter {
+            return Err(Reason::StarterPiece);
+        }
+        let holds = |item: &Item| {
+            item.tiles().any(|(x, y)| {
+                room.is_floor((x, y))
+                    || (item.layer() == Layer::Wall
+                        && room.is_ring((x, y))
+                        && room.is_floor((x, y + 1)))
+            })
+        };
+        if self.items.iter().any(holds) {
+            return Err(Reason::RoomNotEmpty);
+        }
+        let mut after = self.clone();
+        after.rooms.remove(i);
+        if after.disconnected_room().is_some() {
+            return Err(Reason::WouldCutOffRoom);
+        }
+        if let Some(j) = after.cut_off() {
+            return Err(Reason::WouldCutOff(after.items[j].id));
+        }
+        Ok(room.refund())
+    }
+
+    /// Removes room `i` (no checks) and returns its refund.
+    pub fn remove_room(&mut self, i: usize) -> Cost {
+        self.rooms.remove(i).refund()
+    }
+
+    // ------------------------------------------------------------ items
+
+    /// The placement rules for `item` against everything but item `skip`
+    /// (§ Items › Placement rules, Front strip, Doorway clearance).
+    fn check_spot(
+        &self,
+        map: &TileMap,
+        item: &Item,
+        skip: Option<usize>,
+        pilot: Option<Tile>,
+    ) -> Result<(), Reason> {
+        let def = item.id.def().ok_or(Reason::Blocked)?;
+        let occ = self.occupancy(skip);
+        for (x, y) in item.tiles() {
+            if def.placement == Placement::OnWall {
+                if !map.is_wall_face((x, y)) {
+                    return Err(Reason::NeedsWallFace);
+                }
+                if !map.is_finished_floor((x, y + 1)) {
+                    return Err(Reason::StillBeingBuilt);
+                }
+            } else {
+                match map.kind((x, y)) {
+                    TileKind::Floor => {}
+                    TileKind::Doorway if def.layer == Layer::Object => {
+                        return Err(Reason::KeepDoorwayClear)
+                    }
+                    _ => return Err(Reason::NeedsFloor),
+                }
+                if !map.is_finished_floor((x, y)) {
+                    return Err(Reason::StillBeingBuilt);
+                }
+                if def.layer == Layer::Object && map.is_clearance((x, y)) {
+                    return Err(Reason::KeepDoorwayClear);
+                }
+            }
+            if occ.contains_key(&(def.layer, (x, y))) {
+                return Err(Reason::Blocked);
+            }
+        }
+        if def.placement == Placement::AgainstWall
+            && (item.x..item.x + def.size.0).any(|x| map.kind((x, item.y - 1)) != TileKind::Wall)
+        {
+            return Err(Reason::NeedsWallBehind);
+        }
+        if def.layer == Layer::Object {
+            let strips: BTreeSet<Tile> = self
+                .items
+                .iter()
+                .enumerate()
+                .filter(|(j, _)| Some(*j) != skip)
+                .flat_map(|(_, i)| i.front_strip())
+                .collect();
+            if item.tiles().any(|t| strips.contains(&t)) {
+                return Err(Reason::KeepFrontClear);
+            }
+        }
+        for t in item.front_strip() {
+            let floor = matches!(map.kind(t), TileKind::Floor | TileKind::Doorway);
+            if !floor || occ.contains_key(&(Layer::Object, t)) {
+                return Err(Reason::KeepFrontClear);
+            }
+        }
+        if def.layer == Layer::Object && pilot.is_some_and(|p| item.tiles().any(|t| t == p)) {
+            return Err(Reason::PilotInTheWay);
+        }
+        Ok(())
+    }
+
+    /// Whether a new `id` can be built anchored at (x, y) and paid for
+    /// from `wallet`; `pilot` is the tile under the Pilot's feet.
+    pub fn can_place(
+        &self,
+        id: ItemId,
+        x: i32,
+        y: i32,
+        wallet: Cost,
+        pilot: Option<Tile>,
+    ) -> Result<(), Reason> {
+        let def = id.def().ok_or(Reason::Blocked)?;
+        if def.count.fixed() {
+            return Err(Reason::StarterPiece);
+        }
+        if def.count == Count::BuyOnce && self.find(id).is_some() {
+            return Err(Reason::AlreadyBuilt);
+        }
+        let item = Item {
+            build_left_ms: Some(def.build_seconds * 1000),
+            ..Item::new(id, x, y)
+        };
+        self.check_spot(&self.tile_map(), &item, None, pilot)?;
+        let mut after = self.clone();
+        after.items.push(item);
+        if let Some(i) = after.cut_off() {
+            return Err(Reason::WouldCutOff(after.items[i].id));
+        }
+        afford(def.cost, wallet)
+    }
+
+    /// Starts building `id` at (x, y) (no checks; see [`Self::can_place`]).
+    /// Returns its index.
+    pub fn place(&mut self, id: ItemId, x: i32, y: i32, ship: Option<String>) -> usize {
+        let ms = id.def().map_or(0, |d| d.build_seconds * 1000);
+        let layer = Item::new(id, x, y).layer();
+        self.items.push(Item {
+            ship,
+            build_left_ms: (ms > 0).then_some(ms),
+            ..Item::new(id, x, y)
+        });
+        self.normalize();
+        self.items
+            .iter()
+            .position(|i| (i.x, i.y, i.layer(), i.id) == (x, y, layer, id))
+            .unwrap_or(0)
+    }
+
+    /// Whether finished item `i` can be moved to (x, y). Its own tiles
+    /// count as free while it is held.
+    pub fn can_move(&self, i: usize, x: i32, y: i32, pilot: Option<Tile>) -> Result<(), Reason> {
+        let item = self.items.get(i).ok_or(Reason::Blocked)?;
+        if !item.finished() {
+            return Err(Reason::StillBeingBuilt);
+        }
+        let moved = Item {
+            x,
+            y,
+            ..item.clone()
+        };
+        self.check_spot(&self.tile_map(), &moved, Some(i), pilot)?;
+        let mut after = self.clone();
+        after.items[i] = moved;
+        if let Some(j) = after.cut_off() {
+            return Err(Reason::WouldCutOff(after.items[j].id));
+        }
+        Ok(())
+    }
+
+    /// Moves item `i` (free and instant, no checks; `starter` and `ship`
+    /// stay). Returns its new index.
+    pub fn move_item(&mut self, i: usize, x: i32, y: i32) -> usize {
+        let (id, layer) = (self.items[i].id, self.items[i].layer());
+        self.items[i].x = x;
+        self.items[i].y = y;
+        self.normalize();
+        self.items
+            .iter()
+            .position(|it| (it.x, it.y, it.layer(), it.id) == (x, y, layer, id))
+            .unwrap_or(0)
+    }
+
+    /// Whether item `i` (or site) can be removed; `Ok` holds its refund.
+    pub fn can_remove(&self, i: usize) -> Result<Cost, Reason> {
+        let item = self.items.get(i).ok_or(Reason::Blocked)?;
+        if item.id.def().is_some_and(|d| d.count.fixed()) {
+            return Err(Reason::MoveItInstead);
+        }
+        Ok(item.refund())
+    }
+
+    /// Removes item `i` (no checks) and returns its refund.
+    pub fn remove(&mut self, i: usize) -> Cost {
+        self.items.remove(i).refund()
+    }
+
+    /// Advances every construction site by `ms`. Returns whether any
+    /// finished (the caller saves then).
+    pub fn tick(&mut self, ms: u32) -> bool {
+        let mut finished = false;
+        let sites = self
+            .rooms
+            .iter_mut()
+            .map(|r| &mut r.build_left_ms)
+            .chain(self.items.iter_mut().map(|i| &mut i.build_left_ms));
+        for left in sites {
+            if let Some(v) = left {
+                let rest = v.saturating_sub(ms);
+                *left = (rest > 0).then_some(rest);
+                finished |= rest == 0;
+            }
+        }
+        finished
+    }
+
+    // ------------------------------------------------------------ save
+
+    /// Checks a loaded layout (§ Save › Validation on load).
+    pub fn validate(&self) -> Result<(), LayoutError> {
+        if self.rooms.iter().any(|r| r.size == RoomSize::Unknown)
+            || self.items.iter().any(|i| i.id == ItemId::Unknown)
+        {
+            return Err(LayoutError::UnknownId);
+        }
+        // Inside the hull; a tile is floor of at most one room and never
+        // both floor and wall.
+        let mut floor = BTreeSet::new();
+        let mut ring = BTreeSet::new();
+        for (i, r) in self.rooms.iter().enumerate() {
+            for t in r.tiles() {
+                let clash = if r.is_floor(t) {
+                    !floor.insert(t) || ring.contains(&t)
+                } else {
+                    ring.insert(t);
+                    floor.contains(&t)
+                };
+                if !in_hull(t) || clash {
+                    return Err(LayoutError::BadRoom(i));
+                }
+            }
+        }
+        for (size, x, y) in STARTING_ROOMS {
+            if !self
+                .rooms
+                .iter()
+                .any(|r| r.starter && (r.size, r.x, r.y) == (size, x, y))
+            {
+                return Err(LayoutError::MissingStarterRoom);
+            }
+        }
+        for def in &CATALOGUE {
+            let n = self.items.iter().filter(|i| i.id == def.id).count();
+            let ok = match def.count {
+                Count::Exactly1 => n == 1,
+                Count::BuyOnce => n <= 1,
+                Count::Any => true,
+                Count::PerShip => {
+                    let ships: BTreeSet<_> = self
+                        .items
+                        .iter()
+                        .filter(|i| i.id == def.id)
+                        .filter_map(|i| i.ship.as_deref())
+                        .filter(|s| SHIPS.contains(s))
+                        .collect();
+                    n == SHIPS.len() && ships.len() == n
+                }
+            };
+            if !ok {
+                return Err(LayoutError::Count(def.id));
+            }
+        }
+        if let Some(i) = self.disconnected_room() {
+            return Err(LayoutError::Disconnected(i));
+        }
+        let map = self.tile_map();
+        for (i, item) in self.items.iter().enumerate() {
+            self.check_spot(&map, item, Some(i), None)
+                .map_err(|r| LayoutError::BadItem(i, r))?;
+        }
+        if let Some(i) = self.cut_off() {
+            return Err(LayoutError::Unreachable(i));
+        }
+        Ok(())
+    }
+
+    /// What resetting this layout to the start refunds: the cost of every
+    /// non-starter room and item, sites included (unknown IDs refund
+    /// nothing).
+    pub fn refund(&self) -> Cost {
+        let mut total = FREE;
+        for r in &self.rooms {
+            add(&mut total, r.refund());
+        }
+        for i in &self.items {
+            add(&mut total, i.refund());
+        }
+        total
+    }
 }
+
+// ---------------------------------------------------------------- pathing
 
 /// An axis-aligned rectangle in grid px: `x0..x1`, `y0..y1`.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -425,416 +1688,8 @@ pub struct Rect {
 }
 
 impl Rect {
-    fn cell(cx: i32, cy: i32, x0: f32, y0: f32, x1: f32, y1: f32) -> Self {
-        let (ox, oy) = (cx as f32 * CELL, cy as f32 * CELL);
-        Self {
-            x0: ox + x0,
-            y0: oy + y0,
-            x1: ox + x1,
-            y1: oy + y1,
-        }
-    }
-
     pub fn contains(&self, x: f32, y: f32) -> bool {
         x >= self.x0 && x <= self.x1 && y >= self.y0 && y <= self.y1
-    }
-}
-
-impl CarrierLayout {
-    pub fn starting() -> Self {
-        let mut layout = Self {
-            rooms: STARTING_ROOMS.to_vec(),
-            corridors: STARTING_CORRIDORS.to_vec(),
-        };
-        layout.normalize();
-        layout
-    }
-
-    /// Canonical order: rooms by id, corridors by (x, y).
-    pub fn normalize(&mut self) {
-        self.rooms.sort_by_key(|r| (r.id.id(), r.x, r.y));
-        self.corridors.sort_unstable();
-        self.corridors.dedup();
-    }
-
-    pub fn has_room(&self, id: RoomId) -> bool {
-        self.rooms.iter().any(|r| r.id == id)
-    }
-
-    #[cfg(test)]
-    pub fn room(&self, id: RoomId) -> Option<&PlacedRoom> {
-        self.rooms.iter().find(|r| r.id == id)
-    }
-
-    /// The Docks in layout order (west to east); Dock `i` holds battleship
-    /// `i`.
-    pub fn docks(&self) -> impl Iterator<Item = &PlacedRoom> {
-        self.rooms.iter().filter(|r| r.id == RoomId::Dock)
-    }
-
-    /// Save v3 → v4: each old two-berth Dock (4 × 3 at (x, y)) becomes two
-    /// one-berth Docks at (x, y) and (x + 2, y), joined by corridors on the
-    /// row below. Player-built corridors that are now starting pieces are
-    /// refunded (returned). The caller validates the result.
-    pub fn split_v3_dock(&mut self) -> Cost {
-        let mut refund = Cost {
-            credits: 0,
-            void_crystal: 0,
-        };
-        let old: Vec<PlacedRoom> = self.docks().copied().collect();
-        self.rooms.retain(|r| r.id != RoomId::Dock);
-        for PlacedRoom { x, y, .. } in old {
-            for dx in [0, 2] {
-                self.rooms.push(PlacedRoom {
-                    id: RoomId::Dock,
-                    x: x + dx,
-                    y,
-                });
-            }
-            // Only where the starting layout has them: a Dock off its
-            // starting spot fails validation anyway, and corridors added
-            // here must not be refunded by the reset.
-            for dx in 0..3 {
-                let c = (x + dx, y + 3);
-                if !STARTING_CORRIDORS.contains(&c) {
-                    continue;
-                }
-                if self.corridors.contains(&c) {
-                    refund.credits += CORRIDOR_COST.credits;
-                } else {
-                    self.corridors.push(c);
-                }
-            }
-        }
-        self.normalize();
-        refund
-    }
-
-    /// Whether any room beyond the starting ones has been built.
-    pub fn has_built_room(&self) -> bool {
-        self.rooms.iter().any(|r| r.id.cost().is_some())
-    }
-
-    pub fn cell(&self, x: i32, y: i32) -> Cell {
-        if self.corridors.contains(&(x, y)) {
-            return Cell::Corridor;
-        }
-        self.rooms
-            .iter()
-            .position(|r| r.contains(x, y))
-            .map_or(Cell::Empty, Cell::Room)
-    }
-
-    fn is_corridor(&self, x: i32, y: i32) -> bool {
-        self.corridors.contains(&(x, y))
-    }
-
-    /// A room socket on cell (x, y) facing `side`, if there is one.
-    fn socket_at(&self, x: i32, y: i32, side: Side) -> Option<usize> {
-        self.rooms
-            .iter()
-            .position(|r| r.sockets().any(|s| s == (x, y, side)))
-    }
-
-    /// The openings of a corridor at (x, y): toward each neighbour that is a
-    /// corridor or a room socket facing it.
-    pub fn mask(&self, x: i32, y: i32) -> Mask {
-        let mut m = 0;
-        for side in Side::ALL {
-            let (dx, dy) = side.delta();
-            let (nx, ny) = (x + dx, y + dy);
-            if self.is_corridor(nx, ny) || self.socket_at(nx, ny, side.opposite()).is_some() {
-                m |= side.bit();
-            }
-        }
-        Mask(m)
-    }
-
-    /// A room's sockets that have a corridor in front of them (doors).
-    pub fn doors<'a>(
-        &'a self,
-        room: &'a PlacedRoom,
-    ) -> impl Iterator<Item = (i32, i32, Side)> + 'a {
-        room.sockets().filter(move |&(x, y, side)| {
-            let (dx, dy) = side.delta();
-            self.is_corridor(x + dx, y + dy)
-        })
-    }
-
-    /// Whether every room and corridor is reachable from the Bridge.
-    pub fn connected(&self) -> bool {
-        let Some(bridge) = self.rooms.iter().position(|r| r.id == RoomId::Bridge) else {
-            return false;
-        };
-        // Nodes: rooms 0..n, then corridors n..n+m.
-        let n = self.rooms.len();
-        let total = n + self.corridors.len();
-        let corridor_node = |x: i32, y: i32| {
-            self.corridors
-                .iter()
-                .position(|&c| c == (x, y))
-                .map(|i| n + i)
-        };
-        let mut seen = vec![false; total];
-        let mut stack = vec![bridge];
-        seen[bridge] = true;
-        while let Some(node) = stack.pop() {
-            let mut next = Vec::new();
-            if node < n {
-                for (fx, fy, _) in self.rooms[node].socket_fronts() {
-                    next.extend(corridor_node(fx, fy));
-                }
-            } else {
-                let (x, y) = self.corridors[node - n];
-                for side in Side::ALL {
-                    let (dx, dy) = side.delta();
-                    let (nx, ny) = (x + dx, y + dy);
-                    next.extend(corridor_node(nx, ny));
-                    next.extend(self.socket_at(nx, ny, side.opposite()));
-                }
-            }
-            for m in next {
-                if !seen[m] {
-                    seen[m] = true;
-                    stack.push(m);
-                }
-            }
-        }
-        seen.into_iter().all(|s| s)
-    }
-
-    /// Whether `piece` can go at (x, y) (a room's north-west cell), wallet
-    /// aside: inside the hull, on empty cells, not built twice, connected.
-    pub fn can_place(&self, piece: Piece, x: i32, y: i32) -> Result<(), PlaceError> {
-        let (w, d) = piece.footprint();
-        if !in_hull(x, y) || !in_hull(x + w - 1, y + d - 1) {
-            return Err(PlaceError::OutsideHull);
-        }
-        let blocked = (y..y + d).any(|cy| (x..x + w).any(|cx| self.cell(cx, cy) != Cell::Empty));
-        if blocked {
-            return Err(PlaceError::Blocked);
-        }
-        let connects = match piece {
-            Piece::Corridor => Side::ALL.iter().any(|&side| {
-                let (dx, dy) = side.delta();
-                let (nx, ny) = (x + dx, y + dy);
-                self.is_corridor(nx, ny) || self.socket_at(nx, ny, side.opposite()).is_some()
-            }),
-            Piece::Room(id) => {
-                if id.cost().is_none() || id == RoomId::Unknown {
-                    return Err(PlaceError::AlreadyBuilt);
-                }
-                if self.has_room(id) {
-                    return Err(PlaceError::AlreadyBuilt);
-                }
-                PlacedRoom { id, x, y }
-                    .socket_fronts()
-                    .any(|(fx, fy, _)| self.is_corridor(fx, fy))
-            }
-        };
-        if connects {
-            Ok(())
-        } else {
-            Err(PlaceError::MustConnect)
-        }
-    }
-
-    /// Places `piece` (already checked with [`Self::can_place`]).
-    pub fn place(&mut self, piece: Piece, x: i32, y: i32) {
-        match piece {
-            Piece::Corridor => self.corridors.push((x, y)),
-            Piece::Room(id) => self.rooms.push(PlacedRoom { id, x, y }),
-        }
-        self.normalize();
-    }
-
-    /// Whether the piece on cell (x, y) is one of the starting pieces.
-    fn is_starting(&self, cell: Cell, x: i32, y: i32) -> bool {
-        match cell {
-            Cell::Corridor => STARTING_CORRIDORS.contains(&(x, y)),
-            Cell::Room(i) => STARTING_ROOMS.contains(&self.rooms[i]),
-            Cell::Empty => false,
-        }
-    }
-
-    /// The layout without the piece on cell (x, y), and that piece.
-    fn without(&self, x: i32, y: i32) -> Option<(CarrierLayout, Piece)> {
-        let mut rest = self.clone();
-        let piece = match self.cell(x, y) {
-            Cell::Empty => return None,
-            Cell::Corridor => {
-                rest.corridors.retain(|&c| c != (x, y));
-                Piece::Corridor
-            }
-            Cell::Room(i) => Piece::Room(rest.rooms.remove(i).id),
-        };
-        Some((rest, piece))
-    }
-
-    /// Whether the piece on cell (x, y) can be demolished: player-built and
-    /// nothing gets cut off without it. Returns the piece.
-    pub fn can_demolish(&self, x: i32, y: i32) -> Result<Piece, DemolishError> {
-        let cell = self.cell(x, y);
-        if cell == Cell::Empty {
-            return Err(DemolishError::Nothing);
-        }
-        if self.is_starting(cell, x, y) {
-            return Err(DemolishError::Starting);
-        }
-        let (rest, piece) = self.without(x, y).ok_or(DemolishError::Nothing)?;
-        if !rest.connected() {
-            return Err(DemolishError::WouldDisconnect);
-        }
-        Ok(piece)
-    }
-
-    /// Removes the piece on (x, y) (already checked with
-    /// [`Self::can_demolish`]) and returns it.
-    pub fn demolish(&mut self, x: i32, y: i32) -> Option<Piece> {
-        let (rest, piece) = self.without(x, y)?;
-        *self = rest;
-        Some(piece)
-    }
-
-    /// The top-left cell of the piece on (x, y): a room's anchor, or the
-    /// corridor cell itself.
-    pub fn piece_origin(&self, x: i32, y: i32) -> Option<(Piece, i32, i32)> {
-        match self.cell(x, y) {
-            Cell::Empty => None,
-            Cell::Corridor => Some((Piece::Corridor, x, y)),
-            Cell::Room(i) => {
-                let r = self.rooms[i];
-                Some((Piece::Room(r.id), r.x, r.y))
-            }
-        }
-    }
-
-    /// Empty cells next to the network: beside a corridor or in front of a
-    /// free socket (the build-slot markers).
-    pub fn build_slots(&self) -> Vec<(i32, i32)> {
-        let mut slots = BTreeSet::new();
-        for &(x, y) in &self.corridors {
-            for side in Side::ALL {
-                let (dx, dy) = side.delta();
-                slots.insert((y + dy, x + dx));
-            }
-        }
-        for room in &self.rooms {
-            for (fx, fy, _) in room.socket_fronts() {
-                slots.insert((fy, fx));
-            }
-        }
-        slots
-            .into_iter()
-            .map(|(y, x)| (x, y))
-            .filter(|&(x, y)| in_hull(x, y) && self.cell(x, y) == Cell::Empty)
-            .collect()
-    }
-
-    /// Checks a loaded layout (§ Save › Validation on load).
-    pub fn validate(&self) -> Result<(), LayoutError> {
-        if self.rooms.iter().any(|r| r.id == RoomId::Unknown) {
-            return Err(LayoutError::UnknownRoom);
-        }
-        let mut cells = BTreeSet::new();
-        for r in &self.rooms {
-            for c in r.cells() {
-                if !in_hull(c.0, c.1) {
-                    return Err(LayoutError::OutsideHull);
-                }
-                if !cells.insert(c) {
-                    return Err(LayoutError::Overlap);
-                }
-            }
-        }
-        for &c in &self.corridors {
-            if !in_hull(c.0, c.1) {
-                return Err(LayoutError::OutsideHull);
-            }
-            if !cells.insert(c) {
-                return Err(LayoutError::Overlap);
-            }
-        }
-        if STARTING_ROOMS.iter().any(|r| !self.rooms.contains(r))
-            || STARTING_CORRIDORS
-                .iter()
-                .any(|c| !self.corridors.contains(c))
-        {
-            return Err(LayoutError::MissingStart);
-        }
-        for id in RoomId::BUILDABLE {
-            if self.rooms.iter().filter(|r| r.id == id).count() > 1 {
-                return Err(LayoutError::Duplicate);
-            }
-        }
-        if self.rooms.iter().filter(|r| r.id.cost().is_none()).count() != STARTING_ROOMS.len() {
-            return Err(LayoutError::Duplicate);
-        }
-        if !self.connected() {
-            return Err(LayoutError::Disconnected);
-        }
-        Ok(())
-    }
-
-    /// What resetting this layout to the start refunds: the cost of every
-    /// non-starting piece (unknown rooms refund nothing).
-    pub fn refund(&self) -> Cost {
-        let mut total = Cost {
-            credits: 0,
-            void_crystal: 0,
-        };
-        let mut add = |c: Cost| {
-            total.credits = total.credits.saturating_add(c.credits);
-            total.void_crystal = total.void_crystal.saturating_add(c.void_crystal);
-        };
-        for r in &self.rooms {
-            if !STARTING_ROOMS.contains(r) {
-                if let Some(c) = r.id.cost() {
-                    add(c);
-                }
-            }
-        }
-        for c in &self.corridors {
-            if !STARTING_CORRIDORS.contains(c) {
-                add(CORRIDOR_COST);
-            }
-        }
-        total
-    }
-
-    /// Where the Pilot can stand, in grid px (§ Walking and interaction).
-    pub fn walkable(&self) -> Vec<Rect> {
-        let mut rects = Vec::new();
-        for room in &self.rooms {
-            let (w, d) = room.id.footprint();
-            rects.push(Rect {
-                x0: room.x as f32 * CELL + WALL,
-                y0: room.y as f32 * CELL + BACK_WALL,
-                x1: (room.x + w) as f32 * CELL - WALL,
-                y1: (room.y + d) as f32 * CELL - WALL,
-            });
-            for (x, y, side) in self.doors(room) {
-                rects.push(match side {
-                    Side::N => Rect::cell(x, y, LANE_X0, 0.0, LANE_X1, BACK_WALL),
-                    Side::S => Rect::cell(x, y, LANE_X0, CELL - WALL, LANE_X1, CELL),
-                    Side::E => Rect::cell(x, y, CELL - WALL, LANE_Y0, CELL, LANE_Y1),
-                    Side::W => Rect::cell(x, y, 0.0, LANE_Y0, WALL, LANE_Y1),
-                });
-            }
-        }
-        for &(x, y) in &self.corridors {
-            let mask = self.mask(x, y);
-            rects.push(Rect::cell(x, y, LANE_X0, LANE_Y0, LANE_X1, LANE_Y1));
-            for side in Side::ALL.into_iter().filter(|s| mask.has(*s)) {
-                rects.push(match side {
-                    Side::N => Rect::cell(x, y, LANE_X0, 0.0, LANE_X1, LANE_Y0),
-                    Side::S => Rect::cell(x, y, LANE_X0, LANE_Y1, LANE_X1, CELL),
-                    Side::E => Rect::cell(x, y, LANE_X1, LANE_Y0, CELL, LANE_Y1),
-                    Side::W => Rect::cell(x, y, 0.0, LANE_Y0, LANE_X0, LANE_Y1),
-                });
-            }
-        }
-        rects
     }
 }
 
@@ -882,8 +1737,8 @@ pub fn walk(rects: &[Rect], pos: (f32, f32), delta: (f32, f32)) -> (f32, f32) {
 const PATH_STEP: f32 = 8.0;
 /// A click off the floor walks to the nearest floor within this many px.
 pub const SNAP_RANGE: f32 = 64.0;
-const LATTICE_W: i32 = (HULL_W as f32 * CELL / PATH_STEP) as i32 + 1;
-const LATTICE_H: i32 = (HULL_H as f32 * CELL / PATH_STEP) as i32 + 1;
+const LATTICE_W: i32 = (HULL_W as f32 * TILE / PATH_STEP) as i32 + 1;
+const LATTICE_H: i32 = (HULL_H as f32 * TILE / PATH_STEP) as i32 + 1;
 
 /// Whether the Pilot can walk the straight line from `a` to `b` (checked
 /// every 4 px).
@@ -1028,406 +1883,643 @@ pub fn find_path(rects: &[Rect], from: (f32, f32), to: (f32, f32)) -> Option<Vec
     Some(path)
 }
 
-/// The hull cell under grid px (x, y).
-pub fn cell_at(x: f32, y: f32) -> (i32, i32) {
-    ((x / CELL).floor() as i32, (y / CELL).floor() as i32)
-}
-
-/// Grid px of a point given in a room's local cells and cell-local px.
-pub fn room_px(room: &PlacedRoom, local: (f32, f32)) -> (f32, f32) {
-    (
-        room.x as f32 * CELL + local.0,
-        room.y as f32 * CELL + local.1,
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn cost(credits: u32, void_crystal: u32) -> Cost {
-        Cost {
-            credits,
-            void_crystal,
-        }
+    const RICH: Cost = cost(10_000, 1_000);
+    const BROKE: Cost = cost(0, 0);
+
+    /// The spec's map: `#` wall, `.` floor, `+` doorway, letters objects
+    /// (rugs and wall-mounted items don't show), trailing hull trimmed.
+    fn ascii(c: &Carrier) -> Vec<String> {
+        let map = c.tile_map();
+        (0..HULL_H)
+            .map(|y| {
+                let row: String = (0..HULL_W)
+                    .map(
+                        |x| match c.item_at((x, y), Layer::Object).map(|i| c.items[i].id) {
+                            Some(ItemId::CommandConsole) => 'C',
+                            Some(ItemId::UpgradeBench) => 'U',
+                            Some(ItemId::SampleAnalyzer) => 'A',
+                            Some(ItemId::Berth) => 'B',
+                            Some(ItemId::SalvageSorter) => 'S',
+                            Some(ItemId::CombatSimulator) => 'M',
+                            Some(ItemId::BunkBed) => 'b',
+                            Some(ItemId::Locker) => 'l',
+                            Some(ItemId::Table) => 't',
+                            Some(ItemId::CatBed) => 'c',
+                            Some(ItemId::PottedPlant) => 'p',
+                            Some(ItemId::HydroPlanter) => 'h',
+                            Some(ItemId::FloorLamp) => 'f',
+                            Some(ItemId::CrateStack) => 'x',
+                            Some(_) => '?',
+                            None => match map.kind((x, y)) {
+                                TileKind::Hull => ' ',
+                                TileKind::Wall => '#',
+                                TileKind::Floor => '.',
+                                TileKind::Doorway => '+',
+                            },
+                        },
+                    )
+                    .collect();
+                row.trim_end().to_string()
+            })
+            .collect()
     }
 
     #[test]
-    fn starting_layout_masks_match_the_spec_table() {
-        let l = CarrierLayout::starting();
-        let masks: Vec<_> = l
-            .corridors
+    fn starting_layout_matches_the_spec_map() {
+        let c = Carrier::starting();
+        assert_eq!(c.validate(), Ok(()));
+        let expect = [
+            "######################",
+            "#p.CC.f#.bb.lc#p.AAhh#",
+            "#......+.bb...+......#",
+            "#......+..tt..+......#",
+            "#......#......#......#",
+            "###++#####++#####++###",
+            "#.............#UU....#",
+            "#.............+......#",
+            "#.BBBB..BBBB..+......#",
+            "#.BBBB..BBBB..#....xx#",
+            "#.BBBB..BBBB..########",
+            "#.BBBB..BBBB..#",
+            "#.............#",
+            "#.............#",
+            "#.............#",
+            "###############",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+        ];
+        assert_eq!(ascii(&c), expect);
+        assert_eq!(c.rooms.len(), 5);
+        assert!(c.rooms.iter().all(|r| r.starter && r.finished()));
+        assert!(c.items.iter().all(|i| i.starter && i.finished()));
+        assert_eq!(c.refund(), BROKE);
+        let mut doors: Vec<Tile> = c.tile_map().doorways.iter().flat_map(|d| d.tiles).collect();
+        doors.sort();
+        let mut expect = vec![
+            (7, 2),
+            (7, 3),
+            (14, 2),
+            (14, 3),
+            (3, 5),
+            (4, 5),
+            (10, 5),
+            (11, 5),
+            (17, 5),
+            (18, 5),
+            (14, 7),
+            (14, 8),
+        ];
+        expect.sort();
+        assert_eq!(doors, expect);
+        assert!(expect.iter().all(|t| c.tile_map().is_open_doorway(*t)));
+        // The wall-mounted and floor pieces the map doesn't show.
+        assert_eq!(
+            c.pick_item((5, 0)).map(|i| c.items[i].id),
+            Some(ItemId::WallScreen)
+        );
+        assert_eq!(
+            c.pick_item((20, 5)).map(|i| c.items[i].id),
+            Some(ItemId::ToolRack)
+        );
+        assert_eq!(
+            c.item_at((11, 4), Layer::Floor).map(|i| c.items[i].id),
+            Some(ItemId::Rug)
+        );
+        let ships: Vec<_> = [KITE_ID, BULWARK_ID]
             .iter()
-            .map(|&(x, y)| ((x, y), l.mask(x, y).name()))
+            .map(|s| c.berth_of(s).map(|i| (c.items[i].x, c.items[i].y)))
             .collect();
-        assert_eq!(
-            masks,
-            [
-                ((1, 3), "nes".to_string()),
-                ((2, 3), "ew".to_string()),
-                ((3, 3), "esw".to_string()),
-                ((3, 4), "ns".to_string()),
-                ((3, 5), "nsw".to_string()),
-                ((3, 6), "ne".to_string()),
-                ((4, 3), "nw".to_string()),
-                ((4, 7), "ne".to_string()),
-                ((5, 7), "ew".to_string()),
-                ((6, 7), "nw".to_string()),
-            ]
-        );
-        assert!(l.connected());
-        assert_eq!(l.validate(), Ok(()));
+        assert_eq!(ships, [Some((2, 8)), Some((8, 8))]);
     }
 
     #[test]
-    fn starting_layout_doors_and_free_sockets() {
-        let l = CarrierLayout::starting();
-        let doors = |id| {
-            let r = *l.room(id).unwrap();
-            l.doors(&r).collect::<Vec<_>>()
-        };
-        assert_eq!(doors(RoomId::Bridge), [(1, 2, Side::S)]);
-        assert_eq!(doors(RoomId::CrewQuarters), [(4, 2, Side::S)]);
-        assert_eq!(doors(RoomId::Workshop), [(1, 4, Side::N), (2, 5, Side::E)]);
-        let docks: Vec<_> = l.docks().copied().collect();
-        assert_eq!(docks.len(), 2);
+    fn crew_stand_beside_their_posts() {
+        let c = Carrier::starting();
+        assert_eq!(c.crew_post(Crew::Gunner), Some((5, 2)));
+        assert_eq!(c.crew_post(Crew::Engineer), Some((17, 7)));
+        assert_eq!(c.crew_post(Crew::Researcher), Some((19, 2)));
+        // A use point is 24 px south of the front edge, mid-strip.
+        let console = &c.items[c.find(ItemId::CommandConsole).unwrap()];
+        assert_eq!(console.use_point(), (4.0 * TILE, 2.0 * TILE + 24.0));
+        assert_eq!(console.front_strip(), [(3, 2), (4, 2)]);
+    }
+
+    #[test]
+    fn crew_follow_a_moved_station_and_fall_back_west_then_south() {
+        let mut c = Carrier::starting();
+        let i = c.find(ItemId::CommandConsole).unwrap();
+        assert_eq!(c.can_move(i, 2, 1, None), Ok(()));
+        let i = c.move_item(i, 2, 1);
+        assert_eq!((c.items[i].x, c.items[i].starter), (2, true));
+        assert_eq!(c.crew_post(Crew::Gunner), Some((4, 2)));
+        // East blocked: west of the strip.
+        c.place(ItemId::Stool, 4, 2, None);
+        assert_eq!(c.crew_post(Crew::Gunner), Some((1, 2)));
+        // East and west blocked: south of the first strip tile.
+        c.place(ItemId::Stool, 1, 2, None);
+        assert_eq!(c.crew_post(Crew::Gunner), Some((2, 3)));
+    }
+
+    #[test]
+    fn room_anchor_from_the_mouse_tile() {
+        assert_eq!(Room::anchor_for(RoomSize::Small, (17, 12)), (14, 10));
+        assert_eq!(Room::anchor_for(RoomSize::Large, (7, 10)), (0, 5));
+    }
+
+    #[test]
+    fn spec_example_edits_build_and_finish() {
+        let mut c = Carrier::starting();
         assert_eq!(
-            (docks[0].x, docks[0].y, docks[1].x, docks[1].y),
-            (4, 4, 6, 4)
+            c.can_place_room(RoomSize::Small, 14, 10, cost(60, 1)),
+            Ok(())
         );
         assert_eq!(
-            l.doors(&docks[0]).collect::<Vec<_>>(),
-            [(4, 6, Side::W), (4, 6, Side::S)]
+            c.can_place_room(RoomSize::Small, 14, 10, cost(60, 0)),
+            Err(Reason::Need(cost(60, 1)))
         );
-        assert_eq!(l.doors(&docks[1]).collect::<Vec<_>>(), [(6, 6, Side::S)]);
-        let slots = l.build_slots();
-        // Bridge E and Crew Quarters W both face (3,1); Crew Quarters E
-        // faces (6,1); Dock B's E socket faces (8,6).
-        for s in [(3, 1), (6, 1), (8, 6), (3, 7), (7, 7), (0, 3), (3, 2)] {
-            assert!(slots.contains(&s), "{s:?} in {slots:?}");
+        let r = c.place_room(RoomSize::Small, 14, 10);
+        assert_eq!(c.rooms[r].build_left_ms, Some(5000));
+        let map = c.tile_map();
+        for t in [(17, 10), (18, 10), (14, 12), (14, 13)] {
+            assert_eq!(map.kind(t), TileKind::Doorway, "{t:?}");
+            // Shut while the room is being built.
+            assert!(!map.is_open_doorway(t), "{t:?}");
         }
-        assert!(!slots.contains(&(1, 3)));
-        assert!(slots.iter().all(|&(x, y)| l.cell(x, y) == Cell::Empty));
+        assert!(!c.reachable().contains(&(16, 12)));
+        assert_eq!(
+            c.can_place(ItemId::SalvageSorter, 19, 11, RICH, None),
+            Err(Reason::StillBeingBuilt)
+        );
+        assert!(!c.tick(4999));
+        assert!(c.tick(1));
+        assert!(c.rooms[r].finished());
+        assert!(c.reachable().contains(&(16, 12)));
+        assert!(c.tile_map().is_open_doorway((14, 12)));
+
+        assert_eq!(
+            c.can_place(ItemId::SalvageSorter, 19, 11, cost(120, 3), None),
+            Ok(())
+        );
+        let s = c.place(ItemId::SalvageSorter, 19, 11, None);
+        assert_eq!(c.items[s].front_strip(), [(19, 13), (20, 13)]);
+        assert_eq!(c.items[s].build_left_ms, Some(4000));
+        assert!(!c.has_finished(ItemId::SalvageSorter));
+        assert_eq!(
+            c.can_place(ItemId::CombatSimulator, 12, 9, RICH, None),
+            Ok(())
+        );
+        let m = c.place(ItemId::CombatSimulator, 12, 9, None);
+        assert_eq!(c.items[m].front_strip(), [(12, 11), (13, 11)]);
+        assert_eq!(c.validate(), Ok(()));
+        assert!(c.tick(4000));
+        assert!(c.has_finished(ItemId::SalvageSorter) && c.has_finished(ItemId::CombatSimulator));
+        assert!(!c.tick(1000));
+        assert_eq!(c.validate(), Ok(()));
+        assert_eq!(c.refund(), cost(60 + 120 + 200, 1 + 3 + 6));
     }
 
     #[test]
-    fn spec_example_spots_are_legal() {
-        let mut l = CarrierLayout::starting();
-        // The Salvage Bay at (9,5) needs its corridor at (8,6) first.
+    fn sites_tick_together_and_cancel_with_a_full_refund() {
+        let mut c = Carrier::starting();
+        c.place_room(RoomSize::Large, 21, 5);
+        let s = c.place(ItemId::Stool, 2, 3, None);
+        assert_eq!(c.items[s].build_left_ms, Some(2000));
+        // An item site already blocks its tile.
         assert_eq!(
-            l.can_place(Piece::Room(RoomId::SalvageBay), 9, 5),
-            Err(PlaceError::MustConnect)
+            c.can_place(ItemId::Stool, 2, 3, RICH, None),
+            Err(Reason::Blocked)
         );
-        assert_eq!(l.can_place(Piece::Corridor, 8, 6), Ok(()));
-        l.place(Piece::Corridor, 8, 6);
-        // Opens west to the Dock's E door; east once the bay is there.
-        assert_eq!(l.mask(8, 6).name(), "w");
-        assert_eq!(l.can_place(Piece::Room(RoomId::SalvageBay), 9, 5), Ok(()));
-        l.place(Piece::Room(RoomId::SalvageBay), 9, 5);
-        assert_eq!(l.mask(8, 6).name(), "ew");
-        assert!(l.connected());
-        // Training Room at (7,0) off a corridor at (6,1).
-        l.place(Piece::Corridor, 6, 1);
-        assert_eq!(l.mask(6, 1).name(), "w");
-        assert_eq!(l.can_place(Piece::Room(RoomId::TrainingRoom), 7, 0), Ok(()));
-        l.place(Piece::Room(RoomId::TrainingRoom), 7, 0);
-        assert_eq!(l.mask(6, 1).name(), "ew");
-        assert_eq!(l.validate(), Ok(()));
+        assert_eq!(c.can_move(s, 2, 2, None), Err(Reason::StillBeingBuilt));
+        assert!(c.tick(2000));
+        assert_eq!(
+            c.rooms
+                .iter()
+                .find(|r| r.size == RoomSize::Large && !r.starter)
+                .unwrap()
+                .build_left_ms,
+            Some(6000)
+        );
+        let r = c.rooms.iter().position(|r| (r.x, r.y) == (21, 5)).unwrap();
+        assert_eq!(c.can_remove_room(r), Ok(cost(220, 4)));
+        assert_eq!(c.remove_room(r), cost(220, 4));
+        let s = c.place(ItemId::SalvageSorter, 1, 2, None);
+        assert_eq!(c.can_remove(s), Ok(cost(120, 3)));
+        assert_eq!(c.remove(s), cost(120, 3));
+        assert_eq!(c.validate(), Ok(()));
     }
 
     #[test]
-    fn every_place_reason() {
-        let mut l = CarrierLayout::starting();
+    fn room_placement_reasons() {
+        let c = Carrier::starting();
         assert_eq!(
-            l.can_place(Piece::Corridor, -1, 3),
-            Err(PlaceError::OutsideHull)
+            c.can_place_room(RoomSize::Small, 30, 0, RICH),
+            Err(Reason::OutsideHull)
         );
         assert_eq!(
-            l.can_place(Piece::Room(RoomId::SalvageBay), 11, 6),
-            Err(PlaceError::OutsideHull)
-        );
-        assert_eq!(l.can_place(Piece::Corridor, 2, 3), Err(PlaceError::Blocked));
-        assert_eq!(l.can_place(Piece::Corridor, 5, 5), Err(PlaceError::Blocked));
-        assert_eq!(
-            l.can_place(Piece::Room(RoomId::SalvageBay), 3, 1),
-            Err(PlaceError::Blocked)
-        );
-        // Next to a room wall without a socket: no connection.
-        assert_eq!(
-            l.can_place(Piece::Corridor, 8, 4),
-            Err(PlaceError::MustConnect)
+            c.can_place_room(RoomSize::Large, 0, 12, RICH),
+            Err(Reason::OutsideHull)
         );
         assert_eq!(
-            l.can_place(Piece::Corridor, 10, 0),
-            Err(PlaceError::MustConnect)
-        );
-        // In front of a free socket: connects.
-        assert_eq!(l.can_place(Piece::Corridor, 3, 1), Ok(()));
-        // Beside a corridor: connects.
-        assert_eq!(l.can_place(Piece::Corridor, 0, 3), Ok(()));
-        l.place(Piece::Corridor, 8, 6);
-        l.place(Piece::Room(RoomId::SalvageBay), 9, 5);
-        l.place(Piece::Corridor, 6, 1);
-        assert_eq!(
-            l.can_place(Piece::Room(RoomId::SalvageBay), 7, 0),
-            Err(PlaceError::AlreadyBuilt)
+            c.can_place_room(RoomSize::Small, -1, 16, RICH),
+            Err(Reason::OutsideHull)
         );
         assert_eq!(
-            l.can_place(Piece::Room(RoomId::Dock), 7, 0),
-            Err(PlaceError::AlreadyBuilt)
+            c.can_place_room(RoomSize::Small, 1, 1, RICH),
+            Err(Reason::OverlapsRoom)
+        );
+        // Floor over another room's wall.
+        assert_eq!(
+            c.can_place_room(RoomSize::Small, 13, 10, RICH),
+            Err(Reason::OverlapsRoom)
         );
         assert_eq!(
-            PlaceError::CantAfford(cost(120, 3)).to_string(),
-            "Need 120 cr + 3 VC"
+            c.can_place_room(RoomSize::Small, 26, 14, RICH),
+            Err(Reason::MustShareWall)
+        );
+        // Only a corner, or a single facing tile, doesn't connect.
+        assert_eq!(
+            c.can_place_room(RoomSize::Small, 21, 10, RICH),
+            Err(Reason::MustShareWall)
         );
         assert_eq!(
-            PlaceError::MustConnect.to_string(),
-            "Must connect to a corridor"
+            c.can_place_room(RoomSize::Small, 21, 8, RICH),
+            Err(Reason::MustShareWall)
         );
-    }
-
-    #[test]
-    fn a_room_connects_only_through_a_socket() {
-        let mut l = CarrierLayout::starting();
-        l.place(Piece::Corridor, 8, 6);
-        // (9,6) would put the bay's W socket (0,1) at (9,7) facing (8,7):
-        // no corridor there, and its N socket faces (9,5): empty.
+        // East of the Workshop: the doorway at (21,8)-(21,9) would land
+        // next to a crate stack; one row up it's clear.
+        let crate_stack = c.item_at((20, 9), Layer::Object).unwrap();
         assert_eq!(
-            l.can_place(Piece::Room(RoomId::SalvageBay), 9, 6),
-            Err(PlaceError::MustConnect)
+            c.can_place_room(RoomSize::Small, 21, 7, RICH),
+            Err(Reason::ClearDoorway(vec![crate_stack]))
         );
-        // (9,3): sockets face (9,2), (11,3), (10,5), (8,4): none a corridor,
-        // even though (8,6) is near.
+        assert_eq!(c.can_place_room(RoomSize::Small, 21, 5, RICH), Ok(()));
         assert_eq!(
-            l.can_place(Piece::Room(RoomId::SalvageBay), 9, 3),
-            Err(PlaceError::MustConnect)
-        );
-    }
-
-    #[test]
-    fn demolish_refuses_starting_pieces_and_cutting_things_off() {
-        let mut l = CarrierLayout::starting();
-        assert_eq!(l.can_demolish(3, 4), Err(DemolishError::Starting));
-        assert_eq!(l.can_demolish(5, 5), Err(DemolishError::Starting));
-        assert_eq!(l.can_demolish(10, 0), Err(DemolishError::Nothing));
-        l.place(Piece::Corridor, 8, 6);
-        l.place(Piece::Room(RoomId::SalvageBay), 9, 5);
-        // The corridor holds the bay on.
-        assert_eq!(l.can_demolish(8, 6), Err(DemolishError::WouldDisconnect));
-        assert_eq!(
-            DemolishError::WouldDisconnect.to_string(),
-            "Something would be cut off"
-        );
-        // Any cell of the room demolishes the room.
-        assert_eq!(l.can_demolish(10, 6), Ok(Piece::Room(RoomId::SalvageBay)));
-        assert_eq!(l.demolish(10, 6), Some(Piece::Room(RoomId::SalvageBay)));
-        assert_eq!(l.can_demolish(8, 6), Ok(Piece::Corridor));
-        l.demolish(8, 6);
-        assert_eq!(l, CarrierLayout::starting());
-    }
-
-    #[test]
-    fn a_dead_end_corridor_chain_demolishes_from_the_end() {
-        let mut l = CarrierLayout::starting();
-        l.place(Piece::Corridor, 3, 7);
-        l.place(Piece::Corridor, 2, 7);
-        assert_eq!(l.can_demolish(3, 7), Err(DemolishError::WouldDisconnect));
-        assert_eq!(l.can_demolish(2, 7), Ok(Piece::Corridor));
-    }
-
-    #[test]
-    fn validation_catches_every_broken_layout() {
-        let start = CarrierLayout::starting();
-        let with = |f: &dyn Fn(&mut CarrierLayout)| {
-            let mut l = start.clone();
-            f(&mut l);
-            l.validate()
-        };
-        assert_eq!(
-            with(&|l| l.rooms.push(PlacedRoom {
-                id: RoomId::Unknown,
-                x: 9,
-                y: 0
-            })),
-            Err(LayoutError::UnknownRoom)
-        );
-        assert_eq!(
-            with(&|l| l.corridors.push((12, 0))),
-            Err(LayoutError::OutsideHull)
-        );
-        assert_eq!(
-            with(&|l| l.rooms.push(PlacedRoom {
-                id: RoomId::SalvageBay,
-                x: 4,
-                y: 4
-            })),
-            Err(LayoutError::Overlap)
-        );
-        assert_eq!(
-            with(&|l| l.corridors.retain(|&c| c != (2, 3))),
-            Err(LayoutError::MissingStart)
-        );
-        assert_eq!(
-            with(&|l| {
-                l.corridors.extend([(8, 6), (8, 5), (8, 4), (8, 3)]);
-                l.rooms.push(PlacedRoom {
-                    id: RoomId::SalvageBay,
-                    x: 9,
-                    y: 5,
-                });
-                l.rooms.push(PlacedRoom {
-                    id: RoomId::SalvageBay,
-                    x: 9,
-                    y: 2,
-                });
-            }),
-            Err(LayoutError::Duplicate)
-        );
-        assert_eq!(
-            with(&|l| l.corridors.push((10, 0))),
-            Err(LayoutError::Disconnected)
+            c.can_place_room(RoomSize::Large, 21, 5, cost(219, 4))
+                .unwrap_err()
+                .to_string(),
+            "Need 220 cr + 4 VC"
         );
     }
 
     #[test]
-    fn refund_counts_non_starting_pieces_only() {
-        let mut l = CarrierLayout::starting();
-        assert_eq!(l.refund(), cost(0, 0));
-        l.corridors.push((8, 6));
-        l.rooms.push(PlacedRoom {
-            id: RoomId::SalvageBay,
-            x: 9,
-            y: 5,
-        });
-        l.rooms.push(PlacedRoom {
-            id: RoomId::Unknown,
-            x: 0,
-            y: 0,
-        });
-        assert_eq!(l.refund(), cost(130, 3));
-    }
-
-    #[test]
-    fn layout_serializes_like_the_spec() {
-        let mut l = CarrierLayout::starting();
-        l.place(Piece::Corridor, 8, 6);
-        l.place(Piece::Room(RoomId::SalvageBay), 9, 5);
-        let json = serde_json::to_string(&l).unwrap();
+    fn a_new_doorway_must_land_clear() {
+        // An object on the far side's clearance tile.
+        let mut c = Carrier::starting();
+        let stool = c.place(ItemId::Stool, 17, 9, None);
+        c.tick(2000);
         assert_eq!(
-            json,
-            r#"{"rooms":[{"id":"bridge","x":0,"y":1},{"id":"crew_quarters","x":4,"y":1},{"id":"dock","x":4,"y":4},{"id":"dock","x":6,"y":4},{"id":"salvage_bay","x":9,"y":5},{"id":"workshop","x":0,"y":4}],"corridors":[[1,3],[2,3],[3,3],[3,4],[3,5],[3,6],[4,3],[4,7],[5,7],[6,7],[8,6]]}"#
+            c.can_place_room(RoomSize::Small, 14, 10, RICH),
+            Err(Reason::ClearDoorway(vec![stool]))
         );
-        let back: CarrierLayout = serde_json::from_str(&json).unwrap();
-        assert_eq!(back, l);
-        let odd: CarrierLayout =
-            serde_json::from_str(r#"{"rooms":[{"id":"hangar_bay","x":1,"y":1}],"corridors":[]}"#)
-                .unwrap();
-        assert_eq!(odd.rooms[0].id, RoomId::Unknown);
+        // A rug there is fine.
+        c.remove(stool);
+        c.place(ItemId::Rug, 17, 8, None);
+        c.tick(2000);
+        assert_eq!(c.can_place_room(RoomSize::Small, 14, 10, RICH), Ok(()));
+
+        // A wall-mounted item on the new doorway tile itself: room D east
+        // of the Workshop, a wall light on its north wall, then a room
+        // north of D whose doorway lands on that light.
+        let mut c = Carrier::starting();
+        c.place_room(RoomSize::Small, 21, 5);
+        assert_eq!(
+            c.can_place(ItemId::WallLight, 24, 5, RICH, None),
+            Err(Reason::StillBeingBuilt)
+        );
+        c.tick(5000);
+        assert_eq!(c.can_place(ItemId::WallLight, 24, 5, RICH, None), Ok(()));
+        let light = c.place(ItemId::WallLight, 24, 5, None);
+        assert_eq!(
+            c.can_place_room(RoomSize::Small, 21, 0, RICH),
+            Err(Reason::ClearDoorway(vec![light]))
+        );
+        assert_eq!(
+            Reason::ClearDoorway(vec![light]).to_string(),
+            "Clear the doorway first"
+        );
     }
 
-    /// Every cell of the network can be walked to from the Bridge spawn.
     #[test]
-    fn the_pilot_can_walk_everywhere_in_the_network() {
-        let mut l = CarrierLayout::starting();
-        l.place(Piece::Corridor, 8, 6);
-        l.place(Piece::Room(RoomId::SalvageBay), 9, 5);
-        let rects = l.walkable();
-        // Flood fill on an 8 px lattice with 8 px steps.
-        let step = 8.0;
-        let start = (1.5 * CELL, 1.5 * CELL + 16.0);
-        assert!(can_stand(&rects, start.0, start.1));
-        let key = |p: (f32, f32)| ((p.0 / step).round() as i32, (p.1 / step).round() as i32);
-        let mut seen = BTreeSet::from([key(start)]);
-        let mut stack = vec![start];
-        let mut cells = BTreeSet::new();
-        while let Some(p) = stack.pop() {
-            cells.insert(cell_at(p.0, p.1));
-            for d in [(step, 0.0), (-step, 0.0), (0.0, step), (0.0, -step)] {
-                let q = (p.0 + d.0, p.1 + d.1);
-                if can_stand(&rects, q.0, q.1) && seen.insert(key(q)) {
-                    stack.push(q);
-                }
-            }
+    fn room_removal_reasons() {
+        let mut c = Carrier::starting();
+        assert_eq!(c.can_remove_room(0), Err(Reason::StarterPiece));
+        c.place_room(RoomSize::Small, 21, 5);
+        c.place_room(RoomSize::Small, 28, 5);
+        c.tick(5000);
+        let d = c.rooms.iter().position(|r| (r.x, r.y) == (21, 5)).unwrap();
+        let e = c.rooms.iter().position(|r| (r.x, r.y) == (28, 5)).unwrap();
+        // D links E to the rest.
+        assert_eq!(c.can_remove_room(d), Err(Reason::WouldCutOffRoom));
+        assert_eq!(c.can_remove_room(e), Ok(cost(60, 1)));
+        // A wall-mounted item on E's north wall face counts as inside.
+        let light = c.place(ItemId::WallLight, 30, 5, None);
+        assert_eq!(c.can_remove_room(e), Err(Reason::RoomNotEmpty));
+        c.remove(light);
+        let stool = c.place(ItemId::Stool, 31, 7, None);
+        assert_eq!(c.can_remove_room(e), Err(Reason::RoomNotEmpty));
+        c.remove(stool);
+        assert_eq!(c.remove_room(e), cost(60, 1));
+        assert_eq!(c.validate(), Ok(()));
+    }
+
+    #[test]
+    fn item_placement_reasons() {
+        let c = Carrier::starting();
+        let id = ItemId::Stool;
+        assert_eq!(
+            c.can_place(ItemId::CommandConsole, 1, 2, RICH, None),
+            Err(Reason::StarterPiece)
+        );
+        assert_eq!(
+            c.can_place(ItemId::Berth, 1, 2, RICH, None),
+            Err(Reason::StarterPiece)
+        );
+        assert_eq!(c.can_place(id, 0, 0, RICH, None), Err(Reason::NeedsFloor));
+        assert_eq!(c.can_place(id, 30, 18, RICH, None), Err(Reason::NeedsFloor));
+        assert_eq!(
+            c.can_place(id, 7, 2, RICH, None),
+            Err(Reason::KeepDoorwayClear)
+        );
+        assert_eq!(
+            c.can_place(id, 8, 2, RICH, None),
+            Err(Reason::KeepDoorwayClear)
+        );
+        assert_eq!(c.can_place(id, 10, 3, RICH, None), Err(Reason::Blocked));
+        assert_eq!(
+            c.can_place(id, 3, 2, RICH, None),
+            Err(Reason::KeepFrontClear)
+        );
+        assert_eq!(
+            c.can_place(id, 2, 3, RICH, Some((2, 3))),
+            Err(Reason::PilotInTheWay)
+        );
+        assert_eq!(
+            c.can_place(id, 2, 3, BROKE, None),
+            Err(Reason::Need(cost(10, 0)))
+        );
+        assert_eq!(Reason::Need(cost(10, 0)).to_string(), "Need 10 cr");
+        assert_eq!(c.can_place(id, 2, 3, RICH, Some((5, 5))), Ok(()));
+        // Rugs: floor layer, fine on a doorway's clearance, not on a doorway
+        // or another rug.
+        assert_eq!(c.can_place(ItemId::Rug, 12, 3, RICH, None), Ok(()));
+        assert_eq!(
+            c.can_place(ItemId::Rug, 13, 2, RICH, None),
+            Err(Reason::NeedsFloor)
+        );
+        assert_eq!(
+            c.can_place(ItemId::Rug, 11, 3, RICH, None),
+            Err(Reason::Blocked)
+        );
+        // Against a wall / on a wall.
+        assert_eq!(
+            c.can_place(ItemId::Locker, 2, 2, RICH, None),
+            Err(Reason::NeedsWallBehind)
+        );
+        assert_eq!(c.can_place(ItemId::Locker, 2, 1, RICH, None), Ok(()));
+        assert_eq!(
+            c.can_place(ItemId::WallLight, 3, 3, RICH, None),
+            Err(Reason::NeedsWallFace)
+        );
+        assert_eq!(
+            c.can_place(ItemId::WallLight, 0, 2, RICH, None),
+            Err(Reason::NeedsWallFace)
+        );
+        assert_eq!(
+            c.can_place(ItemId::WallLight, 5, 0, RICH, None),
+            Err(Reason::Blocked)
+        );
+        assert_eq!(c.can_place(ItemId::WallLight, 1, 5, RICH, None), Ok(()));
+        // A station's own front strip: blocked, or on a wall.
+        let mut d = c.clone();
+        d.place(id, 1, 4, None);
+        assert_eq!(
+            d.can_place(ItemId::SalvageSorter, 1, 2, RICH, None),
+            Err(Reason::KeepFrontClear)
+        );
+        assert_eq!(
+            c.can_place(ItemId::SalvageSorter, 1, 3, RICH, None),
+            Err(Reason::KeepFrontClear)
+        );
+        assert_eq!(c.can_place(ItemId::SalvageSorter, 1, 2, RICH, None), Ok(()));
+        d.place(ItemId::SalvageSorter, 9, 12, None);
+        assert_eq!(
+            d.can_place(ItemId::SalvageSorter, 1, 2, RICH, None),
+            Err(Reason::AlreadyBuilt)
+        );
+    }
+
+    #[test]
+    fn edits_that_cut_off_a_station_are_refused() {
+        // Box the Command Console's front strip in.
+        let mut c = Carrier::starting();
+        for (x, y) in [(2, 2), (5, 2), (3, 3)] {
+            assert_eq!(c.can_place(ItemId::Stool, x, y, RICH, None), Ok(()));
+            c.place(ItemId::Stool, x, y, None);
         }
-        for &(x, y) in &l.corridors {
-            assert!(cells.contains(&(x, y)), "corridor {x},{y} unreachable");
-        }
-        for r in &l.rooms {
-            assert!(cells.contains(&(r.x, r.y + 1)), "{:?} unreachable", r.id);
-        }
-        // Never outside the network.
-        assert!(cells.iter().all(|&(x, y)| l.cell(x, y) != Cell::Empty));
-    }
+        c.tick(2000);
+        let reason = c.can_place(ItemId::Stool, 4, 3, RICH, None).unwrap_err();
+        assert_eq!(reason, Reason::WouldCutOff(ItemId::SampleAnalyzer));
+        assert_eq!(reason.to_string(), "Would cut off the Sample Analyzer");
+        // Moving a stool there is refused the same way.
+        let s = c.item_at((3, 3), Layer::Object).unwrap();
+        assert_eq!(c.can_move(s, 4, 3, None), Ok(()));
+        let lamp = c.item_at((6, 1), Layer::Object).unwrap();
+        assert_eq!(
+            c.can_move(lamp, 4, 3, None),
+            Err(Reason::WouldCutOff(ItemId::SampleAnalyzer))
+        );
 
-    /// A v3 save's layout: the old 4 × 3 two-berth Dock at (4,4).
-    fn v3_layout(extra_corridors: &[(i32, i32)]) -> CarrierLayout {
-        let mut corridors = vec![(1, 3), (2, 3), (3, 3), (4, 3), (3, 4), (3, 5), (3, 6)];
-        corridors.extend_from_slice(extra_corridors);
-        let mut l = CarrierLayout {
-            rooms: STARTING_ROOMS[..4].to_vec(),
-            corridors,
-        };
-        l.normalize();
-        l
+        // A saved stool on a doorway's clearance fails validation.
+        let mut c = Carrier::starting();
+        for (x, y) in [(17, 6), (17, 7)] {
+            c.place(ItemId::Stool, x, y, None);
+        }
+        assert_eq!(
+            c.validate(),
+            Err(LayoutError::BadItem(
+                c.item_at((17, 6), Layer::Object).unwrap(),
+                Reason::KeepDoorwayClear
+            ))
+        );
     }
 
     #[test]
-    fn a_v3_dock_splits_into_two_connected_docks() {
-        let mut l = v3_layout(&[]);
-        assert_eq!(l.split_v3_dock(), cost(0, 0));
-        assert_eq!(l, CarrierLayout::starting());
-        // The spec's Salvage Bay example still hangs off the east Dock, and
-        // a player corridor where the new one goes is refunded.
-        let mut l = v3_layout(&[(8, 6), (3, 7), (4, 7)]);
-        l.rooms.push(PlacedRoom {
-            id: RoomId::SalvageBay,
-            x: 9,
-            y: 5,
-        });
-        assert_eq!(l.split_v3_dock(), cost(10, 0));
-        assert_eq!(l.validate(), Ok(()));
-        assert_eq!(l.mask(8, 6).name(), "ew");
-        assert_eq!(l.refund(), cost(120 + 10 + 10, 3));
+    fn moving_and_removing_items() {
+        let mut c = Carrier::starting();
+        let console = c.find(ItemId::CommandConsole).unwrap();
+        assert_eq!(c.can_remove(console), Err(Reason::MoveItInstead));
+        assert_eq!(Reason::MoveItInstead.to_string(), "Move it instead");
+        assert_eq!(c.can_move(console, 1, 1, None), Err(Reason::Blocked));
+        // Its own tiles count as free while held.
+        assert_eq!(c.can_move(console, 4, 1, None), Ok(()));
+        assert_eq!(
+            c.can_move(console, 2, 1, Some((2, 1))),
+            Err(Reason::PilotInTheWay)
+        );
+        let berth = c.berth_of(KITE_ID).unwrap();
+        assert_eq!(c.can_remove(berth), Err(Reason::MoveItInstead));
+        assert_eq!(c.can_move(berth, 2, 7, None), Ok(()));
+        let berth = c.move_item(berth, 2, 7);
+        assert_eq!(c.items[berth].ship.as_deref(), Some(KITE_ID));
+        assert!(c.items[berth].starter);
+        assert_eq!(c.validate(), Ok(()));
+        // Starter furniture refunds nothing; bought pieces refund in full.
+        let plant = c.item_at((1, 1), Layer::Object).unwrap();
+        assert_eq!(c.can_remove(plant), Ok(BROKE));
+        let lamp = c.place(ItemId::FloorLamp, 2, 3, None);
+        c.tick(2000);
+        let lamp = c.move_item(lamp, 5, 4);
+        assert_eq!(c.can_remove(lamp), Ok(cost(15, 0)));
     }
 
     #[test]
-    fn click_to_move_paths_around_walls() {
-        let l = CarrierLayout::starting();
-        let rects = l.walkable();
-        // Bridge spawn to Dock B's walkway: out the Bridge's S door, down
-        // the corridor, through Dock A and its S door.
-        let from = (1.5 * CELL, 1.5 * CELL);
-        let to = (7.0 * CELL, 6.5 * CELL);
+    fn walkable_rects_cover_the_walkable_tiles() {
+        let c = Carrier::starting();
+        let rects = c.walkable();
+        let area: f32 = rects.iter().map(|r| (r.x1 - r.x0) * (r.y1 - r.y0)).sum();
+        let map = c.tile_map();
+        let walk = c.walkable_tiles(&map, &c.occupancy(None));
+        assert_eq!(area, walk.len() as f32 * TILE * TILE);
+        assert!(rects.len() < walk.len() / 2, "{}", rects.len());
+        let centre = |(x, y): Tile| ((x as f32 + 0.5) * TILE, (y as f32 + 0.5) * TILE);
+        let console = &c.items[c.find(ItemId::CommandConsole).unwrap()];
+        let from = console.use_point();
+        assert!(can_stand(&rects, from.0, from.1));
+        // Not on a berth, a wall or bare hull.
+        for t in [(3, 9), (0, 3), (30, 18)] {
+            let p = centre(t);
+            assert!(!can_stand(&rects, p.0, p.1), "{t:?}");
+        }
+        // Through two doorways to the Engineer.
+        let to = centre(c.crew_post(Crew::Engineer).unwrap());
         let path = find_path(&rects, from, to).expect("reachable");
         assert_eq!(*path.last().unwrap(), to);
-        assert!(path.len() >= 4, "{path:?}");
-        let mut at = from;
-        for &p in &path {
-            assert!(clear_line(&rects, at, p), "{at:?} -> {p:?}");
-            at = p;
-        }
-        // In a straight line: one step.
-        assert_eq!(
-            find_path(&rects, from, (2.0 * CELL, 1.6 * CELL))
-                .unwrap()
-                .len(),
-            1
-        );
-        // On a wall: the nearest floor. In deep space: nowhere.
-        let snapped = find_path(&rects, from, (1.5 * CELL, 1.0 * CELL + 10.0)).unwrap();
-        let end = *snapped.last().unwrap();
-        assert!(can_stand(&rects, end.0, end.1));
-        assert_eq!(find_path(&rects, from, (10.5 * CELL, 0.5 * CELL)), None);
+        // A room under construction isn't walkable yet.
+        let mut c = c;
+        c.place_room(RoomSize::Small, 14, 10);
+        let p = centre((16, 12));
+        assert!(!can_stand(&c.walkable(), p.0, p.1));
+        c.tick(5000);
+        assert!(can_stand(&c.walkable(), p.0, p.1));
     }
 
     #[test]
-    fn walls_stop_walking_and_the_pilot_slides_along_them() {
-        let l = CarrierLayout::starting();
-        let rects = l.walkable();
-        // In the Bridge, walking north into the back wall.
-        let p = (1.5 * CELL, 1.0 * CELL + BACK_WALL + PILOT_RADIUS);
-        assert_eq!(walk(&rects, p, (0.0, -5.0)), p);
-        // Diagonally into it: slides east.
-        assert_eq!(walk(&rects, p, (4.0, -4.0)), (p.0 + 4.0, p.1));
+    fn validation_catches_broken_layouts() {
+        let ok = Carrier::starting();
+        let mut c = ok.clone();
+        c.items.push(Item::new(ItemId::Unknown, 2, 3));
+        assert_eq!(c.validate(), Err(LayoutError::UnknownId));
+        let mut c = ok.clone();
+        c.rooms.push(Room::new(RoomSize::Small, 2, 2));
+        assert!(matches!(c.validate(), Err(LayoutError::BadRoom(_))));
+        let mut c = ok.clone();
+        c.rooms.push(Room::new(RoomSize::Small, 30, 18));
+        assert!(matches!(c.validate(), Err(LayoutError::BadRoom(_))));
+        let mut c = ok.clone();
+        c.rooms.push(Room::new(RoomSize::Small, 26, 14));
+        c.normalize();
+        assert!(matches!(c.validate(), Err(LayoutError::Disconnected(_))));
+        let mut c = ok.clone();
+        c.rooms[0].starter = false;
+        assert_eq!(c.validate(), Err(LayoutError::MissingStarterRoom));
+        let mut c = ok.clone();
+        c.items.push(Item::starter(ItemId::UpgradeBench, 1, 1));
+        assert_eq!(c.validate(), Err(LayoutError::Count(ItemId::UpgradeBench)));
+        let mut c = ok.clone();
+        let b = c.berth_of(BULWARK_ID).unwrap();
+        c.items[b].ship = Some(KITE_ID.into());
+        assert_eq!(c.validate(), Err(LayoutError::Count(ItemId::Berth)));
+        c.items[b].ship = Some("dreadnought".into());
+        assert_eq!(c.validate(), Err(LayoutError::Count(ItemId::Berth)));
+        let mut c = ok.clone();
+        c.items.push(Item::new(ItemId::SalvageSorter, 1, 2));
+        c.items.push(Item::new(ItemId::SalvageSorter, 9, 12));
+        assert_eq!(c.validate(), Err(LayoutError::Count(ItemId::SalvageSorter)));
+        // Two items on one tile of one layer.
+        let mut c = ok.clone();
+        c.items.push(Item::new(ItemId::Stool, 13, 1));
+        c.normalize();
+        assert!(matches!(
+            c.validate(),
+            Err(LayoutError::BadItem(_, Reason::Blocked))
+        ));
+        // An item in a room that is still being built.
+        let mut c = ok.clone();
+        c.place_room(RoomSize::Small, 14, 10);
+        c.items.push(Item::new(ItemId::Stool, 16, 12));
+        c.normalize();
+        assert!(matches!(
+            c.validate(),
+            Err(LayoutError::BadItem(_, Reason::StillBeingBuilt))
+        ));
+        // Unreachable: a sealed-off Upgrade Bench (stools on the bench's
+        // strip neighbours and across the Workshop).
+        let mut c = ok.clone();
+        for x in 15..=20 {
+            c.items.push(Item::new(ItemId::Stool, x, 8));
+        }
+        c.items.push(Item::new(ItemId::Stool, 17, 7));
+        c.normalize();
+        // (15,8) is the Hangar doorway's clearance tile.
+        assert!(matches!(
+            c.validate(),
+            Err(LayoutError::BadItem(_, Reason::KeepDoorwayClear))
+        ));
+    }
+
+    #[test]
+    fn unreachable_station_fails_validation() {
+        // Fence the Sample Analyzer off: its strip (17,2)-(18,2), neighbours
+        // (16,2), (19,2) and the row below. Hydro planter at (19,1).
+        let mut c = Carrier::starting();
+        for t in [(16, 2), (19, 2), (17, 3), (18, 3)] {
+            c.items.push(Item::new(ItemId::Stool, t.0, t.1));
+        }
+        c.normalize();
+        let a = c.find(ItemId::SampleAnalyzer).unwrap();
+        assert_eq!(c.validate(), Err(LayoutError::Unreachable(a)));
+    }
+
+    #[test]
+    fn catalogue_matches_the_spec() {
+        assert_eq!(CATALOGUE.len(), 25);
+        let keys: BTreeSet<_> = CATALOGUE.iter().map(|d| d.key).collect();
+        assert_eq!(keys.len(), 25);
+        for d in &CATALOGUE {
+            // The serde name is the key.
+            assert_eq!(
+                serde_json::to_string(&d.id).unwrap(),
+                format!("\"{}\"", d.key)
+            );
+            let secs = if d.station() { 4 } else { 2 };
+            assert_eq!(d.build_seconds, secs, "{}", d.key);
+            assert_eq!(
+                d.layer == Layer::Wall,
+                d.placement == Placement::OnWall,
+                "{}",
+                d.key
+            );
+            if !d.station() {
+                assert_eq!(d.cost.void_crystal, 0, "{}", d.key);
+            }
+        }
+        assert_eq!(ItemId::SalvageSorter.def().unwrap().cost, cost(120, 3));
+        assert_eq!(ItemId::CombatSimulator.def().unwrap().cost, cost(200, 6));
+        assert_eq!(ItemId::Berth.def().unwrap().size, (4, 4));
+        assert_eq!(ItemId::Rug.def().unwrap().category, Category::Decor);
+        assert_eq!(ItemId::WallLight.def().unwrap().category, Category::Decor);
+        assert_eq!(ItemId::Locker.def().unwrap().category, Category::Furniture);
+        assert_eq!(RoomSize::Small.cost(), cost(60, 1));
+        assert_eq!(RoomSize::Large.cost(), cost(220, 4));
+        let unknown: ItemId = serde_json::from_str("\"jacuzzi\"").unwrap();
+        assert_eq!(unknown, ItemId::Unknown);
     }
 }
