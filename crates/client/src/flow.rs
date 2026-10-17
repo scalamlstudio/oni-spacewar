@@ -15,7 +15,7 @@ use crate::carrier::{
 };
 use crate::hints::{Hint, Hints};
 use crate::input::{self, MovePress};
-use crate::layout::{Piece, RoomId};
+use crate::layout_v1::{Piece, RoomId};
 use crate::mission::{self, MissionOutcome, MissionRequest, MissionResult};
 use crate::rollback::SimWorld;
 use crate::save::{self, SaveError, SaveGame};
@@ -488,7 +488,7 @@ pub(crate) fn enter_carrier(
         }
     }
     let can_build = save.game.as_ref().is_some_and(|g| {
-        !g.carrier.has_built_room()
+        !g.carrier_rev1.has_built_room()
             && RoomId::BUILDABLE
                 .iter()
                 .filter_map(|r| r.cost())
@@ -1172,12 +1172,12 @@ fn autoplay_flow(
                     );
                     println!(
                         "autoplay: layout rooms {:?} corridors {:?}",
-                        g.carrier
+                        g.carrier_rev1
                             .rooms
                             .iter()
                             .map(|r| format!("{}@{},{}", r.id.id(), r.x, r.y))
                             .collect::<Vec<_>>(),
-                        g.carrier.corridors
+                        g.carrier_rev1.corridors
                     );
                 }
             }
@@ -1291,7 +1291,7 @@ fn autoplay_flow(
             // first affordable upgrade.
             let bay = Piece::Room(RoomId::SalvageBay);
             let can_build = save.game.as_ref().is_some_and(|g| {
-                !g.carrier.has_room(RoomId::SalvageBay)
+                !g.carrier_rev1.has_room(RoomId::SalvageBay)
                     && crate::workshop::can_afford(
                         g,
                         crate::workshop::Cost {

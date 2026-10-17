@@ -24,9 +24,9 @@ use crate::art::{self, icon_node, ContentImages};
 use crate::flow::{self, GameScreen, PauseMenu, SaveSlot, ScreenEntity};
 use crate::hints::{Hint, Hints};
 use crate::input::{self, MovePress};
-use crate::layout::{
-    self, room_px, CarrierLayout, Cell, Piece, PlaceError, PlacedRoom, Rect, RoomId, Side, CELL,
-    HULL_H, HULL_W,
+use crate::layout_v1::{
+    self as layout, room_px, CarrierLayout, Cell, Piece, PlaceError, PlacedRoom, Rect, RoomId,
+    Side, CELL, HULL_H, HULL_W,
 };
 use crate::mission::MissionRequest;
 use crate::save::{LastResult, SaveGame};
@@ -1523,7 +1523,7 @@ fn sync_layout(
     let layout = save
         .game
         .as_ref()
-        .map(|g| g.carrier.clone())
+        .map(|g| g.carrier_rev1.clone())
         .unwrap_or_default();
     if scene.drawn.as_ref() == Some(&layout) {
         return;
@@ -2175,7 +2175,7 @@ struct Ghost {
 
 /// The ghost for `tool` at `cell`.
 fn ghost(game: &SaveGame, tool: Tool, (x, y): (i32, i32)) -> Option<Ghost> {
-    let layout = &game.carrier;
+    let layout = &game.carrier_rev1;
     let image = |piece: Piece, x: i32, y: i32| match piece {
         Piece::Room(id) => id.content_id(),
         Piece::Corridor => {
@@ -2235,7 +2235,7 @@ fn build_preview(
     mut drawn: Local<Option<(Overlay, Option<(i32, i32)>, CarrierLayout)>>,
 ) {
     let game = save.game.clone().unwrap_or_default();
-    let key = (overlay.clone(), cursor.0, game.carrier.clone());
+    let key = (overlay.clone(), cursor.0, game.carrier_rev1.clone());
     if drawn.as_ref() == Some(&key) {
         return;
     }
@@ -2263,7 +2263,7 @@ fn build_preview(
     };
     if matches!(tool, Tool::Place(_)) {
         for (x, y) in game
-            .carrier
+            .carrier_rev1
             .build_slots()
             .into_iter()
             .filter(|&(x, y)| !under_ghost(x, y))
@@ -2397,7 +2397,7 @@ fn carrier_hints(
 
 /// The room the grid point `p` is in, if any.
 fn room_under(save: &SaveSlot, p: Vec2) -> Option<RoomId> {
-    let layout = &save.game.as_ref()?.carrier;
+    let layout = &save.game.as_ref()?.carrier_rev1;
     let (x, y) = layout::cell_at(p.x, p.y);
     match layout.cell(x, y) {
         Cell::Room(i) => Some(layout.rooms[i].id),
@@ -2496,7 +2496,7 @@ fn update_hud(
         .ok()
         .and_then(|tf| {
             let feet = grid(tf.translation.truncate());
-            let layout = &save.game.as_ref()?.carrier;
+            let layout = &save.game.as_ref()?.carrier_rev1;
             let (x, y) = layout::cell_at(feet.x, feet.y);
             Some(match layout.cell(x, y) {
                 Cell::Room(i) => {

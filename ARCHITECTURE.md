@@ -43,7 +43,8 @@ crates/
     src/main.rs         CLI (synctest / p2p modes), app + GGRS session setup, ICE (STUN/TURN) config
     src/art.rs          ContentImages: shipped images and fonts by stable content ID (manifest -> processed file), cached; linear sampler + CPU mip chain
     src/flow.rs         first-playable scene state machine, Title / Result UI, --autoplay QA driver: Title → Carrier → Battle → Result
-    src/layout.rs       2.5D carrier layout rules, no Bevy: hull grid, room catalogue, corridor masks, connectivity, can_place / can_demolish, walkable rects, click-to-move pathing, save validation + v3 Dock split
+    src/layout.rs       carrier interior Revision 3 rules, no Bevy, no clock: rooms (Small / Large shells) → derived tiles, walls, doorways + clearance; item catalogue; construction sites (`tick(ms)`); can_place_room / can_remove_room / can_place / can_move / can_remove with the spec's reasons; reachability, crew posts, walkable rects, validation, refunds; click-to-move pathing (A*)
+    src/layout_v1.rs    retired Revision 1 layout (rooms + corridors on 12 × 8 cells) the Carrier scene still runs on until the Revision 3 scene lands (TAKOAI-88, Engineer B), then deleted
     src/carrier.rs      Carrier scene: draws the layout, click-to-move / hold-to-drag + 8-direction WASD walking, crew dialogue, one-berth Docks (board a ship → briefing → launch), camera / zoom, Workshop panel (Upgrades + Build tabs), ONI-style Build mode screen (builder UI kit), clickable panels
     src/workshop.rs     Workshop rules: upgrade costs / levels / buy(), and Build: build_lock / can_build / build / demolish (full refund)
     src/hints.rs        one-time tutorial hints: triggers, display queue, seen IDs in the save
@@ -302,9 +303,36 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   screen all read it from there. The demo battle path steps the same
   `SimWorld` resource at a fixed rate without opening a network session; the
   `synctest` and `p2p` modes still use `RollbackPlugin` and GGRS.
-- **The 2.5D carrier** (`layout.rs` rules, `carrier.rs` scene; design/READINESS.md
-  § Carrier). Plain Bevy in `Update`, gated on `GameScreen::Carrier`; it owns
-  no sim state. `layout::CarrierLayout` (in the save) is rooms (id + anchor
+- **Carrier interior, Revision 3 core** (`layout.rs`, TAKOAI-90;
+  design/READINESS.md § Carrier). Pure client data, no Bevy and no clock.
+  `layout::Carrier` (the save's `carrier`) is `rooms` (size + north-west wall
+  anchor, `starter`, `build_left_ms`) and `items` (catalogue `ItemId` +
+  north-west footprint anchor, `ship` for berths, `starter`,
+  `build_left_ms`), kept sorted (`normalize`). Nothing else is stored:
+  `TileMap::new` derives hull / wall / floor / doorway tiles from the rooms,
+  one 2-tile doorway per shared straight wall with ≥ 2 facing floor tiles
+  (`doorway_between`), its clearance tiles, and which doorways are open (both
+  rooms finished). `CATALOGUE` holds every item's footprint, layer (object /
+  floor / wall), placement (free / against a wall / on a wall), category,
+  count rule, cost and `build_seconds`; everything faces S. The checks
+  (`can_place_room`, `can_remove_room`, `can_place`, `can_move`,
+  `can_remove`) return a `Reason` whose `Display` is the spec's text; each
+  applies the edit to a clone and re-checks reachability (4-neighbour flood
+  from the Command Console's front strip over walkable tiles: floor of a
+  finished room or an open doorway, no object) and, for rooms, room-graph
+  connectivity. Edits (`place_room`, `place`, `move_item`, ...) don't check
+  and return the new index after re-sorting. `tick(ms)` advances every
+  construction site. `walkable()` merges walkable tiles into rectangles for
+  the same `find_path` / `walk` / `can_stand` pathing; `crew_post` and
+  `Item::use_point` place crew and use points. `validate()` is the load-time
+  check; `refund()` is what a reset gives back. The pathing lives here and is
+  re-exported by `layout_v1` for the old scene. Floats appear only in the
+  pixel helpers; the rules are integer tile math (this is client code, not
+  `sim`).
+- **The 2.5D carrier, Revision 1** (`layout_v1.rs` rules, `carrier.rs` scene;
+  retired, still running until the Revision 3 scene lands). Plain Bevy in
+  `Update`, gated on `GameScreen::Carrier`; it owns no sim state.
+  `layout_v1::CarrierLayout` (in the save as the transitional `carrier_rev1`) is rooms (id + anchor
   cell) and corridor cells on a 12 × 8 hull of 128 px cells; grid y grows
   south and the scene flips it (`carrier::world` / `grid`). Corridors shape
   themselves from a 4-bit mask (`mask`, which picks the corridor art); a
@@ -488,21 +516,27 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   presenting and screenshots come out black. For the same reason (a fully
   covered window presents nothing), autoplay opens its window always-on-top
   and activates it once winit has created it (`bring_window_to_front`).
-- Save data is client-only JSON with an explicit schema version (now 4). It
+- Save data is client-only JSON with an explicit schema version (now 5). It
   stores credits, resources, purchased upgrades, selected battleship, tutorial
   hints seen, missions played and won, the last result and the carrier
-  layout, and is never read by `sim`; the client converts it into a
-  deterministic mission config before launch. Older versions load through
-  `save::migrate` (every field added since v1 has a serde default; v1 / v2
-  get the starting layout; a v3 layout's two-berth Dock is split in place
-  into two one-berth Docks plus the corridors that join them,
-  `CarrierLayout::split_v3_dock`, refunding any player corridor that became
-  a starting one); newer versions are refused. `migrate` then
-  validates the layout (`CarrierLayout::validate`: known rooms, inside the
-  hull, no overlaps, the starting pieces in place, each buildable room at
-  most once, connected); a broken one resets to the starting layout and
-  refunds every non-starting piece, with a warning. Rooms are written sorted
-  by id and corridors by (x, y). Saved on New Game, every return to the
+  (`carrier`: Revision 3 rooms and items), and is never read by `sim`; the
+  client converts it into a deterministic mission config before launch.
+  `save::from_json` loads any supported version: up to v4 the `carrier`
+  field is a Revision 1 layout, so it is taken out of the JSON and handed to
+  `save::migrate`, which refunds every player-built room and corridor in it
+  at Revision 1's prices (a v3 Dock is split first so its corridors count
+  right), sets the starting carrier and the `carrier_refit` flag (the hint
+  the Revision 3 scene shows once); newer versions are refused. `migrate`
+  then validates the carrier (`Carrier::validate`: known IDs, rooms inside
+  the hull and overlapping only on walls, every starter room, the station
+  counts and one berth per ship, connected to the Command Console's room,
+  every item's placement rule, layer, doorway clearance and front strip,
+  every front strip reachable); a broken one resets to the starting layout
+  and refunds every non-starter room and item (unknown IDs nothing), with a
+  warning. Transitional until the Revision 3 scene: `carrier_rev1` holds the
+  Revision 1 layout the scene still edits, validated and reset the old way;
+  its removal (TAKOAI-88, Engineer B) should refund what it holds. Saved on
+  New Game, every return to the
   Carrier, every Workshop purchase, build and demolish, Launch, the first
   showing of each hint, and Quit.
 
