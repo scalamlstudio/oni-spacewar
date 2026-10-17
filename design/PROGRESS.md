@@ -247,3 +247,26 @@ _Running log of what's decided and what's built. Newest entries on top._
   Carrier (catalogue, rules, starting layout, art spec, retired code and
   art, engineer scope) and OPEN_QUESTIONS.md. Starting-layout mock and
   checker: `design/art/carrier-furniture/`.
+
+## 2026-10-17
+
+- **Carrier interior Revision 3, approved** (TAKOAI-88). Wei's answers to
+  Revision 2: six stations is fine; building takes a few seconds as a
+  placeholder; every item faces S, so each is drawn once; rooms come back
+  as **two buildable shells, Small 6 × 4 and Large 13 × 9**, paid for with
+  resources, which open a doorway into a neighbouring room by themselves
+  (no doors or corridors to build); the starting-layout mock makes sense;
+  one deck for now, more decks later.
+- Mika's defaults on top: rooms have a one-tile wall ring and share walls;
+  a shared wall with at least 2 facing floor tiles gets one 2-tile doorway
+  at its middle, with a clear tile on each side; a new room must share a
+  wall with an existing one. Small Room 60 cr + 1 VC, Large Room 220 cr +
+  4 VC. Build times: Small Room 5 s, Large Room 8 s, station 4 s, furniture
+  2 s; sites build on a timer while the Carrier is open, saved across
+  missions. Hull 36 × 22 tiles (Overview zoom 0.5); the starting carrier
+  is four Small rooms and one Large Hangar in its north-west corner.
+- Painted floor tiles and doors from Revision 2 are dropped; save version
+  5 stores rooms and items, with tiles rebuilt from the rooms. Updated
+  DESIGN.md § Carrier and § Player, READINESS.md § Demo Spec › Carrier,
+  OPEN_QUESTIONS.md and the mock and checker in
+  `design/art/carrier-furniture/`.

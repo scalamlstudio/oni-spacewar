@@ -25,16 +25,18 @@ Carrier, result, menus and save live in `client`.
 - **Title screen:** New Game / Continue / Quit.
 - **Carrier scene:** the player walks the main character (the Pilot) freely
   around the carrier interior, talks to crew and uses work stations.
-  3/4 top-down (2.5D) tile grid of floor, walls and doors, furnished with
-  stations and furniture (Revision 2, TAKOAI-88, proposed 2026-10-12;
-  Revision 1's rooms and corridors are retired). Starting stations: Command
+  3/4 top-down (2.5D) tile grid of rooms, furnished with stations and
+  furniture (Revision 3, TAKOAI-88, approved 2026-10-17; Revision 1's
+  pre-drawn rooms and corridors are retired). Starting stations: Command
   Console, **Upgrade Bench** (spend credits and Void Crystal on upgrades),
   Sample Analyzer, and one **Berth** per battleship (pick a ship, hear the
   briefing, launch).
 - **Carrier building:** from anywhere aboard (B), ONI-style, the player
-  paints floor, adds doors and places, moves, rotates and removes stations
-  and furniture. Two stations have a real effect (Salvage Sorter, Combat
-  Simulator); about 19 furniture and decor pieces are cosmetic.
+  builds Small (6 × 4) and Large (13 × 9) rooms that open into their
+  neighbours by themselves, and places, moves and removes stations and
+  furniture, all facing S. Building takes a few seconds. Two stations have
+  a real effect (Salvage Sorter, Combat Simulator); 19 furniture and decor
+  pieces are cosmetic.
 - **Crew dialogue:** 2–3 short lines per crew member, each with one of the 11
   expression portraits; the Pilot gives the briefing at the Dock; one line per
   crew member reacts to the last mission's result.
@@ -84,27 +86,29 @@ seconds. Percent bonuses are integer math, rounded down._
 
 ### Carrier
 
-_Revision 2 (TAKOAI-88, 2026-10-12), **proposed, awaiting Wei's approval**.
-Wei's direction: stop drawing whole rooms; draw lots of furniture and work
-stations and let the player place them freely. The player now builds the
-interior from floor tiles and fills it with stations and furniture.
-Revision 1's rooms and corridors (TAKOAI-52/56/60) are retired; their spec
-is in git history. Until the follow-up issues land, the code still runs
-Revision 1. Mechanics: design/DESIGN.md § Carrier. Every value below is a
-default Mika chose; Wei can tune any of them._
+_Revision 3 (TAKOAI-88), **approved by Wei on 2026-10-17**. Wei's direction
+(2026-10-12): stop drawing whole rooms; draw lots of furniture and work
+stations and let the player place them freely. His answers on 2026-10-17:
+six stations; building takes a few seconds as a placeholder; everything
+faces S; rooms come back as **two buildable shells, 6 × 4 and 13 × 9**, that
+open into each other by themselves; one deck. Revision 1's pre-drawn rooms
+and corridors (TAKOAI-52/56/60) and Revision 2's painted floor tiles
+(2026-10-12) are both retired; their specs are in git history. Until the
+follow-up issues land, the code still runs Revision 1. Mechanics:
+design/DESIGN.md § Carrier. Wei set the decisions above; every number below
+is a default Mika chose, and Wei can tune any of them._
 
 #### Grid and view
 
 | Item | Value |
 |---|---|
 | View | 3/4 top-down, orthographic, axis-aligned square grid, light from the top left (unchanged) |
-| Tile | **64 × 64 world px** (art authored at 2×: 128 × 128). Half of Revision 1's 128 px cell, so furniture can be sized against the Pilot (about 70 px tall, so about 1.1 tiles) |
-| Hull | **24 × 16 tiles** (1536 × 1024 world px, the same area as Revision 1). Tile (0,0) is the north-west corner; x grows east, y grows south. The outer ring is **bulkhead**: it is always wall and can't take floor. Fixed size in the demo |
-| Tile kinds | **floor**, **door** or **wall**. Every tile the player hasn't floored is wall. There are no wall pieces to place: walls are whatever isn't floor |
-| Wall look | auto-tiled from a 4-bit mask of which neighbours are wall (or door). A wall tile with floor directly south shows its **48 px face** in the lower part of its own tile under a 16 px cap; any other wall shows only its top. A floor tile is therefore fully walkable: no back-wall band to subtract |
-| Door | a wall tile with floor on both sides along one axis and wall on both sides along the other, in other words a one-tile wall between two floors. It is walkable |
-| Draw order | floor and rug layer first, then wall faces, then wall-mounted items, then objects and characters sorted by the y of their feet (front edge) |
-| Zoom (screen px per world px) | Overview 0.65 (the whole hull fits 1280 × 720) · **Normal 1.0** (about 20 × 11 tiles on screen) · Close 1.5. Unchanged |
+| Tile | **64 × 64 world px** (art authored at 2×: 128 × 128). The Pilot is about 70 px tall, so about 1.1 tiles |
+| Hull | **36 × 22 tiles** (2304 × 1408 world px), one deck. Tile (0,0) is the north-west corner; x grows east, y grows south. Tiles outside every room are **bare hull**: drawn, not walkable, free for new rooms. Fixed size in the demo |
+| Tile kinds | **hull**, **wall**, **floor** or **doorway**, all derived from the rooms (§ Rooms). Nothing is painted tile by tile |
+| Wall look | auto-tiled from a 4-bit mask of which neighbours are wall. A wall tile with floor directly south shows its **48 px face** in the lower part of its own tile under a 16 px cap; any other wall shows only its top |
+| Draw order | hull and floor, rugs, wall faces, wall-mounted items, then objects and characters sorted by the y of their feet (front edge) |
+| Zoom (screen px per world px) | **Overview 0.5** (the whole hull fits 1280 × 720) · **Normal 1.0** (about 20 × 11 tiles on screen) · Close 1.5 |
 | Camera | follows the Pilot, clamped so it never shows more than 2 tiles past the hull. Build mode: Overview, pan with WASD / arrows at 600 screen px/s |
 | Behind the hull | the procedural nebula sky shared with the battle (TAKOAI-58) |
 
@@ -114,62 +118,90 @@ default Mika chose; Wei can tune any of them._
 |---|---|
 | Keys | unchanged from Revision 1 (TAKOAI-60/87): left click or press-and-hold on the floor walks there; left click on a crew member, a station or a docked ship walks up to it and uses it on arrival; WASD / arrows walk in 8 directions; E interacts; mouse wheel zooms; Esc pauses. **B** opens Build mode |
 | Speed, collider, Pilot size, Pilot art, panels | unchanged (160 px/s; 12 px circle at the feet; about 70 px tall; 8 directions; every panel clickable) |
-| Walkable | every floor tile and door tile that no **object**-layer item covers. A door tile is walkable in a 48 px lane along its passage axis |
-| Pathing | the same A\* over an 8 px lattice, string-pulled (`find_path`), fed by the walkable rectangles built from tiles instead of rooms and corridors |
-| Use point | each station has a **front strip** (see § Tiles and items); its use point is 24 px in front of the footprint's front edge, at the middle of the strip. A click on a station walks there and uses it |
+| Walkable | every floor and doorway tile of a **finished** room that no **object**-layer item covers. A room under construction isn't walkable and its doorways stay shut |
+| Pathing | the same A\* over an 8 px lattice, string-pulled (`find_path`), fed by walkable rectangles built from the tiles |
+| Use point | 24 px south of a station's front edge, at the middle of its front strip. A click on a station walks there and uses it |
 | Interact | the nearest use point or crew member within 56 px of the Pilot's feet: "E Use" / "E Talk" / "E Board" |
 | Crew posts | the Gunner stands at the Command Console, the Engineer at the Upgrade Bench and the Researcher at the Sample Analyzer: on the first walkable tile east of the post's front strip, else west of it, else south of its first tile. Recomputed after every edit, so crew follow their station when it moves |
 | Spawn | new game: the Command Console's use point · after a mission: the use point of the launched ship's berth |
-| HUD | Revision 1's room label goes (there are no rooms). Nothing replaces it |
+| HUD | Revision 1's room label goes. Rooms have no names in the demo |
 
-#### Tiles and items
+#### Rooms
 
-- The layout is a **tile map** (floor, door, wall) plus a list of **items**.
-  An item is a catalogue ID, an anchor tile (the north-west tile of its
-  footprint) and a **facing** (S, E, N, W; S means its front faces south,
-  toward the viewer).
-- **Footprint:** w × d tiles when facing S or N; turned to d × w when facing
-  E or W.
+A room is a rectangle of floor with a one-tile wall ring around it. The
+player builds rooms; walls and doorways come with them.
+
+| ID | Name | Floor | With walls | Cost | Build time |
+|---|---|---|---|---|---|
+| `small_room` | Small Room | **6 × 4** | 8 × 6 | 60 cr + 1 VC | 5 s |
+| `large_room` | Large Room | **13 × 9** | 15 × 11 | 220 cr + 4 VC | 8 s |
+
+- **Placing:** the room's anchor is its north-west wall tile. The whole
+  room, walls included, must lie inside the hull. It may overlap other
+  rooms only on wall tiles, which then become a **shared wall**. Its floor
+  can't cover another room's tiles.
+- **Connecting:** a new room must share a straight wall with at least one
+  existing room, with at least 2 floor tiles facing each other across it.
+  Every such shared wall gets **one doorway** automatically: 2 tiles wide, at
+  the middle of the facing stretch (rounded north or west). There are no
+  doors or gateways to build. Rooms that touch only at a corner or along
+  less than 2 tiles don't connect, and that alone isn't enough to place one.
+- **Doorway clearance:** the floor tile on each side of every doorway tile
+  stays free of objects (rugs are fine). Placing a room whose new doorway
+  would land on an object or a wall-mounted item is refused: "Clear the
+  doorway first", and the blocking items flash.
+- **Removing:** only an empty room (no item on its floor or on its walls'
+  faces), only one the player built, and only if every other room still
+  connects to the room holding the Command Console. Refunds in full. Rooms
+  don't move; to move one, remove it and build it again.
+- **Room types and bonuses:** none in the demo. A room is just space; what
+  makes it a bunk room or a lab is the furniture the player puts in it.
+  Labels and ONI-style room bonuses are deferred to TAKOAI-4 and need no
+  save change.
+- **More decks:** deferred (design/OPEN_QUESTIONS.md, ship size extension). The
+  demo has one deck.
+
+#### Items
+
+- An item is a catalogue ID and an anchor tile (the north-west tile of its
+  footprint). **Every item faces S** (toward the viewer), so there is no
+  rotation and each item is drawn once.
+- **Footprint:** w × d tiles (1 × 1, 2 × 1, 1 × 2, 2 × 2, 4 × 4).
 - **Layers.** Each tile holds at most one item per layer:
   - **object**: stations and most furniture. Blocks walking.
   - **floor**: rugs. Walkable; an object may stand on top of it.
   - **wall**: wall-mounted decor (screens, lights, racks). Hangs on a wall
     face. Never blocks.
 - **Placement rules**, one per catalogue item:
-  - **Free:** every footprint tile is floor (not door, not bulkhead) and the
-    item's layer is empty there.
-  - **Against a wall:** free, and every tile directly behind the footprint's
-    back edge is wall (not door).
+  - **Free:** every footprint tile is floor of a finished room (not a
+    doorway, not a doorway's clearance tile for objects) and the item's
+    layer is empty there. A footprint may span a doorway's two rooms only
+    if it is on the floor layer.
+  - **Against a wall:** free, and every tile directly north of the
+    footprint is wall (not a doorway). Since everything faces S, these items
+    stand along a room's north wall.
   - **On a wall:** every footprint tile is a wall tile with floor directly
-    south of it (a visible face) and an empty wall layer. Always faces S.
-- **Front strip:** every station has one, the row of tiles directly in front
-  of its footprint along its full width. These tiles must be floor or door
+    south of it (a visible face, so a north wall) and an empty wall layer.
+- **Front strip:** every station has one, the row of tiles directly south of
+  its footprint along its full width. These tiles must be floor or doorway
   and free of objects, and at least one of them must be reachable. No object
-  may be placed on any station's front strip, which keeps the use point
-  open.
+  may be placed on any station's front strip.
 - **Reachability:** the root is the Command Console's front strip. Every
   station's front strip must be reachable from the root by walking
   (4-neighbour over walkable tiles). An edit that breaks this is refused:
   "Would cut off the Upgrade Bench".
-- **Doors** stay valid only while the tiles on both sides are floor and the
-  tiles beside them are wall. Removing a floor tile next to a door, or
-  flooring a tile beside one, is refused ("A door needs floor on both
-  sides").
-- **Rooms are not tracked** in the demo. An enclosed area (bounded by walls
-  and doors) can be found from the tiles alone, so ONI-style room bonuses
-  ("a space with 2 beds and a locker is a Bunk Room") can come later without
-  changing the save. Room bonuses are deferred to TAKOAI-4 (economy).
 
 #### Item catalogue
 
 **Work stations** have a gameplay function. Every Revision 1 room maps to a
 station. Stations with a fixed count can be moved but not removed or bought.
+Six stations is the batch (Wei, 2026-10-17); more would be new content.
 
 | ID | Name | Footprint | Placement | Function in the demo | Count | Cost | Replaces (Rev. 1) |
 |---|---|---|---|---|---|---|---|
 | `command_console` | Command Console | 2 × 1 | against a wall | the root for reachability, the spawn point, the Gunner's post. Not usable yet (a star map / mission board later) | exactly 1 | starter | Bridge |
 | `upgrade_bench` | Upgrade Bench | 2 × 1 | against a wall | E opens the Workshop upgrades (Hull Plating, Weapon Tuning, Thruster Tuning, unchanged). The Engineer's post | exactly 1 | starter | Workshop bench (minus the Build tab) |
-| `berth` | Berth | 4 × 4 | free | holds one battleship, drawn with its combat sprite, nose north, longest side 150 px (Kite) / 210 px (Bulwark). E or a click boards it → briefing → launch (TAKOAI-54). Facing only sets which side its front strip is on; the pad is drawn once | one per battleship (2) | starter | Dock |
+| `berth` | Berth | 4 × 4 | free | holds one battleship, drawn with its combat sprite, nose north, longest side 150 px (Kite) / 210 px (Bulwark). E or a click boards it → briefing → launch (TAKOAI-54). Its front strip is the row south of the pad | one per battleship (2) | starter | Dock |
 | `sample_analyzer` | Sample Analyzer | 2 × 1 | against a wall | the Researcher's post. No function in the demo (the Lab Module's research, TAKOAI-8) | exactly 1 | starter | Crew Quarters (as the Researcher's spot) |
 | `salvage_sorter` | Salvage Sorter | 2 × 2 | free | **+25% Credits and Void Crystal** from every successful mission (the Salvage Bay effect, unchanged numbers). Result line "Salvage Sorter +45 cr +1 VC" | buy once | 120 cr + 3 VC | Salvage Bay |
 | `combat_simulator` | Combat Simulator | 2 × 2 | free | **−15% Q and W cooldowns** on every battleship (the Training Room effect, unchanged) | buy once | 200 cr + 6 VC | Training Room |
@@ -179,15 +211,7 @@ Fabricator and other manufacturing stations (Manufacturing Module, TAKOAI-8),
 Research Bench for studying samples and tech documents (Lab Module, TAKOAI-8),
 Mission Board (hub and factions), crew needs (beds that matter, Medbay pod),
 power and life support (the ONI webs), and extra berths for a third
-battleship. Adding any of them is new content, which this phase leaves out;
-the catalogue takes them without a model change.
-
-**Structure:**
-
-| ID | Name | Rule | Cost |
-|---|---|---|---|
-| `floor` | Floor | any non-bulkhead wall tile that isn't next to a door along the door's wall line. Painted by dragging a rectangle | 2 cr per tile |
-| `door` | Door | a wall tile between two floor tiles (see § Tiles and items) | 10 cr |
+battleship. The catalogue takes them without a model change.
 
 **Furniture and decor** are cosmetic only in the demo. A comfort or morale
 stat is deferred to TAKOAI-4 (economy). All cost Credits only, so they never
@@ -217,91 +241,124 @@ compete with upgrades for Void Crystal.
 
 #### Cost, refunds and unlocks
 
-- Placing pays the catalogue cost; **removing refunds it in full**; moving
-  and rotating are free.
-- **Starter pieces refund nothing**, so the starting carrier can't be sold
-  for cash: starter items carry a `starter` flag in the save (it stays when
-  they move), and floor and door tiles inside the starting tile map cost
-  nothing to re-place and refund nothing.
-- **Unlocks:** every catalogue item is available from the start. The only
-  locks are affordability, the buy-once stations ("Already built") and the
-  fixed-count stations. Unlocking stations through Ship Modules and crew
-  skill trees comes with TAKOAI-4 / TAKOAI-8.
+- Building pays the full cost up front. **Removing refunds it in full**,
+  including cancelling something still under construction. Moving an item
+  is free and instant.
+- **Starter pieces refund nothing**, so the starting carrier can't be sold:
+  starter rooms can't be removed at all, and starter items carry a
+  `starter` flag in the save (it stays when they move).
+- **Unlocks:** both room sizes and every catalogue item are available from
+  the start. The only locks are affordability, free hull space, the
+  buy-once stations ("Already built") and the fixed-count stations.
+  Unlocking through Ship Modules and crew skill trees comes with TAKOAI-4 /
+  TAKOAI-8.
 - **Pricing:** a new game starts at 0 cr. One successful run (about 180 cr +
-  6 VC) furnishes a room (6–8 pieces), or buys the Salvage Sorter, or one
-  Workshop upgrade. Extending the floor is cheap (a 5 × 5 area is 50 cr);
-  stations are the expensive part.
+  6 VC) buys a Small Room and furnishes it (5–6 pieces), or buys the
+  Salvage Sorter, or one Workshop upgrade. A Large Room is about one and a
+  half runs.
+
+#### Construction time
+
+Building takes time, with short placeholder values while we test (Wei,
+2026-10-17). One `build_seconds` value per catalogue entry, in the
+catalogue data:
+
+| What | Build time |
+|---|---|
+| Small Room | 5 s |
+| Large Room | 8 s |
+| Station | 4 s |
+| Furniture and decor | 2 s |
+
+- Placing creates a **construction site** at once: the cost is paid, the
+  tiles are taken, and the item or room shows as its sprite in the kit's
+  blueprint tint with a progress bar. Nobody has to walk there; the timer
+  just runs. Any number of sites build at the same time.
+- A room under construction draws its floor and walls with a scaffold
+  overlay, isn't walkable, keeps its new doorways shut and takes no items
+  until it finishes. An item under construction already blocks its tiles
+  (object layer) but can't be used, and its effect (Salvage Sorter, Combat
+  Simulator) isn't on yet.
+- Timers run only while the Carrier scene is open and unpaused. They are
+  saved, so a site resumes after a mission or a reload.
+- Remove on a site cancels it with a full refund. A site can't be moved.
+- Crew carrying out construction (ONI-style jobs) comes with companion task
+  assignment.
 
 #### Building (Build mode)
 
 | Step | Rule |
 |---|---|
 | Open | **B**, or the Build button on the Carrier HUD, from anywhere aboard. No station is needed. The Upgrade Bench loses Revision 1's Build tab |
-| Who builds | **instant**: the Pilot doesn't walk to the spot and there is no build time. Crew building things (ONI construction jobs) comes with companion task assignment |
-| Screen | the ONI-style builder kit (TAKOAI-65/66) along the bottom edge. **Category bar:** Structure (Floor, Door), Stations, Furniture, Decor (rugs and wall-mounted pieces), then two tools: **Move** and **Remove**. **Flyout:** one card per item, its S-facing sprite as the icon, name and cost chip, greyed with the reason when locked. **Detail panel:** name, size, placement rule ("Against a wall", "On a wall"), effect, cost, lock, last feedback, Rotate and Back buttons. 1–9 pick cards |
-| Ghost | the item's real sprite at the current facing, tinted with the kit's valid / invalid swatch; its footprint outlined on the grid and its front strip marked with chevrons; one line with the cost or the reason. The mouse tile is the footprint's middle tile (rounded north-west) |
-| Rotate | **R** or the Rotate button turns the ghost 90° clockwise around the mouse tile. On-a-wall items don't rotate |
-| Place | left click pays, places and saves. The item stays picked for another copy; a buy-once station returns to the flyout |
-| Floor | press and drag paints a rectangle. The ghost shows each tile valid or invalid and the total cost; release places every valid tile |
-| Door | click a wall tile between two floors |
-| Move | click an item to lift it: it becomes the ghost, and its own tiles count as free while held. Click to drop it (free). Right click or Esc puts it back. A berth carries its ship |
-| Remove | click an item to remove it and refund. Press and drag over floor removes that rectangle of floor **as one edit**: all of it or none, with the reason. Fixed-count stations can't be removed ("Move it instead") |
-| Grid | the hull's tiles show the kit's grid overlay in Build mode. No build-slot markers: any floor is a slot |
-| Cancel | right click or Esc drops the picked item or tool; Esc again leaves Build mode |
+| Screen | the ONI-style builder kit (TAKOAI-65/66) along the bottom edge. **Category bar:** Rooms (Small Room, Large Room), Stations, Furniture, Decor (rugs and wall-mounted pieces), then two tools: **Move** and **Remove**. **Flyout:** one card per entry, its sprite as the icon (a room card shows its outline at scale), name, cost chip and build time, greyed with the reason when locked. **Detail panel:** name, size, placement rule ("Against a wall", "On a wall"), effect, cost, build time, lock, last feedback, Back button. 1–9 pick cards |
+| Room ghost | the room's outline, walls and floor, snapped to the grid, tinted with the kit's valid / invalid swatch; the doorways it would open are marked; one line with the cost or the reason. The mouse tile is the room's middle floor tile (rounded north-west) |
+| Item ghost | the item's real sprite, tinted the same way; its footprint outlined and its front strip marked with chevrons on the row south of it; one line with the cost or the reason. The mouse tile is the footprint's middle tile (rounded north-west) |
+| Place | left click pays and starts construction, and saves. The entry stays picked for another copy; a buy-once station returns to the flyout |
+| Move | items only. Click a finished item to lift it: it becomes the ghost, and its own tiles count as free while held. Click to drop it (free, instant). Right click or Esc puts it back. A berth carries its ship |
+| Remove | click an item, a site or an empty room to remove it and refund. Fixed-count stations can't be removed ("Move it instead") |
+| Grid | the hull's tiles show the kit's grid overlay in Build mode. No build-slot markers: any bare hull is room space and any free floor is item space |
+| Cancel | right click or Esc drops the picked entry or tool; Esc again leaves Build mode |
 
 Reasons, shown on the ghost and in the error tooltip: "Outside the hull" ·
-"That's the hull" · "Needs floor" · "Blocked" · "Needs a wall behind it" ·
-"Needs a wall face" · "Keep the front clear" (on another station's front
-strip, or its own strip blocked) · "Would cut off the <station>" · "A door
-needs floor on both sides" · "The Pilot is in the way" (an object over the
-Pilot's feet) · "Need 120 cr + 3 VC" · "Already built" · "Move it instead".
+"Overlaps a room" · "Must share a wall with a room" · "Clear the doorway
+first" · "Room isn't empty" · "Would cut off a room" · "Needs floor" ·
+"Still being built" · "Blocked" · "Keep the doorway clear" · "Needs a wall
+behind it" · "Needs a wall face" · "Keep the front clear" (on another
+station's front strip, or its own strip blocked) · "Would cut off the
+<station>" · "The Pilot is in the way" (an object over the Pilot's
+feet) · "Need 120 cr + 3 VC" · "Already built" · "Move it instead" ·
+"Part of the starting carrier".
 
 #### Starting layout
 
-Five areas joined by six doors. The names are for this doc only; the game
-stores tiles and items. Mock: `design/art/carrier-furniture/mockup-starter-carrier.png`
+Five rooms (four small, one large) and six doorways, in the north-west of
+the hull, leaving the east and south free to grow. The names are for this
+doc only; the game stores rooms by size and position. Mock:
+`design/art/carrier-furniture/mockup-starter-carrier.png`
 (`make-starter-mock.mjs` draws it and checks the layout against the rules
-above).
+above, including the autoplay's expansion).
 
 ```
-     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3
-y 0  # # # # # # # # # # # # # # # # # # # # # # # #
-y 1  # p . C C . . f # b b . . . l # p . A A . h h #
-y 2  # . . . . . . . # b b . . . . # . . . . . . . #
-y 3  # . . . . . . . + . . . . . . + . . . . . . . #
-y 4  # . . . . . . . # . . t t . . # . . . . . . . #
-y 5  # . . . . . . . # . . . . . c # . . . . . . . #
-y 6  # # # # + # # # # # # + # # # # # # + # # # # #
-y 7  # U U . . . . . # . . . . . . . . . . . . . . #
-y 8  # . . . . . . . # . B B B B . . B B B B . . . #
-y 9  # . . . . . . . # . B B B B . . B B B B . . . #
-y10  # . . . . . . . + . B B B B . . B B B B . . . #
-y11  # . . . . . . . # . B B B B . . B B B B . . . #
-y12  # . . . . . . . # . . . . . . . . . . . . . . #
-y13  # . . . . . . . # . . . . . . . . . . . . . . #
-y14  # . . . . . x x # . . . . . . . . . . . . . . #
-y15  # # # # # # # # # # # # # # # # # # # # # # # #
-# wall · . floor · + door · C Command Console · U Upgrade Bench ·
+    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1   (x 22–35 bare hull)
+y 0 # # # # # # # # # # # # # # # # # # # # # #
+y 1 # p . C C . f # . b b . l c # p . A A h h #
+y 2 # . . . . . . + . b b . . . + . . . . . . #
+y 3 # . . . . . . + . . t t . . + . . . . . . #
+y 4 # . . . . . . # . . . . . . # . . . . . . #
+y 5 # # # + + # # # # # + + # # # # # + + # # #
+y 6 # . . . . . . . . . . . . . # U U . . . . #
+y 7 # . . . . . . . . . . . . . + . . . . . . #
+y 8 # . B B B B . . B B B B . . + . . . . . . #
+y 9 # . B B B B . . B B B B . . # . . . . x x #
+y10 # . B B B B . . B B B B . . # # # # # # # #
+y11 # . B B B B . . B B B B . . #
+y12 # . . . . . . . . . . . . . #
+y13 # . . . . . . . . . . . . . #
+y14 # . . . . . . . . . . . . . #
+y15 # # # # # # # # # # # # # # #                 (y 16–21 bare hull)
+# wall · . floor · + doorway · C Command Console · U Upgrade Bench ·
 A Sample Analyzer · B berth · b bunk bed · l locker · t table · c cat bed ·
 p potted plant · h hydroponic planter · f floor lamp · x crate stack
 ```
 
-| Area | Floor | Items (anchor, all facing S) |
+| Room | Size, anchor | Items (anchor) |
 |---|---|---|
-| Bridge | (1,1)–(7,5) | Command Console (3,1); wall screen on the bulkhead at (3,0); potted plant (1,1); floor lamp (7,1). Gunner at (5,2) |
-| Quarters | (9,1)–(14,5) | bunk beds (9,1) and (10,1); locker (14,1); rug (11,3); table (11,4); cat bed (14,5) |
-| Lab | (16,1)–(22,5) | Sample Analyzer (18,1); potted plant (16,1); hydroponic planter (21,1). Researcher at (20,2) |
-| Workshop | (1,7)–(7,14) | Upgrade Bench (1,7); tool rack on the wall at (5,6); crate stacks (6,14) and (7,14). Engineer at (3,8). Room for the Salvage Sorter and Combat Simulator |
-| Hangar | (9,7)–(22,14) | berth Kite (10,8) and berth Bulwark (16,8), front strips on row 12; wall lights at (13,6) and (20,6) |
+| Bridge | small (0,0) | Command Console (3,1); wall screen (5,0); potted plant (1,1); floor lamp (6,1). Gunner at (5,2) |
+| Quarters | small (7,0) | bunk beds (9,1) and (10,1); locker (12,1); cat bed (13,1); rug (10,3); table (10,3) |
+| Lab | small (14,0) | Sample Analyzer (17,1); potted plant (15,1); hydroponic planter (19,1). Researcher at (19,2) |
+| Hangar | large (0,5) | berth Kite (2,8) and berth Bulwark (8,8), front strips on row 12; wall lights (6,5) and (13,5) |
+| Workshop | small (14,5) | Upgrade Bench (15,6); tool rack (20,5); crate stacks (19,9) and (20,9). Engineer at (17,7) |
 
-Doors: (8,3) Bridge–Quarters · (15,3) Quarters–Lab · (4,6) Bridge–Workshop ·
-(11,6) Quarters–Hangar · (18,6) Lab–Hangar · (8,10) Workshop–Hangar.
-268 floor tiles. The catalogue value of everything is 916 cr, all starter, so
+Doorways: (7,2)–(7,3) Bridge–Quarters · (14,2)–(14,3) Quarters–Lab ·
+(3,5)–(4,5) Bridge–Hangar · (10,5)–(11,5) Quarters–Hangar · (17,5)–(18,5)
+Lab–Workshop · (14,7)–(14,8) Hangar–Workshop. Everything is starter, so
 none of it refunds.
 
-Example spots for autoplay and tests: **Salvage Sorter** at (4,10) facing S
-(front strip (4,12)–(5,12), in the Workshop); **Combat Simulator** at
-(21,8) facing W (front strip (20,8)–(20,9), east end of the Hangar).
+Example edits for autoplay and tests: a **Small Room** at (14,10), south of
+the Workshop, opens doorways (17,10)–(18,10) to the Workshop and
+(14,12)–(14,13) to the Hangar; the **Salvage Sorter** at (19,11) inside it
+(front strip (19,13)–(20,13)); the **Combat Simulator** at (12,9) in the
+Hangar (front strip (12,11)–(13,11)).
 
 #### Dock and berths
 
@@ -317,24 +374,23 @@ Example spots for autoplay and tests: **Salvage Sorter** at (4,10) facing S
 
 ```json
 "carrier": {
-  "tiles": [
-    "########################",
-    "#.......#......#.......#",
-    "#.......#......#.......#",
-    "#.......+......+.......#",
-    "… 16 rows of 24 characters in all: # wall, . floor, + door …"
+  "rooms": [
+    {"size": "small", "x": 0, "y": 0, "starter": true},
+    {"size": "large", "x": 0, "y": 5, "starter": true},
+    {"size": "small", "x": 14, "y": 10, "build_left_ms": 3200}
   ],
   "items": [
-    {"id": "command_console", "x": 3, "y": 1, "facing": "s", "starter": true},
-    {"id": "berth", "x": 10, "y": 8, "facing": "s", "ship": "kite", "starter": true},
-    {"id": "salvage_sorter", "x": 4, "y": 10, "facing": "s"}
+    {"id": "command_console", "x": 3, "y": 1, "starter": true},
+    {"id": "berth", "x": 2, "y": 8, "ship": "kite", "starter": true},
+    {"id": "salvage_sorter", "x": 19, "y": 11, "build_left_ms": 4000}
   ]
 }
 ```
 
-- Items are sorted by (y, x, layer, id), so the same layout always writes
-  the same bytes. `facing` defaults to `s`, `starter` to false and `ship` to
-  none (omitted when default).
+- Tiles and doorways aren't saved: they are rebuilt from the rooms. Rooms
+  are sorted by (y, x), items by (y, x, layer, id), so the same layout
+  always writes the same bytes. `starter` defaults to false, `ship` and
+  `build_left_ms` to none (omitted when default; none means finished).
 - **Migration from v1–v4:** the old `carrier` field (rooms and corridors) is
   read once, the full cost of every player-built room and corridor in it is
   refunded using Revision 1's prices (Salvage Bay 120 cr + 3 VC, Training
@@ -343,15 +399,16 @@ Example spots for autoplay and tests: **Salvage Sorter** at (4,10) facing S
   upgrades, hints, stats and the last ship picked are kept. A one-time hint
   explains it (§ Tutorial hints, `carrier_refit`). The version is stamped to
   5. Revision 1's room prices live only in this migration.
-- **Validation on load:** only known IDs; inside the hull; bulkhead never
-  floor or door; every door valid; every item obeys its placement rule; no
-  two items share a tile on one layer; every front strip clear and
-  reachable; exactly one Command Console, Upgrade Bench and Sample Analyzer;
-  exactly one berth per battleship with distinct ships; at most one Salvage
-  Sorter and one Combat Simulator. If any check fails, the carrier resets to
-  the starting layout and the cost of every non-starter item and non-starter
-  floor or door tile is refunded (unknown IDs refund nothing), with a
-  warning in the log.
+- **Validation on load:** only known IDs and room sizes; every room inside
+  the hull, overlapping others only on walls, and connected to the room
+  holding the Command Console; every item obeys its placement rule and
+  sits in a finished room; no two items share a tile on one layer; doorway
+  clearance kept; every front strip clear and reachable; exactly one
+  Command Console, Upgrade Bench and Sample Analyzer; exactly one berth per
+  battleship with distinct ships; at most one Salvage Sorter and one Combat
+  Simulator; every starter room present. If any check fails, the carrier
+  resets to the starting layout and the cost of every non-starter room and
+  item is refunded (unknown IDs refund nothing), with a warning in the log.
 
 #### Art spec and first batch (`design/art/carrier-furniture/`)
 
@@ -363,6 +420,7 @@ bounding-box check. On top of it:
   carrier, light from the top left. Tops and south-facing fronts are
   visible; heights are drawn upward at full scale (1 px of height = 1 px up),
   as the 48 px wall face and the 70 px Pilot are.
+- **One view per item: facing S.** Nothing rotates (Wei, 2026-10-17).
 - **Scale (2×: 128 px per tile).** The Pilot is about 140 px tall at 2×.
   Reference heights at 2×: stool seat 36, bed top 44 (bunk's upper bunk
   104), table top 52, console desk 60 with screen up to 140, locker 180, cat
@@ -374,34 +432,35 @@ bounding-box check. On top of it:
   item's ground contact stays inside it with at least a 4 px transparent
   margin; everything that rises goes into the headroom. The anchor is the
   bottom centre of the canvas (the middle of the footprint's front edge).
+  File: `<id>.png`. On-a-wall items get a `w × 128` by 96 px canvas that
+  sits on the wall face.
 - **Whole on transparent:** draw each piece whole on a transparent canvas;
-  never cut it out of a painted room or patch it.
-- **Facings:** items that rotate get `<id>-s.png`, `<id>-e.png`,
-  `<id>-n.png` (E and N canvases use the turned footprint); W mirrors E.
-  Symmetric items (potted plant, floor lamp, cat tree, scratching post, food
-  bowls, crate stack, rug, berth) get one `<id>.png`. On-a-wall items get one
-  S view on a `w × 128` by 96 px canvas that sits on the wall face.
+  never cut it out of a painted room or patch it. Rooms aren't drawn whole:
+  they are assembled from the tiles below.
 - **Tiles:** `floor-0..2.png` (128 × 128, three seamless variants of one
   plating), `wall-<mask>.png` × 16 (128 × 128, mask of wall neighbours in
   n-e-s-w order, a 96 px face in the lower part where south is open and a
-  32 px cap above it), `door-ns.png` and `door-ew.png` (128 × 128, a frame
-  and threshold on top of the wall tile), `front-marker.png` (a small
-  chevron, 128 × 128, for the front strip in Build mode).
-- **Icons:** none. Build cards show the item's S sprite.
+  32 px cap above it), `doorway-ns.png` and `doorway-ew.png` (128 × 128, an
+  open frame and threshold, no door leaf; two side by side make the 2-tile
+  doorway), `hull-0..1.png` (128 × 128, dark bare-hull plating, two
+  variants), `scaffold.png` (128 × 128, tileable overlay for rooms under
+  construction), `front-marker.png` (a small chevron, 128 × 128, for the
+  front strip in Build mode).
+- **Icons:** none. Build cards show the item's sprite; room cards draw
+  their outline in code.
 
 **Art batch A (needed to ship):** the tiles above, plus the six stations
-(Command Console, Upgrade Bench and Sample Analyzer in S / E / N; Salvage
-Sorter and Combat Simulator in S / E / N; the berth pad once), plus a
-painted mock of the starting layout.
-**Art batch B:** the 19 furniture and decor pieces in § Item catalogue.
-That's 6 stations, not the 8 first floated: only six map to things the demo
-already does, and more would be new content, which this phase excludes.
+(Command Console, Upgrade Bench, Sample Analyzer, Salvage Sorter, Combat
+Simulator, berth pad; one S view each), plus a painted mock of the starting
+layout.
+**Art batch B:** the 19 furniture and decor pieces in § Item catalogue, one
+S view each.
 
 Shipped IDs after import: `core.carrier.tile.floor.<n>`,
-`core.carrier.tile.wall.<mask>`, `core.carrier.tile.door.<ns|ew>`,
-`core.carrier.item.<id>.<s|e|n>` (or `core.carrier.item.<id>`),
-`core.carrier.front_marker`. `core.carrier.hull_floor` is retired: every
-hull tile is now floor, door or wall, and the sky shows outside the hull.
+`core.carrier.tile.wall.<mask>`, `core.carrier.tile.doorway.<ns|ew>`,
+`core.carrier.tile.hull.<n>`, `core.carrier.scaffold`,
+`core.carrier.item.<id>`, `core.carrier.front_marker`.
+`core.carrier.hull_floor` is retired in favour of the 64 px hull tiles.
 
 #### Retired with Revision 1
 
@@ -419,40 +478,46 @@ alongside the new model.
   In `workshop.rs`, the room `build_lock`. In `mission.rs` the
   `training_room_1` upgrade ID becomes `combat_simulator_1` (`sim` is
   untouched: it still sees `Upgrades::training`). `SaveGame::salvage_bonus`
-  checks for the Salvage Sorter. The `carrier_build` / `carrier_can_build`
-  hint texts and the autoplay's build steps change (§ Tutorial hints).
+  checks for a finished Salvage Sorter. The `carrier_build` /
+  `carrier_can_build` hint texts and the autoplay's build steps change
+  (§ Tutorial hints).
 - **Shipped art:** `assets/source/core/carrier/room/*` (6),
   `door/*` (4), `corridor/*` (15), `build_slot.png`, `hull_floor.png` and
   `dock/berth.png`, their manifest entries and the `CARRIER_2_5D` rows in
-  `demo_art_import`. Builder kit pieces tied to rooms:
-  `core.ui.builder.category.rooms` / `corridors` and
+  `demo_art_import`. Builder kit pieces tied to the old rooms:
+  `core.ui.builder.category.corridors` and
   `core.ui.builder.module.corridor` / `salvage_bay` / `training_room`.
-  The rest of the kit (panels, cards, cost chip, ghost swatches, grid
-  overlay, the demolish icon reused for Remove) stays.
+  `core.ui.builder.category.rooms` stays for the new Rooms category. The
+  rest of the kit (panels, cards, cost chip, ghost swatches, grid overlay,
+  the demolish icon reused for Remove) stays.
 - **Design art:** `design/art/carrier-2_5d/` and `carrier-2_5d-v2/` stay as
   history, like every superseded concept folder.
 
 #### Engineer scope
 
-- **Layout core** (pure, no Bevy, `client/src/layout.rs` rewritten): the
-  tile map, catalogue (footprint, layer, placement, front strip, count rule,
-  cost), facing and footprint turning, `can_place` / `can_move` /
-  `can_remove` / `can_paint_floor` / `can_remove_floor` / `can_place_door`
-  with the reasons above, reachability, walkable rectangles, crew posts,
-  `starting()`, `validate()` and the refund rules. Unit tests for every rule
-  and reason, the starting layout, and save round-trip.
+- **Layout core** (pure, no Bevy, `client/src/layout.rs` rewritten): rooms
+  (sizes, overlap on walls only, shared-wall detection, doorways and their
+  clearance), the derived tile map, the catalogue (footprint, layer,
+  placement, front strip, count rule, cost, `build_seconds`), construction
+  sites and their timers (advanced by an explicit `tick(ms)`, no clock),
+  `can_place_room` / `can_remove_room` / `can_place` / `can_move` /
+  `can_remove` with the reasons above, reachability, walkable rectangles,
+  crew posts, `starting()`, `validate()` and the refund rules. Unit tests
+  for every rule and reason, the starting layout, the example edits, and
+  save round-trip.
 - **Save v5** (`save.rs`): the new `carrier` field, the v1–v4 migration with
   refunds, validation and reset. Tests for each old version and for a
   broken layout.
-- **Scene and Build mode** (`carrier.rs`): draw tiles, walls (mask) and
-  items by layer and y; stations as hotspots; crew at their posts; berths
-  with their ships; B opens Build mode with the categories, Move, Remove,
-  Rotate, floor painting and the ghost; hints; autoplay (new game → mission
-  → paint floor and place a Salvage Sorter at (4,10) → second mission →
-  Continue, with the layout still there).
+- **Scene and Build mode** (`carrier.rs`): draw hull, floor, walls (mask),
+  doorways, scaffolds and items by layer and y; construction sites with
+  progress bars; stations as hotspots; crew at their posts; berths with
+  their ships; B opens Build mode with Rooms, Stations, Furniture, Decor,
+  Move and Remove; hints; autoplay (new game → mission → build a Small Room
+  at (14,10) → wait for it → place a Salvage Sorter at (19,11) → wait →
+  second mission → Continue, with the layout still there).
 
-Out of scope: room bonuses, comfort, crew building things, unlock trees,
-hull growth, manufacturing.
+Out of scope: room types and bonuses, comfort, more decks, crew building
+things, unlock trees, hull growth, manufacturing.
 
 ### Battleships
 
@@ -577,7 +642,7 @@ Shown once each, then recorded in the save.
 | First loot drop | "Fly over drops to collect them." |
 | First return with loot | "Spend credits and Void Crystal at the Upgrade Bench." |
 | First Carrier arrival with ≥ 120 cr + 3 VC and no Salvage Sorter yet (`carrier_can_build`) | "You can afford a Salvage Sorter. Press B to build." |
-| First time in Build mode (`carrier_build`) | "Pick an item, then click the floor. R rotates. Keep the front of a station clear." |
+| First time in Build mode (`carrier_build`) | "Pick a room or an item, then click to build. Rooms open into their neighbours. Keep the front of a station clear." |
 | First Carrier load after a v1–v4 save migrated (`carrier_refit`) | "The carrier has been refitted. Everything you built was refunded. Press B to rebuild it your way." |
 
 ### Save file
@@ -586,7 +651,8 @@ Saved on every return to the Carrier and every Workshop purchase. Holds:
 credits, Void Crystal, upgrade levels, last mission result (none / success /
 failed), missions played and won, tutorial hints seen, last battleship picked,
 and (version 5) the carrier tiles and items — see § Carrier › Save. Also
-saved after every place, move, rotate and remove. Mission loot is never saved mid-battle.
+saved after every place, move and remove, and when a construction site
+finishes. Mission loot is never saved mid-battle.
 
 ## Design-Done Checklist
 

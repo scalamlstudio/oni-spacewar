@@ -49,12 +49,12 @@ segment (see § Missions, § Ship Modules).
   growing/upgrading the carrier (see § Hub, § Economy).
 - **Aboard the carrier (outside missions):** the player walks the main
   character around the carrier interior — a 3/4 top-down (2.5D) view of
-  floor tiles furnished with work stations and furniture — talks to crew and
+  rooms furnished with work stations and furniture — talks to crew and
   walks up to a station to use it (click, press-and-hold or WASD to walk, E
   or a click to use). Launching a mission is one of those stations: a ship's
   Berth, from the Docking Module (see § Missions). The player shapes the
-  carrier by laying floor and placing stations and furniture freely in Build
-  mode (see § Carrier). The ability scheme above is only for piloting the
+  carrier by building rooms and placing stations and furniture freely in
+  Build mode (see § Carrier). The ability scheme above is only for piloting the
   battleship in a mission. Manufacturing stations will go through the same
   placement; how the player assigns crew tasks is left for when companion
   jobs come back into scope (see design/OPEN_QUESTIONS.md).
@@ -238,39 +238,43 @@ Numbers (wave plan, kill target, drop rates): design/READINESS.md § Demo Spec.
 
 ## Carrier
 
-_Revision 2 (TAKOAI-88, 2026-10-12), **proposed, awaiting Wei's approval**.
-It replaces Revision 1 (TAKOAI-52, 2026-10-04): a grid of pre-drawn rooms
-joined by corridors. Wei's direction: stop drawing whole rooms; draw lots of
-furniture and work stations and let players place them freely. Numbers, the
-catalogue, the starting layout, the art spec and the build scope:
-design/READINESS.md § Demo Spec › Carrier._
+_Revision 3 (TAKOAI-88), **approved by Wei on 2026-10-17**. It replaces
+Revision 1 (TAKOAI-52, 2026-10-04: pre-drawn rooms joined by corridors) and
+Revision 2 (2026-10-12, proposed: floor painted tile by tile). Wei's
+direction: stop drawing whole rooms; draw lots of furniture and work
+stations and let players place them freely, inside simple rooms the player
+builds. Numbers, the catalogue, the starting layout, the art spec and the
+build scope: design/READINESS.md § Demo Spec › Carrier._
 
-The carrier interior is built **ONI-style**: the player lays floor tiles
-inside the hull, and everything that isn't floor is wall. On that floor they
-place **work stations** (things that do something) and **furniture and
-decor** (things that make it theirs). There are no room assets and no
-corridors: a "room" is just floor the player has walled off and furnished.
+The carrier interior is a set of **rooms** the player builds inside the
+hull, filled with **work stations** (things that do something) and
+**furniture and decor** (things that make it theirs). A room is only space:
+what makes it a bunk room or a lab is what the player puts in it.
 
 - **View:** 3/4 top-down (2.5D), as in Zelda or Stardew Valley,
   orthographic and axis-aligned, lit from the top left. A wall tile with
   floor south of it shows its front face; other walls show only their top.
-  Sprites are drawn in order of their feet's y.
+  Sprites are drawn in order of their feet's y. One deck.
 - **Camera and walking:** unchanged from Revision 1. The camera follows the
   Pilot with three zoom levels; the Pilot walks by click, press-and-hold
   or WASD, the same controls as in battle, and uses stations and talks to
   crew with a click or E.
 - **Grid:** 64 px tiles (the Pilot is about one tile tall) in a fixed hull.
-  Each tile is floor, door or wall. A door is a one-tile wall between two
-  floors. Walls are auto-tiled; the player never places them.
-- **Items:** every item has a footprint (1 × 1, 2 × 1, 2 × 2, 4 × 4…), a
-  facing (four directions, turned with R) and a layer: **object** (blocks
+- **Rooms:** two sizes, **Small (6 × 4 floor)** and **Large (13 × 9)**, each
+  with a one-tile wall ring, built with Credits and Void Crystal. Rooms
+  placed side by side share the wall between them and open a 2-tile
+  **doorway** through it by themselves; the player never builds doors or
+  corridors. A new room must share a wall with an existing one. Rooms are
+  assembled from floor, wall and doorway tiles, never drawn whole.
+- **Items:** every item has a footprint (1 × 1, 2 × 1, 2 × 2, 4 × 4…) and
+  **faces S** (no rotation, one drawing each). Layers: **object** (blocks
   walking), **floor** (rugs, walkable) or **wall** (screens and lights hung
-  on a wall face). Placement rules are "on floor", "against a wall" (its
-  back touches a wall) or "on a wall".
-- **Use and pathing:** a station has a **front strip**, the tiles in front
-  of it, which must stay clear and be reachable from the Command Console.
-  Any edit that would block a station or cut it off is refused with a
-  reason. Pathing runs over the walkable tiles; doors are walkable.
+  on a north wall's face). Placement rules are "on floor", "against a
+  wall" (its back touches the north wall) or "on a wall".
+- **Use and pathing:** a station has a **front strip**, the row south of
+  it, which must stay clear and be reachable from the Command Console.
+  Doorways keep a clear tile on each side. Any edit that would block a
+  station or cut it off is refused with a reason.
 - **Stations** keep every function the demo has. The Command Console
   (where the Pilot starts), the Upgrade Bench (Workshop upgrades), one
   Berth per battleship (board, briefing, launch) and the Sample Analyzer
@@ -281,22 +285,21 @@ corridors: a "room" is just floor the player has walled off and furnished.
   sofas, plants, lamps, an aquarium, cat beds and cat trees, wall screens
   and lights. A comfort stat is deferred to the economy pass (TAKOAI-4).
 - **Building:** B opens Build mode anywhere aboard. It uses the ONI-style
-  builder screen: categories (Structure, Stations, Furniture, Decor), a
-  ghost that shows green or red with one reason, R to rotate, plus Move and
-  Remove tools. Placement is instant: the Pilot doesn't walk there and
-  nothing takes time to build. Crew carrying out construction comes with
-  companion jobs. Everything is unlocked from the start; placing costs
-  credits (two stations also cost Void Crystal), removing refunds in full,
-  moving is free, and the starting pieces refund nothing.
-- **Rooms and room bonuses:** not tracked in the demo. Enclosed areas can
-  be detected from the tiles later, so ONI-style room bonuses ("two beds and
-  a locker make a Bunk Room") can be added without changing the save.
-  Deferred to TAKOAI-4.
+  builder screen: categories (Rooms, Stations, Furniture, Decor), a ghost
+  that shows green or red with one reason, plus Move and Remove tools.
+  Placing pays and starts a **construction site** that finishes on its own
+  after a few seconds (placeholder times while testing); nobody walks
+  there. Crew carrying out construction comes with companion jobs.
+  Everything is unlocked from the start; removing refunds in full, moving
+  is free, and the starting carrier can't be sold.
+- **Room types and bonuses:** not tracked in the demo. ONI-style labels
+  and bonuses ("two beds and a locker make a Bunk Room") can come later
+  without changing the save. Deferred to TAKOAI-4.
 - **Battle effects** still reach the battle only through the battleship's
   `Loadout`, so they stay inside the deterministic `sim`. Economy effects
   stay in `client`.
-- **Hull:** fixed size in the demo. Growing it (the "ship size extension"
-  question) stays deferred.
+- **Hull and decks:** one deck of fixed size in the demo. Growing the hull
+  and adding decks (the "ship size extension" question) stay deferred.
 
 ## Enemies / Opposition
 
@@ -316,7 +319,7 @@ corridors: a "room" is just floor the player has walled off and furnished.
 
 ## World / Levels
 
-- **Carrier interior:** the player's persistent base — floor, stations,
+- **Carrier interior:** the player's persistent base — rooms, stations,
   furniture and systems to fix, build out, and upgrade over the course of the game (see
   § Carrier, § Ship Modules).
 - **Hub:** dev-managed MMO social/trade space; not player-buildable.
