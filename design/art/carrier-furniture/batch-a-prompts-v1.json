@@ -1,0 +1,220 @@
+{
+  "tool": "built-in image_gen",
+  "status": "exploratory; failed shipping QA; not imported",
+  "shared_prompt": "Use case: stylized-concept. Oni Spacewar carrier Revision 3 asset. Painted soft shading, fine panel details, variable dark outlines, teal metal and warm amber palette. 3/4 top-down orthographic with top and SOUTH front visible, no isometric rotation, horizontal front edge, lighting top left. No characters, no humans, no text, no numbers, no labels, no room or backdrop. Whole single asset.",
+  "suffix": "Requested canvas WIDTH x HEIGHT pixels. Whole asset contained; objects have clear transparent margin.",
+  "console_prompt": "Whole south-facing Command Console sprite. Painted soft shading, variable dark outlines, detailed teal metal panels, warm amber indicator lights, cute rounded cat-inspired industrial design but NO characters and no humans. 3/4 top-down orthographic, top and south front visible, light top left. Wide desk footprint 2 by 1 tiles, reference 128px per tile, desk height 60px, screen tops 140px. Transparent canvas, entire object inside with generous transparent margin, bottom-center ground anchor. Single console only, no floor or room, no words or numbers. Canvas proportions 256 wide by 288 tall.",
+  "doorway_ns_v2_prompt": "Game tile, not standing door. One half of two-cell north-south doorway. Passage top to bottom. Flat 128x128 square metal threshold lower 96 pixels; shallow horizontal teal lintel cap top 32px. No side posts; adjacent identical tile must form one continuous 256px wide passage. Orthographic axis-aligned top-down, teal, amber, painted shading; no words or humans.",
+  "jobs": [
+    [
+      "upgrade-bench",
+      "Wide low south-facing teal upgrade workbench with warm amber tool lights, an engine component on desk, desk 60 px high, 2x1 tile footprint.",
+      256,
+      224,
+      true
+    ],
+    [
+      "sample-analyzer",
+      "Wide low south-facing scientific sample analyzer desk with amber sample chamber and teal instrument housing, 2x1 tile footprint, screen up to 140 px.",
+      256,
+      288,
+      true
+    ],
+    [
+      "salvage-sorter",
+      "South-facing salvage sorter, rounded teal industrial machine with open intake and warm amber control lights. 2x2 tile footprint, machine height 170 px.",
+      256,
+      448,
+      true
+    ],
+    [
+      "combat-simulator",
+      "South-facing combat simulator training console with circular simulation display and warm amber lights in rounded teal housing. No cockpit occupants. 2x2 tile footprint, 160px high.",
+      256,
+      416,
+      true
+    ],
+    [
+      "berth",
+      "Flat square spacecraft berth pad, no spaceship, teal metal with amber edge guide lights, 4x4 tiles square footprint, only 12px raised. Orthographic axis-aligned square, no diamond perspective.",
+      512,
+      544,
+      true
+    ],
+    [
+      "floor-0",
+      "Seamless square floor tile, variant 0, muted teal grey spacecraft metal plating, subtle painted panel details only in center; all four edges identical plain metal, top-down square face fills canvas edge to edge. No lights no raised objects.",
+      128,
+      128,
+      false
+    ],
+    [
+      "floor-1",
+      "Seamless square floor tile, variant 1, muted teal grey spacecraft metal plating, subtle painted panel details only in center; all four edges identical plain metal, top-down square face fills canvas edge to edge. No lights no raised objects.",
+      128,
+      128,
+      false
+    ],
+    [
+      "floor-2",
+      "Seamless square floor tile, variant 2, muted teal grey spacecraft metal plating, subtle painted panel details only in center; all four edges identical plain metal, top-down square face fills canvas edge to edge. No lights no raised objects.",
+      128,
+      128,
+      false
+    ],
+    [
+      "hull-0",
+      "Seamless square dark bare-hull plating tile variant 0, much darker desaturated teal than room floor, subtle center plate detail, all edges plain identical dark metal, fills canvas.",
+      128,
+      128,
+      false
+    ],
+    [
+      "hull-1",
+      "Seamless square dark bare-hull plating tile variant 1, much darker desaturated teal than room floor, subtle center plate detail, all edges plain identical dark metal, fills canvas.",
+      128,
+      128,
+      false
+    ],
+    [
+      "doorway-ns",
+      "A square open doorway tile oriented north-south, threshold on horizontal axis and teal frame at left and right edges. No door leaf. Warm amber trim. Keep central north-south passage transparent, no floor.",
+      128,
+      128,
+      true
+    ],
+    [
+      "doorway-ew",
+      "A square open doorway tile oriented east-west, teal open frame on top and bottom edges and horizontal open passage through center. No door leaf. Warm amber trim, no floor.",
+      128,
+      128,
+      true
+    ],
+    [
+      "scaffold",
+      "Tileable square construction scaffold overlay, thin teal open scaffold frame along edges with tiny warm amber hazard tabs, transparent central opening, no floor.",
+      128,
+      128,
+      true
+    ],
+    [
+      "front-marker",
+      "One tiny warm amber downward pointing chevron centered on large transparent square canvas. Simple painted metal chevron for a station front strip.",
+      128,
+      128,
+      true
+    ],
+    [
+      "wall-0000",
+      "Single square modular spacecraft wall tile. Neighbour connectivity NORTH EAST SOUTH WEST = 0 0 0 0 where 1 means wall connects to that edge and 0 is an exposed end. Teal metal wall cap occupies top 32/128 of tile. South is open: draw visible south-facing wall face occupying lower 96/128 of square. Orthographic axis-aligned rectangular tile, straight edges connect seamlessly, amber tiny fixtures only, no floor.",
+      128,
+      128,
+      true
+    ],
+    [
+      "wall-0001",
+      "Single square modular spacecraft wall tile. Neighbour connectivity NORTH EAST SOUTH WEST = 0 0 0 1 where 1 means wall connects to that edge and 0 is an exposed end. Teal metal wall cap occupies top 32/128 of tile. South is open: draw visible south-facing wall face occupying lower 96/128 of square. Orthographic axis-aligned rectangular tile, straight edges connect seamlessly, amber tiny fixtures only, no floor.",
+      128,
+      128,
+      true
+    ],
+    [
+      "wall-0010",
+      "Single square modular spacecraft wall tile. Neighbour connectivity NORTH EAST SOUTH WEST = 0 0 1 0 where 1 means wall connects to that edge and 0 is an exposed end. Teal metal wall cap occupies top 32/128 of tile. South connects to another wall: cap surface, no exposed south face. Orthographic axis-aligned rectangular tile, straight edges connect seamlessly, amber tiny fixtures only, no floor.",
+      128,
+      128,
+      true
+    ],
+    [
+      "wall-0011",
+      "Single square modular spacecraft wall tile. Neighbour connectivity NORTH EAST SOUTH WEST = 0 0 1 1 where 1 means wall connects to that edge and 0 is an exposed end. Teal metal wall cap occupies top 32/128 of tile. South connects to another wall: cap surface, no exposed south face. Orthographic axis-aligned rectangular tile, straight edges connect seamlessly, amber tiny fixtures only, no floor.",
+      128,
+      128,
+      true
+    ],
+    [
+      "wall-0100",
+      "Single square modular spacecraft wall tile. Neighbour connectivity NORTH EAST SOUTH WEST = 0 1 0 0 where 1 means wall connects to that edge and 0 is an exposed end. Teal metal wall cap occupies top 32/128 of tile. South is open: draw visible south-facing wall face occupying lower 96/128 of square. Orthographic axis-aligned rectangular tile, straight edges connect seamlessly, amber tiny fixtures only, no floor.",
+      128,
+      128,
+      true
+    ],
+    [
+      "wall-0101",
+      "Single square modular spacecraft wall tile. Neighbour connectivity NORTH EAST SOUTH WEST = 0 1 0 1 where 1 means wall connects to that edge and 0 is an exposed end. Teal metal wall cap occupies top 32/128 of tile. South is open: draw visible south-facing wall face occupying lower 96/128 of square. Orthographic axis-aligned rectangular tile, straight edges connect seamlessly, amber tiny fixtures only, no floor.",
+      128,
+      128,
+      true
+    ],
+    [
+      "wall-0110",
+      "Single square modular spacecraft wall tile. Neighbour connectivity NORTH EAST SOUTH WEST = 0 1 1 0 where 1 means wall connects to that edge and 0 is an exposed end. Teal metal wall cap occupies top 32/128 of tile. South connects to another wall: cap surface, no exposed south face. Orthographic axis-aligned rectangular tile, straight edges connect seamlessly, amber tiny fixtures only, no floor.",
+      128,
+      128,
+      true
+    ],
+    [
+      "wall-0111",
+      "Single square modular spacecraft wall tile. Neighbour connectivity NORTH EAST SOUTH WEST = 0 1 1 1 where 1 means wall connects to that edge and 0 is an exposed end. Teal metal wall cap occupies top 32/128 of tile. South connects to another wall: cap surface, no exposed south face. Orthographic axis-aligned rectangular tile, straight edges connect seamlessly, amber tiny fixtures only, no floor.",
+      128,
+      128,
+      true
+    ],
+    [
+      "wall-1000",
+      "Single square modular spacecraft wall tile. Neighbour connectivity NORTH EAST SOUTH WEST = 1 0 0 0 where 1 means wall connects to that edge and 0 is an exposed end. Teal metal wall cap occupies top 32/128 of tile. South is open: draw visible south-facing wall face occupying lower 96/128 of square. Orthographic axis-aligned rectangular tile, straight edges connect seamlessly, amber tiny fixtures only, no floor.",
+      128,
+      128,
+      true
+    ],
+    [
+      "wall-1001",
+      "Single square modular spacecraft wall tile. Neighbour connectivity NORTH EAST SOUTH WEST = 1 0 0 1 where 1 means wall connects to that edge and 0 is an exposed end. Teal metal wall cap occupies top 32/128 of tile. South is open: draw visible south-facing wall face occupying lower 96/128 of square. Orthographic axis-aligned rectangular tile, straight edges connect seamlessly, amber tiny fixtures only, no floor.",
+      128,
+      128,
+      true
+    ],
+    [
+      "wall-1010",
+      "Single square modular spacecraft wall tile. Neighbour connectivity NORTH EAST SOUTH WEST = 1 0 1 0 where 1 means wall connects to that edge and 0 is an exposed end. Teal metal wall cap occupies top 32/128 of tile. South connects to another wall: cap surface, no exposed south face. Orthographic axis-aligned rectangular tile, straight edges connect seamlessly, amber tiny fixtures only, no floor.",
+      128,
+      128,
+      true
+    ],
+    [
+      "wall-1011",
+      "Single square modular spacecraft wall tile. Neighbour connectivity NORTH EAST SOUTH WEST = 1 0 1 1 where 1 means wall connects to that edge and 0 is an exposed end. Teal metal wall cap occupies top 32/128 of tile. South connects to another wall: cap surface, no exposed south face. Orthographic axis-aligned rectangular tile, straight edges connect seamlessly, amber tiny fixtures only, no floor.",
+      128,
+      128,
+      true
+    ],
+    [
+      "wall-1100",
+      "Single square modular spacecraft wall tile. Neighbour connectivity NORTH EAST SOUTH WEST = 1 1 0 0 where 1 means wall connects to that edge and 0 is an exposed end. Teal metal wall cap occupies top 32/128 of tile. South is open: draw visible south-facing wall face occupying lower 96/128 of square. Orthographic axis-aligned rectangular tile, straight edges connect seamlessly, amber tiny fixtures only, no floor.",
+      128,
+      128,
+      true
+    ],
+    [
+      "wall-1101",
+      "Single square modular spacecraft wall tile. Neighbour connectivity NORTH EAST SOUTH WEST = 1 1 0 1 where 1 means wall connects to that edge and 0 is an exposed end. Teal metal wall cap occupies top 32/128 of tile. South is open: draw visible south-facing wall face occupying lower 96/128 of square. Orthographic axis-aligned rectangular tile, straight edges connect seamlessly, amber tiny fixtures only, no floor.",
+      128,
+      128,
+      true
+    ],
+    [
+      "wall-1110",
+      "Single square modular spacecraft wall tile. Neighbour connectivity NORTH EAST SOUTH WEST = 1 1 1 0 where 1 means wall connects to that edge and 0 is an exposed end. Teal metal wall cap occupies top 32/128 of tile. South connects to another wall: cap surface, no exposed south face. Orthographic axis-aligned rectangular tile, straight edges connect seamlessly, amber tiny fixtures only, no floor.",
+      128,
+      128,
+      true
+    ],
+    [
+      "wall-1111",
+      "Single square modular spacecraft wall tile. Neighbour connectivity NORTH EAST SOUTH WEST = 1 1 1 1 where 1 means wall connects to that edge and 0 is an exposed end. Teal metal wall cap occupies top 32/128 of tile. South connects to another wall: cap surface, no exposed south face. Orthographic axis-aligned rectangular tile, straight edges connect seamlessly, amber tiny fixtures only, no floor.",
+      128,
+      128,
+      true
+    ]
+  ]
+}
