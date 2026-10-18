@@ -34,11 +34,13 @@ crates/
     src/lib.rs          manifest types, hash validation, stable-ID resolution, manifest diff
     tests/asset_crop.rs crop check: no opaque pixel of a cut-out under assets/source/core/ touches its canvas edge
     tests/character_frames.rs  8-direction frame contract (canvas, feet baseline, visible height, margin) + processed == source
+    tests/carrier_tiles.rs     Revision 3 carrier art: batch A IDs resolve, tiles are one cell, mask-picked walls join seamlessly
     src/bin/content_pipeline.rs        source -> processed asset + zstd bundle + manifest
     src/bin/content_manifest_diff.rs   compare manifests and list packs/assets a patch needs
     src/cutouts.rs                     background keying, sheet slicing, single-sprite crop, resize
     src/bin/sprite_sheet_cutouts.rs    expression sheets -> portraits
     src/bin/demo_art_import.rs         design/art/demo (+ demo-v2 battle art and backdrops, carrier-2_5d-v2 pieces) -> battle / carrier / title / result / icon sources
+    src/bin/carrier_tile_import.rs     design/art/carrier-furniture batch A catalogue -> carrier/tile, carrier/item, scaffold, front marker sources
   client/             package `oni-client`, bin `oni-spacewar` — everything else
     src/main.rs         CLI (synctest / p2p modes), app + GGRS session setup, ICE (STUN/TURN) config
     src/art.rs          ContentImages: shipped images and fonts by stable content ID (manifest -> processed file), cached; linear sampler + CPU mip chain
@@ -248,11 +250,42 @@ import also writes `target/demo-art-contact-sheet.png` for a visual check. The
 file names and target sizes are tables at the top of the tool; a new art file
 means a new table row.
 
+### Carrier Revision 3 art import
+
+Art batch A for the room-and-item carrier (TAKOAI-89) is imported with:
+
+```sh
+cargo run --release --bin carrier-tile-import -- .
+cargo run --release --bin content-pipeline -- .
+```
+
+`carrier-tile-import` reads Art's catalogue
+`design/art/carrier-furniture/batch-a-import-v2.json` (selected file,
+stable ID, destination, size, alpha bounds), checks each row (the ID must
+be the one the pipeline derives from the destination path; size and alpha
+bounds must match the file) and copies the file unchanged: the art is
+already transparent and authored at 2×. It ships
+`core.carrier.tile.floor.<0..2>`, `core.carrier.tile.wall.<nesw>` (16
+masks, digits in n-e-s-w order), `core.carrier.tile.doorway.<ns|ew>`,
+`core.carrier.item.<id>` for the six stations, `core.carrier.scaffold` and
+`core.carrier.front_marker`. No hull tiles: space shows through outside
+the rooms (TAKOAI-94). A new Art batch means a new catalogue file and a
+new constant here.
+
+`layout::TileMap::art(tile)` is the one place that picks a tile's image:
+walls by `wall_mask` (wall neighbours only; a doorway ends a wall, so the
+wall beside it shows its end trim and jamb), floors cycling the three
+variants by `x + y`, doorways by axis (`ew` in a north–south wall), hull
+none. `crates/content/tests/carrier_tiles.rs` checks that any two
+mask-picked walls that join share their edge pixels (cap always, face when
+both show one), apart from the rim of an outer edge one of them exposes at
+a corner, so a run of wall tiles draws as one wall.
+
 **Crop check.** `crates/content/tests/asset_crop.rs` (part of `cargo test`)
 loads every PNG under `assets/source/core/` and fails if a pixel with
 alpha > 8 touches the canvas edge (design/ART_GUIDELINES.md § Cropping).
 Art allowed to touch its canvas edge is listed by path in `FULL_BLEED`: the
-transparent title and Result scene art, carrier rooms / corridors / doors / dock / hull tiles,
+transparent title and Result scene art, carrier rooms / corridors / doors / dock / hull tiles, the Revision 3 floor / wall / doorway tiles and scaffold,
 and the builder UI's 9-slice panels, module cards and grid overlay. Real
 clipped cut-outs waiting for an art fix go in `KNOWN_CLIPPED`, which fails
 once the asset is fixed so the entry is removed.
@@ -310,7 +343,8 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   anchor, `starter`, `build_left_ms`) and `items` (catalogue `ItemId` +
   north-west footprint anchor, `ship` for berths, `starter`,
   `build_left_ms`), kept sorted (`normalize`). Nothing else is stored:
-  `TileMap::new` derives hull / wall / floor / doorway tiles from the rooms,
+  `TileMap::new` derives hull / wall / floor / doorway tiles from the rooms
+  (`TileMap::art` names each one's content ID, § Carrier Revision 3 art import),
   one 2-tile doorway per shared straight wall with ≥ 2 facing floor tiles
   (`doorway_between`), its clearance tiles, and which doorways are open (both
   rooms finished). `CATALOGUE` holds every item's footprint, layer (object /

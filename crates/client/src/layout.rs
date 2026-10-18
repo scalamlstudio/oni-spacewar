@@ -362,6 +362,34 @@ impl TileMap {
             .filter(|(_, (dx, dy))| self.kind((x + dx, y + dy)) == TileKind::Wall)
             .fold(0, |m, (i, _)| m | 1 << i)
     }
+
+    /// The content ID a tile is drawn with (§ Art spec › Tiles), `None` for
+    /// hull (space shows through, TAKOAI-94). Walls use the n-e-s-w mask
+    /// tile (`core.carrier.tile.wall.<nesw>`, bits in that order), so joined
+    /// walls draw as one wall; floors cycle the three variants by `x + y`;
+    /// a doorway tile shows the threshold across its passage.
+    pub fn art(&self, (x, y): Tile) -> Option<String> {
+        Some(match self.kind((x, y)) {
+            TileKind::Hull => return None,
+            TileKind::Floor => format!("core.carrier.tile.floor.{}", (x + y).rem_euclid(3)),
+            TileKind::Wall => {
+                let mask = self.wall_mask((x, y));
+                let bits: String = (0..4)
+                    .map(|i| if mask & 1 << i != 0 { '1' } else { '0' })
+                    .collect();
+                format!("core.carrier.tile.wall.{bits}")
+            }
+            TileKind::Doorway => {
+                let vertical = self
+                    .doorways
+                    .iter()
+                    .find(|d| d.tiles.contains(&(x, y)))
+                    .is_some_and(|d| d.vertical);
+                let axis = if vertical { "ew" } else { "ns" };
+                format!("core.carrier.tile.doorway.{axis}")
+            }
+        })
+    }
 }
 
 // ---------------------------------------------------------------- items
@@ -1930,6 +1958,59 @@ mod tests {
                 row.trim_end().to_string()
             })
             .collect()
+    }
+
+    /// Art batch A (TAKOAI-95): every tile of the starting carrier (and of
+    /// the autoplay's expansion) and every station draws with a shipped
+    /// image, walls pick their tile by the n-e-s-w mask, and both doorway
+    /// axes show up.
+    #[test]
+    fn tiles_and_stations_draw_with_shipped_art() {
+        let manifest = content::ContentManifest::load(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../assets/manifest.json"
+        ))
+        .unwrap();
+        let mut c = Carrier::starting();
+        c.place_room(RoomSize::Small, 14, 10);
+        let map = c.tile_map();
+        let mut axes = BTreeSet::new();
+        for y in 0..HULL_H {
+            for x in 0..HULL_W {
+                let Some(id) = map.art((x, y)) else {
+                    assert_eq!(map.kind((x, y)), TileKind::Hull);
+                    continue;
+                };
+                assert!(manifest.asset(&id).is_ok(), "({x},{y}) {id}");
+                if let Some(axis) = id.strip_prefix("core.carrier.tile.doorway.") {
+                    axes.insert(axis.to_string());
+                }
+                if map.kind((x, y)) == TileKind::Wall {
+                    // n, e, s, w as '0' / '1', each set exactly when that
+                    // neighbour is wall.
+                    let bits: Vec<char> = id.rsplit('.').next().unwrap().chars().collect();
+                    for (bit, (dx, dy)) in bits.iter().zip([(0, -1), (1, 0), (0, 1), (-1, 0)]) {
+                        let joined = map.kind((x + dx, y + dy)) == TileKind::Wall;
+                        assert_eq!(*bit == '1', joined, "({x},{y}) {id}");
+                    }
+                }
+            }
+        }
+        assert_eq!(axes, BTreeSet::from(["ew".to_string(), "ns".to_string()]));
+        for id in [
+            ItemId::CommandConsole,
+            ItemId::UpgradeBench,
+            ItemId::SampleAnalyzer,
+            ItemId::SalvageSorter,
+            ItemId::CombatSimulator,
+            ItemId::Berth,
+        ] {
+            assert!(
+                manifest.asset(&id.content_id()).is_ok(),
+                "{}",
+                id.content_id()
+            );
+        }
     }
 
     #[test]

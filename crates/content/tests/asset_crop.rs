@@ -21,6 +21,10 @@ const FULL_BLEED: &[&str] = &[
     "carrier/dock/",
     "carrier/hull_floor.png",
     "carrier/build_slot.png",
+    // Revision 3 floor, wall and doorway tiles and the tileable scaffold
+    // overlay (TAKOAI-95).
+    "carrier/tile/",
+    "carrier/scaffold.png",
     "ui/builder/panel/",
     "ui/builder/module/",
     "ui/builder/grid_cell_overlay.png",
