@@ -6,7 +6,7 @@
       "id": "core",
       "version": "0.2.0",
       "gameplay_affecting": false,
-      "content_hash": "9240e3ce1b675f3c9ae13bcafe8c4cde16819434de88a2f9ad85c1bbdf824282",
+      "content_hash": "d0bc36b4846ddf1b914c74c417c6fe1bb4d59d6276c9a86a84cf2d9d4a4bc8dd",
       "assets": [
         {
           "id": "core.battle.enemy.void_spitter",
@@ -77,7 +77,7 @@
           "source": "source/core/carrier/item/aquarium.png",
           "processed": "packs/core/processed/carrier/item/aquarium.png",
           "compressed": "packs/core/bundles/carrier/item/aquarium.png.zst",
-          "hash": "0bb5293b564dd5a3dabeb283e890e3dad14c68778198179888a1dc9a8ac9ba5f",
+          "hash": "153cedbb222c7df8086cc961d777275fa07e91cb520f29ee2d7e37ec4d459120",
           "gameplay_affecting": false
         },
         {
@@ -131,7 +131,7 @@
           "source": "source/core/carrier/item/command_console.png",
           "processed": "packs/core/processed/carrier/item/command_console.png",
           "compressed": "packs/core/bundles/carrier/item/command_console.png.zst",
-          "hash": "146ee70e13e41ed43d97330abb7d287af2cca86364925522e608484d18b8d747",
+          "hash": "643c56b8a5ab70a0d9f087469c317790b2d28205273706a7586691222979f70d",
           "gameplay_affecting": false
         },
         {
@@ -140,7 +140,7 @@
           "source": "source/core/carrier/item/crate_stack.png",
           "processed": "packs/core/processed/carrier/item/crate_stack.png",
           "compressed": "packs/core/bundles/carrier/item/crate_stack.png.zst",
-          "hash": "57d0408347e65454cc9fbfaeb3538a654873efe73bb5d31aded765e41e6b9186",
+          "hash": "4e5aa466b8948eaa6c610a117c392bdaa14202ed1c14b3ce904a050e9c56e0bc",
           "gameplay_affecting": false
         },
         {
@@ -176,7 +176,7 @@
           "source": "source/core/carrier/item/locker.png",
           "processed": "packs/core/processed/carrier/item/locker.png",
           "compressed": "packs/core/bundles/carrier/item/locker.png.zst",
-          "hash": "7175073f217af6374dce9282e09fd5f57aaeae8b5b02073d81bc58c42ec39cbf",
+          "hash": "b78deed8ddd270ab4967ed8d7720b62709ef0176afb09be022507cd388d0b5f5",
           "gameplay_affecting": false
         },
         {
@@ -203,7 +203,7 @@
           "source": "source/core/carrier/item/salvage_sorter.png",
           "processed": "packs/core/processed/carrier/item/salvage_sorter.png",
           "compressed": "packs/core/bundles/carrier/item/salvage_sorter.png.zst",
-          "hash": "e43f99bfd62ce7ec296cd4303d7022b7e08e80e16b2ba1708494246b1cfcc0f4",
+          "hash": "05be8300c78ef50b6984f6713e429662e49bb8609ccc3c935d681518ad1c2f1a",
           "gameplay_affecting": false
         },
         {
@@ -230,7 +230,7 @@
           "source": "source/core/carrier/item/snack_dispenser.png",
           "processed": "packs/core/processed/carrier/item/snack_dispenser.png",
           "compressed": "packs/core/bundles/carrier/item/snack_dispenser.png.zst",
-          "hash": "d8ec6e96ea7c9e0940529e8a03cf7ad8089bb9d105723ea0e00e1f0711e5cb2a",
+          "hash": "df9ba8d4bf306574d82add4876bcdb2a70c73fa2c5efd0a2a88c0de42eaa294c",
           "gameplay_affecting": false
         },
         {
@@ -239,7 +239,7 @@
           "source": "source/core/carrier/item/sofa.png",
           "processed": "packs/core/processed/carrier/item/sofa.png",
           "compressed": "packs/core/bundles/carrier/item/sofa.png.zst",
-          "hash": "826ddab8991a1d01e2ee196307c37ae5605f33656286fd1a44c1d6fd4fec905a",
+          "hash": "c2678f1d0373258c1ada5f08affa73a1ac897d4c3b02f767636d84d60d749f2a",
           "gameplay_affecting": false
         },
         {
@@ -573,6 +573,348 @@
           "processed": "packs/core/processed/carrier/tile/floor/2.png",
           "compressed": "packs/core/bundles/carrier/tile/floor/2.png.zst",
           "hash": "cf7153d0e322f4c9d9e53a8dc7491ea66d5c4661db82e27239468bd20d5a3644",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_0011_x00000010",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_0011_x00000010.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_0011_x00000010.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_0011_x00000010.png.zst",
+          "hash": "5ed617d36cd2ca461a32813831b344b520f2c1e4449092beff7addb9a0ffcdf8",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_0011_x11000000",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_0011_x11000000.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_0011_x11000000.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_0011_x11000000.png.zst",
+          "hash": "7f6ab8e3fbce08e008431b3a207dd42b1806d0636117ddc16ed811a20ba5309e",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_0101_x00100000",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_0101_x00100000.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_0101_x00100000.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_0101_x00100000.png.zst",
+          "hash": "14ff513f657401736070b1a43b9d2147e721c4017da88d567cf899b37382a342",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_0101_x10000000",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_0101_x10000000.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_0101_x10000000.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_0101_x10000000.png.zst",
+          "hash": "025a9ce3d8597ea7371041ea2f6fa1765daa7530b29364673aa932f5b468739c",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_0110_x00000100",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_0110_x00000100.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_0110_x00000100.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_0110_x00000100.png.zst",
+          "hash": "f30401f3264ed4cc678640376f2d3e125604f2509668e4b4b6b0298020de9284",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_0110_x10010000",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_0110_x10010000.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_0110_x10010000.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_0110_x10010000.png.zst",
+          "hash": "00b33b075116f64cf25547fe65e22eca1f6b296e19266afbb8266bcf0fcf7fbf",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_0111_x00000010",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_0111_x00000010.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_0111_x00000010.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_0111_x00000010.png.zst",
+          "hash": "577745dd8bb43478693fe77153de180919febd6e7cb7c9d118be4e970a0801f3",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_0111_x00000100",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_0111_x00000100.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_0111_x00000100.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_0111_x00000100.png.zst",
+          "hash": "08943bbe98027d073b78e12961a73d1279ccccf369374952f06dc904c959517a",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_0111_x10000000",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_0111_x10000000.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_0111_x10000000.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_0111_x10000000.png.zst",
+          "hash": "71c05d46c9dea53bed8fdb1186043f9a8b09de79e012eaf2e6e35ff5e013bb2f",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_0111_x10000010",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_0111_x10000010.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_0111_x10000010.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_0111_x10000010.png.zst",
+          "hash": "00b33b075116f64cf25547fe65e22eca1f6b296e19266afbb8266bcf0fcf7fbf",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_0111_x10000100",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_0111_x10000100.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_0111_x10000100.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_0111_x10000100.png.zst",
+          "hash": "7f6ab8e3fbce08e008431b3a207dd42b1806d0636117ddc16ed811a20ba5309e",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_1001_x00000001",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_1001_x00000001.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_1001_x00000001.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_1001_x00000001.png.zst",
+          "hash": "5579e90abfd923a1b80ef7a2db1cee8cdd1bb544a763ee644253ef07eaa3e393",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_1001_x01100000",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_1001_x01100000.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_1001_x01100000.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_1001_x01100000.png.zst",
+          "hash": "7b4fd83fd665ec65bc5bbf073935473468ecf7656c618c7db69f1a31d5801f71",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_1010_x00010000",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_1010_x00010000.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_1010_x00010000.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_1010_x00010000.png.zst",
+          "hash": "b042fd66628234dc81fb664121001fc9e7763e45c0be244dd03963c04e67a54d",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_1010_x01000000",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_1010_x01000000.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_1010_x01000000.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_1010_x01000000.png.zst",
+          "hash": "7b68288f257127e52a8367fcf0660e5dc3f3474b670c4884f69b997360835220",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_1011_x00000001",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_1011_x00000001.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_1011_x00000001.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_1011_x00000001.png.zst",
+          "hash": "17920989d517c53ccacfbe2ddb4c633a5e555d0a7a81ed4319e16a69d80bba8c",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_1011_x00000010",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_1011_x00000010.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_1011_x00000010.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_1011_x00000010.png.zst",
+          "hash": "a4ed249539b2a9ed25ff84388e33e9974728343cc6632bc96d96cffa3cad3689",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_1011_x01000000",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_1011_x01000000.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_1011_x01000000.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_1011_x01000000.png.zst",
+          "hash": "d8ee53f7463a14aa3537fb03fd1fa1c5b4eb0d2dcdb52029e447c7b7c1060118",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_1011_x01000001",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_1011_x01000001.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_1011_x01000001.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_1011_x01000001.png.zst",
+          "hash": "7f6ab8e3fbce08e008431b3a207dd42b1806d0636117ddc16ed811a20ba5309e",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_1011_x01000010",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_1011_x01000010.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_1011_x01000010.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_1011_x01000010.png.zst",
+          "hash": "7b4fd83fd665ec65bc5bbf073935473468ecf7656c618c7db69f1a31d5801f71",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_1100_x00001000",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_1100_x00001000.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_1100_x00001000.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_1100_x00001000.png.zst",
+          "hash": "f9fa4ed7a75f7680b01ebd58241d9e7384b43f46cde5946211e708459328f70c",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_1100_x00110000",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_1100_x00110000.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_1100_x00110000.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_1100_x00110000.png.zst",
+          "hash": "2b7dc7722065fb72782fd22cd435ebb13700955249ab3d8c1be01caa340ec63a",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_1101_x00000001",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_1101_x00000001.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_1101_x00000001.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_1101_x00000001.png.zst",
+          "hash": "e0311ddcc47bda48242ccdd5cb275a72e767efc8e2624faefb22bf87296eff62",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_1101_x00001000",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_1101_x00001000.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_1101_x00001000.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_1101_x00001000.png.zst",
+          "hash": "ccab647dbe47cf4b9d3b855a547945c14dc0c3747fee10d177b2bf0a8f7383f9",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_1101_x00100000",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_1101_x00100000.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_1101_x00100000.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_1101_x00100000.png.zst",
+          "hash": "b87408c0254627a736dd23e8ff25e7d496cc736312442d2491a1843b13efd06b",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_1101_x00100001",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_1101_x00100001.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_1101_x00100001.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_1101_x00100001.png.zst",
+          "hash": "2b7dc7722065fb72782fd22cd435ebb13700955249ab3d8c1be01caa340ec63a",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_1101_x00101000",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_1101_x00101000.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_1101_x00101000.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_1101_x00101000.png.zst",
+          "hash": "7b4fd83fd665ec65bc5bbf073935473468ecf7656c618c7db69f1a31d5801f71",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_1110_x00000100",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_1110_x00000100.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_1110_x00000100.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_1110_x00000100.png.zst",
+          "hash": "50ce0f48bdf18700adb3a350f87b2a0a5a5c7a69d73230033ffa2d0ee6cc7e95",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_1110_x00001000",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_1110_x00001000.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_1110_x00001000.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_1110_x00001000.png.zst",
+          "hash": "03f5010e51dc012203dd9b6ba082f0bcb753ff5ba9b43c6248d89487b4cd6c24",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_1110_x00010000",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_1110_x00010000.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_1110_x00010000.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_1110_x00010000.png.zst",
+          "hash": "ac61e870755be5ba085b18d41b3df4f2e9ccc256dcf634cd26bce9020f6be8b0",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_1110_x00010100",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_1110_x00010100.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_1110_x00010100.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_1110_x00010100.png.zst",
+          "hash": "2b7dc7722065fb72782fd22cd435ebb13700955249ab3d8c1be01caa340ec63a",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_1110_x00011000",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_1110_x00011000.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_1110_x00011000.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_1110_x00011000.png.zst",
+          "hash": "00b33b075116f64cf25547fe65e22eca1f6b296e19266afbb8266bcf0fcf7fbf",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_1111_x00000001",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_1111_x00000001.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_1111_x00000001.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_1111_x00000001.png.zst",
+          "hash": "9fa52589dd8206f31cacc069f4367ad6021ce98f2e32dcbb657a34c9a4f80c89",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_1111_x00000010",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_1111_x00000010.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_1111_x00000010.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_1111_x00000010.png.zst",
+          "hash": "839f02b9ec108c1d1a207e98867af607e1f0ee575cd70a8f4e32808f5caa6e49",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_1111_x00000100",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_1111_x00000100.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_1111_x00000100.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_1111_x00000100.png.zst",
+          "hash": "6c44d56f33347420cca17c0b186eaf596ba260539fd53b7f3d44b0a85e13c746",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_1111_x00000101",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_1111_x00000101.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_1111_x00000101.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_1111_x00000101.png.zst",
+          "hash": "ca33e4ebb6cbdf87af47a32bd837c5dadc98993b30ea50311f2f86a47c23fcb1",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_1111_x00001000",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_1111_x00001000.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_1111_x00001000.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_1111_x00001000.png.zst",
+          "hash": "19d5baa4fff3094c4496b42e76d72149d9981472d191305c43c029f98cb9adc1",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.tile.hull_wall_1111_x00001010",
+          "kind": "image/png",
+          "source": "source/core/carrier/tile/hull_wall_1111_x00001010.png",
+          "processed": "packs/core/processed/carrier/tile/hull_wall_1111_x00001010.png",
+          "compressed": "packs/core/bundles/carrier/tile/hull_wall_1111_x00001010.png.zst",
+          "hash": "276308609e777ffbd772614b48beff3820ba1bf106a886daa15dbf20bb8ef437",
           "gameplay_affecting": false
         },
         {

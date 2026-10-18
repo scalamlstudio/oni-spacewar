@@ -40,7 +40,8 @@ crates/
     src/cutouts.rs                     background keying, sheet slicing, single-sprite crop, resize
     src/bin/sprite_sheet_cutouts.rs    expression sheets -> portraits
     src/bin/demo_art_import.rs         design/art/demo (+ demo-v2 battle art and backdrops) -> battle / title / result / icon sources
-    src/bin/carrier_tile_import.rs     design/art/carrier-furniture batch A catalogue -> carrier/tile, carrier/item, scaffold, front marker sources
+    src/bin/carrier_tile_import.rs     design/art/carrier-furniture catalogues (batches A/B, patches, hull edge) -> carrier/tile, carrier/item, scaffold, front marker sources
+    hull-wall/build-hull-wall-extra.py every reachable hull-edge case Art's catalogue lacks, drawn by Art's generator -> hull-wall/extra-v1/ (PNGs + catalogue)
   client/             package `oni-client`, bin `oni-spacewar` — everything else
     src/main.rs         CLI (synctest / p2p modes), app + GGRS session setup, ICE (STUN/TURN) config
     src/art.rs          ContentImages: shipped images and fonts by stable content ID (manifest -> processed file), cached; linear sampler + CPU mip chain
@@ -252,14 +253,22 @@ cargo run --release --bin carrier-tile-import -- .
 cargo run --release --bin content-pipeline -- .
 ```
 
-`carrier-tile-import` reads Art's catalogues
-`design/art/carrier-furniture/batch-a-import-v3.json` and
+`carrier-tile-import` reads the catalogues in its `CATALOGUES` table, in
+order: Art's `design/art/carrier-furniture/batch-a-import-v3.json` and
 `batch-b-import-v1.json` (selected file, stable ID, destination, size,
 alpha bounds; batch B adds footprint, headroom, anchor, layer and
-placement), checks each row (the ID must be the one the pipeline derives
-from the destination path; size and alpha bounds must match the file, the
+placement); patch catalogues (`orientation-import-patch-v2.json`,
+TAKOAI-99), whose rows each redraw a row an earlier catalogue has (same
+ID and canvas, a footprint row keeps footprint, headroom, anchor and
+layer; anything else is an error) and replace it; and the hull-edge
+catalogues (`outer-wall-import-v1.json`, TAKOAI-101, and the generated
+`crates/content/hull-wall/extra-v1/catalogue.json`, rows under
+`tiles`). It checks each row (the ID decides the destination, the path
+the pipeline derives it from; a catalogue `source` that disagrees is
+reported and overridden, as Art's hull rows put their tiles in a
+`hull_wall/` folder their IDs don't have; size and alpha bounds must match the file, the
 alpha bounds counting the pixels above each batch's own threshold: any
-alpha for A, above 0.02 for B as Art's inspector does; a batch B canvas
+alpha for A, the patches and the hull tiles, above 0.02 for B as Art's inspector does; a batch B canvas
 must be its footprint's width × 128, and 96 px tall for a wall piece or
 depth × 128 plus a multiple-of-32 headroom otherwise, anchored bottom
 centre) and copies the file unchanged: the art is already transparent and
@@ -267,10 +276,25 @@ authored at 2×. It ships
 `core.carrier.tile.floor.<0..2>`, `core.carrier.tile.wall.<nesw>` (16
 masks, digits in n-e-s-w order), `core.carrier.tile.doorway.<ns|ew>`,
 `core.carrier.item.<id>` for all 25 catalogue entries (six stations, 19
-furniture and decor pieces), `core.carrier.scaffold` and
-`core.carrier.front_marker`. No hull tiles: space shows through outside
-the rooms (TAKOAI-94). A new Art batch means a new catalogue file and a
-new `CATALOGUES` row there. Every item draws as its art, bottom centre at
+furniture and decor pieces), `core.carrier.scaffold`,
+`core.carrier.front_marker` and the 38 hull-edge walls
+`core.carrier.tile.hull_wall_<nesw>_x<n e s w ne se sw nw>`. Nothing is
+drawn outside the rooms: space shows through (TAKOAI-94). A new Art batch
+or patch means a new catalogue file and a new `CATALOGUES` row there.
+
+**Hull-edge tiles (TAKOAI-101, TAKOAI-102).** Art ships the 17 starter
+cases; a player-built layout reaches 38. `build-hull-wall-extra.py`
+(Python 3 + Pillow) runs Art's deterministic `build-outer-wall-v1.py` on a
+scratch copy of its folder (design/art/ is never written), enumerates the
+reachable keys (every set of Small and Large rooms round a wall tile that
+overlap only on walls, doorways included: a superset of valid layouts)
+and renders the 21 missing ones with Art's `render()` into
+`crates/content/hull-wall/extra-v1/`. `layout::reachable_hull_keys` (test
+only) enumerates the same from the Rust side, and
+`every_reachable_hull_case_has_a_shipped_tile` requires the shipped set to
+equal it, so a new room size or doorway rule fails until the tiles are
+regenerated; `random_layouts_resolve_every_hull_wall_to_a_shipped_tile`
+fuzzes real `can_place_room` layouts on top. Every item draws as its art, bottom centre at
 the middle of its footprint's front edge, at 1 world px per 2 art px;
 there is no placeholder. `carrier::tests::catalogue_art_fits_its_footprint`
 checks every `layout::CATALOGUE` entry against its shipped canvas, so a
@@ -281,7 +305,11 @@ new catalogue entry needs its art in the same change.
 `carrier::deck` the one place that turns them into sprites, so a later
 recolour (TAKOAI-96) hooks in there:
 walls by `wall_mask` (wall neighbours only; a doorway ends a wall, so the
-wall beside it shows its end trim and jamb), floors cycling the three
+wall beside it shows its end trim and jamb); a wall with space round it
+(`exterior_mask`: n e s w ne se sw nw outside every room, a diagonal
+cleared when a cardinal beside it is set) by both masks as its hull-edge
+tile, which replaces the inner wall and has the floor in it, so
+`floor_art` is `None` there and `deck` draws that tile alone; floors cycling the three
 variants by `x + y`, doorways by axis (`ew` in a north–south wall), hull
 none. `crates/content/tests/carrier_tiles.rs` checks that any two
 mask-picked walls that join share their edge pixels (cap always, face when
@@ -596,7 +624,11 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   Art's cyan light line, and moves every other pixel by its per-channel
   offset from Art's floor (`FLOOR_REF`, seams) or wall (`WALL_REF`, trim)
   colour, whichever is nearer in luma, onto the chosen colour (Art's own
-  pair reproduces the shipped pixels). A change rewrites those images in
+  pair reproduces the shipped pixels). The hull-edge tiles are drawn in
+  exactly Art's v3 floor, wall, trim and cyan, so the same per-pixel
+  family split recolours their inside floor with the floor colour and the
+  shell with the wall colour; no mask image is needed
+  (`hull_tiles_recolour_their_floor_and_shell_apart`). A change rewrites those images in
   place (`apply_palette`), so the deck updates live without a redraw.
   Stations, scaffold, marker and characters keep their art.
 - Save data is client-only JSON with an explicit schema version (now 5). It

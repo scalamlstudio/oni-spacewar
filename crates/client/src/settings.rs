@@ -822,6 +822,48 @@ mod tests {
         assert_eq!(&out[4..], &src[4..]);
     }
 
+    /// TAKOAI-102: the hull-edge tiles are drawn in Art's v3 floor, wall,
+    /// trim and cyan, so the same recolour moves the floor inside them
+    /// with the floor colour and the shell with the wall colour.
+    #[test]
+    fn hull_tiles_recolour_their_floor_and_shell_apart() {
+        let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets");
+        let manifest = content::ContentManifest::load(format!("{root}/manifest.json")).unwrap();
+        let (floor, wall) = (Rgb::hex(0x203040), Rgb::hex(0xC08060));
+        let mut tiles = 0;
+        for a in &manifest.packs[0].assets {
+            if !a.id.starts_with("core.carrier.tile.hull_wall_") {
+                continue;
+            }
+            assert!(recolourable(&a.id));
+            let image = image::open(format!("{root}/{}", a.processed))
+                .unwrap()
+                .to_rgba8();
+            let (mut floors, mut shells) = (0, 0);
+            for p in image.pixels() {
+                let rgb = [p[0], p[1], p[2]];
+                let out = recolour_pixel(rgb, floor, wall);
+                if is_accent(rgb) {
+                    assert_eq!(out, rgb);
+                } else if rgb == FLOOR_REF.0 {
+                    assert_eq!(out, floor.0, "{}", a.id);
+                    floors += 1;
+                } else {
+                    // Shell, trim or rim: moved with the wall colour.
+                    let expect: [u8; 3] = std::array::from_fn(|c| {
+                        (wall.0[c] as i32 + rgb[c] as i32 - WALL_REF.0[c] as i32).clamp(0, 255)
+                            as u8
+                    });
+                    assert_eq!(out, expect, "{} {rgb:?}", a.id);
+                    shells += 1;
+                }
+            }
+            assert!(floors > 0 && shells > 0, "{}", a.id);
+            tiles += 1;
+        }
+        assert_eq!(tiles, 38);
+    }
+
     #[test]
     fn only_floor_wall_and_doorway_tiles_recolour() {
         assert!(recolourable("core.carrier.tile.floor.0"));

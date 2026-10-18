@@ -1235,11 +1235,13 @@ pub fn image_ids() -> Vec<String> {
         .map(|v| format!("core.carrier.tile.floor.{v}"))
         .collect();
     for mask in 0..16 {
-        let bits: String = (0..4)
-            .map(|i| if mask & 1 << i != 0 { '1' } else { '0' })
-            .collect();
-        ids.push(format!("core.carrier.tile.wall.{bits}"));
+        ids.push(format!("core.carrier.tile.wall.{}", layout::bits(mask, 4)));
     }
+    ids.extend(
+        layout::reachable_hull_keys()
+            .into_iter()
+            .map(|(joins, ext)| layout::hull_wall_id(joins, ext)),
+    );
     ids.extend(["ns", "ew"].map(|a| format!("core.carrier.tile.doorway.{a}")));
     ids.extend([SCAFFOLD, FRONT_MARKER].map(String::from));
     ids.extend(CATALOGUE.iter().map(|d| d.id.content_id()));
@@ -1409,10 +1411,11 @@ pub struct Draw {
 }
 
 /// The deck, back to front (§ Grid and view › Draw order). Each room tile
-/// gets its floor, and a wall or doorway tile its wall or doorway art on
-/// top of that floor, so wall art that leaves floor showing (TAKOAI-89's
-/// thinner walls) drops in unchanged; the tile art is picked by
-/// `TileMap::art`. Rooms being built get the scaffold over every tile and
+/// gets its floor, and an inner wall or doorway tile its wall or doorway
+/// art on top of that floor, so wall art that leaves floor showing
+/// (TAKOAI-89's thinner walls) drops in unchanged; a wall on the hull edge
+/// gets its outer-wall tile alone, floor included (TAKOAI-101). The tile
+/// art is picked by `TileMap::art` / `TileMap::floor_art`. Rooms being built get the scaffold over every tile and
 /// keep their new doorways shut (dimmed). Items follow: rugs and
 /// wall-mounted pieces on their flat layers, objects sorted with the
 /// characters by their front edge; sites in the blueprint tint. Hull tiles
@@ -1431,10 +1434,9 @@ pub fn deck(carrier: &Carrier) -> Vec<Draw> {
     for y in 0..HULL_H {
         for x in 0..HULL_W {
             let t = (x, y);
-            let Some(floor) = map.floor_art(t) else {
-                continue;
-            };
-            out.push(tile(floor, t, Z_FLOOR, Color::WHITE));
+            if let Some(floor) = map.floor_art(t) {
+                out.push(tile(floor, t, Z_FLOOR, Color::WHITE));
+            }
             let kind = map.kind(t);
             if kind == TileKind::Floor {
                 continue;
@@ -4376,9 +4378,10 @@ mod tests {
         let floor = tiles_at(&draws, (2, 2));
         assert_eq!(floor.len(), 1);
         assert!(floor[0].id.starts_with("core.carrier.tile.floor."));
-        // Wall and doorway tiles: a floor, then the tile map's art over it.
+        // Inner wall and doorway tiles: a floor, then the tile map's art
+        // over it.
         let map = c.tile_map();
-        for t in [(0, 0), (7, 1), (7, 2), (3, 15)] {
+        for t in [(7, 1), (7, 2), (14, 3), (3, 5)] {
             let d = tiles_at(&draws, t);
             assert_eq!(d.len(), 2, "{t:?}");
             assert_eq!(Some(d[0].id.clone()), map.floor_art(t));
@@ -4386,6 +4389,16 @@ mod tests {
             assert!(d[0].z < d[1].z, "{t:?}");
             assert_eq!(d[1].tint, Color::WHITE);
         }
+        // A hull-edge wall: its outer-wall tile alone, no floor under it
+        // and nothing outside it (TAKOAI-101).
+        for t in [(0, 0), (3, 0), (3, 15), (14, 10)] {
+            let d = tiles_at(&draws, t);
+            assert_eq!(d.len(), 1, "{t:?}");
+            assert!(d[0].id.starts_with("core.carrier.tile.hull_wall_"), "{t:?}");
+            assert_eq!(Some(d[0].id.clone()), map.art(t));
+        }
+        assert!(tiles_at(&draws, (3, -1)).is_empty());
+        assert!(tiles_at(&draws, (15, 11)).is_empty());
         // Every item once, pinned at its front edge; rugs under wall pieces
         // under objects, and objects sorted by their front edge.
         let items: Vec<&Draw> = draws.iter().filter(|d| d.item.is_some()).collect();
