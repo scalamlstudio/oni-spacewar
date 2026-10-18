@@ -20,7 +20,6 @@ use crate::mission::{self, MissionOutcome, MissionRequest, MissionResult};
 use crate::rollback::SimWorld;
 use crate::save::{self, SaveError, SaveGame};
 use crate::settings::{self, SettingsScreen};
-use crate::zoom;
 
 #[derive(States, Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub enum GameScreen {
@@ -172,7 +171,7 @@ const CODEX_SHOTS: [(&str, usize); 5] = [
 
 /// First Carrier visit: when the autoplay's 8-direction Pilot tour starts,
 /// and the time per walk (the longest, a 209 px diagonal, takes 1.3 s).
-const TOUR_START: f32 = 6.8;
+const TOUR_START: f32 = 5.6;
 const TOUR_LEG: f32 = 1.4;
 /// Then the hold-to-move drag: pressed after the tour, released once the
 /// cursor has swept all its legs.
@@ -1367,18 +1366,7 @@ fn autoplay_flow(
                         autoplay.shoot(&mut commands, &format!("11b-build-mode-{name}"));
                     }
                 }
-                // Then Build mode's grid at 1× and zoomed in, so the
-                // furniture footprints can be checked against the cells.
-                for (i, (z, name)) in [(1.0, "1x"), (zoom::MAX, "zoomed")].into_iter().enumerate() {
-                    let t = 5.2 + i as f32 * 0.6;
-                    if at(t) {
-                        view.zoom.set(z);
-                    }
-                    if at(t + 0.5) {
-                        autoplay.shoot(&mut commands, &format!("11b-build-mode-grid-{name}"));
-                    }
-                }
-                if at(6.5) {
+                if at(5.3) {
                     *overlay = Overlay::None;
                 }
                 for (i, (to, name)) in carrier::PILOT_TOUR.into_iter().enumerate() {

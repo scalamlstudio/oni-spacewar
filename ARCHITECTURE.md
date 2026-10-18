@@ -260,8 +260,7 @@ order: Art's `design/art/carrier-furniture/batch-a-import-v3.json` and
 `batch-b-import-v1.json` (selected file, stable ID, destination, size,
 alpha bounds; batch B adds footprint, headroom, anchor, layer and
 placement); patch catalogues (`orientation-import-patch-v2.json`,
-TAKOAI-99, then `orthographic-import-patch-v1.json`, TAKOAI-104, the
-top-down redraw), whose rows each redraw a row an earlier catalogue has (same
+TAKOAI-99), whose rows each redraw a row an earlier catalogue has (same
 ID and canvas, a footprint row keeps footprint, headroom, anchor and
 layer; anything else is an error) and replace it; and the hull-edge
 catalogues (`outer-wall-import-v1.json`, TAKOAI-101, and the generated
@@ -587,8 +586,7 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   demo loop; its battles end at 10 kills unless `--kill-target` says otherwise: New Game
   (or Continue the existing save), fly N battles (default 1) with a scripted
   pilot (input only, like a player). The first Carrier visit shows Build
-  mode's flyouts, its grid at 1× and zoomed in (`11b-build-mode-grid-*`,
-  to check footprints against the cells, TAKOAI-105) and walks the Pilot in all 8 directions. Between missions
+  mode's flyouts and walks the Pilot in all 8 directions. Between missions
   it builds the spec's example edits when it can afford them: a Small
   Room at (14,10) (mouse tile (17,12)), waits for it, then the Salvage
   Sorter at (19,11) with a few Art batch B pieces around it
