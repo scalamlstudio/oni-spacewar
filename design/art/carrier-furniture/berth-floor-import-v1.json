@@ -1,0 +1,113 @@
+{
+  "tile_px": 128,
+  "pieces": [
+    {
+      "piece": "fill",
+      "file": "berth-floor-fill-v1.png",
+      "size": [
+        128,
+        128
+      ],
+      "edges": ""
+    },
+    {
+      "piece": "edge-n",
+      "file": "berth-floor-edge-n-v1.png",
+      "size": [
+        128,
+        128
+      ],
+      "edges": "n"
+    },
+    {
+      "piece": "edge-e",
+      "file": "berth-floor-edge-e-v1.png",
+      "size": [
+        128,
+        128
+      ],
+      "edges": "e"
+    },
+    {
+      "piece": "edge-s",
+      "file": "berth-floor-edge-s-v1.png",
+      "size": [
+        128,
+        128
+      ],
+      "edges": "s"
+    },
+    {
+      "piece": "edge-w",
+      "file": "berth-floor-edge-w-v1.png",
+      "size": [
+        128,
+        128
+      ],
+      "edges": "w"
+    },
+    {
+      "piece": "corner-ne",
+      "file": "berth-floor-corner-ne-v1.png",
+      "size": [
+        128,
+        128
+      ],
+      "edges": "ne"
+    },
+    {
+      "piece": "corner-se",
+      "file": "berth-floor-corner-se-v1.png",
+      "size": [
+        128,
+        128
+      ],
+      "edges": "se"
+    },
+    {
+      "piece": "corner-sw",
+      "file": "berth-floor-corner-sw-v1.png",
+      "size": [
+        128,
+        128
+      ],
+      "edges": "sw"
+    },
+    {
+      "piece": "corner-nw",
+      "file": "berth-floor-corner-nw-v1.png",
+      "size": [
+        128,
+        128
+      ],
+      "edges": "nw"
+    }
+  ],
+  "marking": {
+    "file": "berth-floor-marking-2x2-v1.png",
+    "size": [
+      256,
+      256
+    ],
+    "offset_cells": [
+      1,
+      1
+    ]
+  },
+  "example_footprint": [
+    4,
+    4
+  ],
+  "starting_origins": [
+    [
+      2,
+      8
+    ],
+    [
+      8,
+      8
+    ]
+  ],
+  "layer": "floor",
+  "status": "exploratory"
+}
