@@ -567,6 +567,10 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   hints seen, missions played and won, the last result and the carrier
   (`carrier`: Revision 3 rooms and items), and is never read by `sim`; the
   client converts it into a deterministic mission config before launch.
+  A new game (`SaveGame::default`) starts with `save::STARTING_RESOURCES`,
+  currently the test-build values (`TEST_BUILD_STARTING_RESOURCES`: 10,000
+  credits, 1,000 Void Crystal, TAKOAI-97); pointing it at
+  `RELEASE_STARTING_RESOURCES` (nothing) restores the Demo Spec start.
   `save::from_json` loads any supported version: up to v4 the `carrier`
   field is a Revision 1 layout, so it is taken out of the JSON and handed to
   `save::migrate`, which refunds every player-built room and corridor in it

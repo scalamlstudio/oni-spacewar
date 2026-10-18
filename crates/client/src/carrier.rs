@@ -3553,7 +3553,7 @@ mod tests {
 
     #[test]
     fn ghost_shows_the_shaped_corridor_and_why_not() {
-        let game = SaveGame::default();
+        let game = SaveGame::release_start();
         let g = ghost(&game, Tool::Place(Piece::Corridor), (8, 6)).unwrap();
         assert_eq!(g.image, "core.carrier.corridor.w");
         assert_eq!((g.at, g.size, g.ok), ((8, 6), (1, 1), false));
