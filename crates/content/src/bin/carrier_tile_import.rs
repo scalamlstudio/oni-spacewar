@@ -3,7 +3,7 @@
 //! wall and doorway tiles, the six stations, the scaffold and the front
 //! marker; batch B (TAKOAI-92, TAKOAI-93), the 19 furniture and decor
 //! pieces; the hull-edge wall tiles (TAKOAI-101, TAKOAI-102); and patch
-//! catalogues that redraw some of those (TAKOAI-99). The selection is Art's
+//! catalogues that redraw some of those (TAKOAI-99, TAKOAI-104). The selection is Art's
 //! catalogues under `design/art/carrier-furniture/` (design file, stable ID,
 //! destination under `assets/source/core/`, size, alpha bounds; batch B adds
 //! footprint, headroom, anchor, layer and placement). The art is already
@@ -39,12 +39,15 @@ enum Kind {
 /// the alpha above which Art's inspector counted a pixel into
 /// `alpha_bbox`: any alpha for batch A, the patches and the hull tiles,
 /// above 0.02 (5 of 255) for batch B (`inspect-batch-b-v1.swift`).
-const CATALOGUES: [(&str, &str, Kind, u8); 5] = [
+const CATALOGUES: [(&str, &str, Kind, u8); 6] = [
     ("batch-a-import-v3.json", ART_DIR, Kind::Rows, 0),
     ("batch-b-import-v1.json", ART_DIR, Kind::Rows, 5),
     // TAKOAI-99: two stations and five furniture pieces turned to face
     // straight south.
     ("orientation-import-patch-v2.json", ART_DIR, Kind::Patch, 0),
+    // TAKOAI-104: the berth, the six stations and the 19 furniture pieces
+    // redrawn top-down without perspective.
+    ("orthographic-import-patch-v1.json", ART_DIR, Kind::Patch, 0),
     // TAKOAI-101: the starter hull edge, and (TAKOAI-102) every other hull
     // case a player-built layout reaches, drawn by Art's generator.
     ("outer-wall-import-v1.json", ART_DIR, Kind::Tiles, 0),
