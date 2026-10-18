@@ -1,0 +1,534 @@
+[
+  {
+    "alpha_bbox" : [
+      5,
+      148,
+      123,
+      380
+    ],
+    "anchor" : [
+      64,
+      384
+    ],
+    "description" : "bunk bed",
+    "file" : "bunk-bed-v1.png",
+    "footprint" : [
+      1,
+      2
+    ],
+    "headroom" : 128,
+    "id" : "core.carrier.item.bunk_bed",
+    "layer" : "object",
+    "placement" : "against a wall",
+    "reference_height" : 104,
+    "size" : [
+      128,
+      384
+    ],
+    "source" : "carrier\/item\/bunk_bed.png"
+  },
+  {
+    "alpha_bbox" : [
+      20,
+      72,
+      107,
+      316
+    ],
+    "anchor" : [
+      64,
+      320
+    ],
+    "description" : "tall narrow teal metal locker, cat-ear vent glyph, amber handle, height 180 relative to tile width 128",
+    "file" : "locker-v1.png",
+    "footprint" : [
+      1,
+      1
+    ],
+    "headroom" : 192,
+    "id" : "core.carrier.item.locker",
+    "layer" : "object",
+    "placement" : "against a wall",
+    "reference_height" : 180,
+    "size" : [
+      128,
+      320
+    ],
+    "source" : "carrier\/item\/locker.png"
+  },
+  {
+    "alpha_bbox" : [
+      4,
+      106,
+      252,
+      188
+    ],
+    "anchor" : [
+      128,
+      192
+    ],
+    "description" : "wide low rectangular dining table, warm wood surface with teal metal legs, tabletop height 52 relative to total width 256",
+    "file" : "table-v1.png",
+    "footprint" : [
+      2,
+      1
+    ],
+    "headroom" : 64,
+    "id" : "core.carrier.item.table",
+    "layer" : "object",
+    "placement" : "free",
+    "reference_height" : 52,
+    "size" : [
+      256,
+      192
+    ],
+    "source" : "carrier\/item\/table.png"
+  },
+  {
+    "alpha_bbox" : [
+      11,
+      88,
+      117,
+      188
+    ],
+    "anchor" : [
+      64,
+      192
+    ],
+    "description" : "small round padded orange stool with four teal feet, seat height 36 relative to tile width 128",
+    "file" : "stool-v1.png",
+    "footprint" : [
+      1,
+      1
+    ],
+    "headroom" : 64,
+    "id" : "core.carrier.item.stool",
+    "layer" : "object",
+    "placement" : "free",
+    "reference_height" : 36,
+    "size" : [
+      128,
+      192
+    ],
+    "source" : "carrier\/item\/stool.png"
+  },
+  {
+    "alpha_bbox" : [
+      29,
+      84,
+      227,
+      220
+    ],
+    "anchor" : [
+      128,
+      224
+    ],
+    "description" : "wide cozy two-seat orange upholstered sofa on teal spacecraft frame, cat-ear cushions, width two tiles",
+    "file" : "sofa-v1.png",
+    "footprint" : [
+      2,
+      1
+    ],
+    "headroom" : 96,
+    "id" : "core.carrier.item.sofa",
+    "layer" : "object",
+    "placement" : "against a wall",
+    "reference_height" : 72,
+    "size" : [
+      256,
+      224
+    ],
+    "source" : "carrier\/item\/sofa.png"
+  },
+  {
+    "alpha_bbox" : [
+      4,
+      79,
+      124,
+      156
+    ],
+    "anchor" : [
+      64,
+      160
+    ],
+    "description" : "round low plush warm orange cat bed with padded rim and teal outer shell, empty",
+    "file" : "cat-bed-v1.png",
+    "footprint" : [
+      1,
+      1
+    ],
+    "headroom" : 32,
+    "id" : "core.carrier.item.cat_bed",
+    "layer" : "object",
+    "placement" : "free",
+    "reference_height" : 20,
+    "size" : [
+      128,
+      160
+    ],
+    "source" : "carrier\/item\/cat_bed.png"
+  },
+  {
+    "alpha_bbox" : [
+      4,
+      132,
+      124,
+      348
+    ],
+    "anchor" : [
+      64,
+      352
+    ],
+    "description" : "tall compact cat tree with two platforms and cozy rounded cubby, sisal poles, teal and orange, height 200 relative to base width 128",
+    "file" : "cat-tree-v1.png",
+    "footprint" : [
+      1,
+      1
+    ],
+    "headroom" : 224,
+    "id" : "core.carrier.item.cat_tree",
+    "layer" : "object",
+    "placement" : "free",
+    "reference_height" : 200,
+    "size" : [
+      128,
+      352
+    ],
+    "source" : "carrier\/item\/cat_tree.png"
+  },
+  {
+    "alpha_bbox" : [
+      14,
+      76,
+      114,
+      220
+    ],
+    "anchor" : [
+      64,
+      224
+    ],
+    "description" : "single sisal scratching post on small teal base with warm amber top cap",
+    "file" : "scratch-post-v1.png",
+    "footprint" : [
+      1,
+      1
+    ],
+    "headroom" : 96,
+    "id" : "core.carrier.item.scratch_post",
+    "layer" : "object",
+    "placement" : "free",
+    "reference_height" : 80,
+    "size" : [
+      128,
+      224
+    ],
+    "source" : "carrier\/item\/scratch_post.png"
+  },
+  {
+    "alpha_bbox" : [
+      4,
+      103,
+      124,
+      156
+    ],
+    "anchor" : [
+      64,
+      160
+    ],
+    "description" : "two shallow food and water bowls side by side on one small teal feeding mat, orange kibble and clear blue water",
+    "file" : "food-bowls-v1.png",
+    "footprint" : [
+      1,
+      1
+    ],
+    "headroom" : 32,
+    "id" : "core.carrier.item.food_bowls",
+    "layer" : "object",
+    "placement" : "free",
+    "reference_height" : 12,
+    "size" : [
+      128,
+      160
+    ],
+    "source" : "carrier\/item\/food_bowls.png"
+  },
+  {
+    "alpha_bbox" : [
+      4,
+      112,
+      124,
+      220
+    ],
+    "anchor" : [
+      64,
+      224
+    ],
+    "description" : "compact stack of three teal cargo crates with amber latches, no markings",
+    "file" : "crate-stack-v1.png",
+    "footprint" : [
+      1,
+      1
+    ],
+    "headroom" : 96,
+    "id" : "core.carrier.item.crate_stack",
+    "layer" : "object",
+    "placement" : "free",
+    "reference_height" : 90,
+    "size" : [
+      128,
+      224
+    ],
+    "source" : "carrier\/item\/crate_stack.png"
+  },
+  {
+    "alpha_bbox" : [
+      13,
+      80,
+      115,
+      284
+    ],
+    "anchor" : [
+      64,
+      288
+    ],
+    "description" : "narrow upright teal snack vending machine with small transparent window showing snacks and orange dispensing hatch, no text",
+    "file" : "snack-dispenser-v1.png",
+    "footprint" : [
+      1,
+      1
+    ],
+    "headroom" : 160,
+    "id" : "core.carrier.item.snack_dispenser",
+    "layer" : "object",
+    "placement" : "against a wall",
+    "reference_height" : 140,
+    "size" : [
+      128,
+      288
+    ],
+    "source" : "carrier\/item\/snack_dispenser.png"
+  },
+  {
+    "alpha_bbox" : [
+      4,
+      107,
+      252,
+      252
+    ],
+    "anchor" : [
+      128,
+      256
+    ],
+    "description" : "wide rectangular aquarium on a low teal cabinet, amber trim, water and tiny fish and aquatic plants, width two tiles",
+    "file" : "aquarium-v1.png",
+    "footprint" : [
+      2,
+      1
+    ],
+    "headroom" : 128,
+    "id" : "core.carrier.item.aquarium",
+    "layer" : "object",
+    "placement" : "against a wall",
+    "reference_height" : 100,
+    "size" : [
+      256,
+      256
+    ],
+    "source" : "carrier\/item\/aquarium.png"
+  },
+  {
+    "alpha_bbox" : [
+      4,
+      106,
+      124,
+      220
+    ],
+    "anchor" : [
+      64,
+      224
+    ],
+    "description" : "one leafy green houseplant in a squat orange ceramic pot with teal base",
+    "file" : "potted-plant-v1.png",
+    "footprint" : [
+      1,
+      1
+    ],
+    "headroom" : 96,
+    "id" : "core.carrier.item.potted_plant",
+    "layer" : "object",
+    "placement" : "free",
+    "reference_height" : 80,
+    "size" : [
+      128,
+      224
+    ],
+    "source" : "carrier\/item\/potted_plant.png"
+  },
+  {
+    "alpha_bbox" : [
+      4,
+      120,
+      252,
+      188
+    ],
+    "anchor" : [
+      128,
+      192
+    ],
+    "description" : "wide low teal hydroponic trough with warm amber trim and neat leafy green vegetables, width two tiles",
+    "file" : "hydro-planter-v1.png",
+    "footprint" : [
+      2,
+      1
+    ],
+    "headroom" : 64,
+    "id" : "core.carrier.item.hydro_planter",
+    "layer" : "object",
+    "placement" : "free",
+    "reference_height" : 45,
+    "size" : [
+      256,
+      192
+    ],
+    "source" : "carrier\/item\/hydro_planter.png"
+  },
+  {
+    "alpha_bbox" : [
+      22,
+      60,
+      107,
+      284
+    ],
+    "anchor" : [
+      64,
+      288
+    ],
+    "description" : "tall slender teal floor lamp with warm orange glowing shade and circular base, height 160 relative to tile width 128",
+    "file" : "floor-lamp-v1.png",
+    "footprint" : [
+      1,
+      1
+    ],
+    "headroom" : 160,
+    "id" : "core.carrier.item.floor_lamp",
+    "layer" : "object",
+    "placement" : "free",
+    "reference_height" : 160,
+    "size" : [
+      128,
+      288
+    ],
+    "source" : "carrier\/item\/floor_lamp.png"
+  },
+  {
+    "alpha_bbox" : [
+      4,
+      59,
+      252,
+      252
+    ],
+    "anchor" : [
+      128,
+      256
+    ],
+    "description" : "flat square cozy warm orange woven rug with subtle teal border and simple cat-paw glyph, viewed top down, occupies two by two tile square, no raised geometry",
+    "file" : "rug-v1.png",
+    "footprint" : [
+      2,
+      2
+    ],
+    "headroom" : 0,
+    "id" : "core.carrier.item.rug",
+    "layer" : "floor",
+    "placement" : "free",
+    "reference_height" : 2,
+    "size" : [
+      256,
+      256
+    ],
+    "source" : "carrier\/item\/rug.png"
+  },
+  {
+    "alpha_bbox" : [
+      4,
+      33,
+      252,
+      92
+    ],
+    "anchor" : [
+      128,
+      96
+    ],
+    "description" : "wide shallow teal wall-mounted star map monitor, glowing blue-green star points connected by subtle lines, amber rim accents, NO letters or numbers; front facing south with slightly visible top rim, landscape 256 by 96 proportions, no wall",
+    "file" : "wall-screen-v1.png",
+    "footprint" : [
+      2,
+      1
+    ],
+    "headroom" : 0,
+    "id" : "core.carrier.item.wall_screen",
+    "layer" : "wall",
+    "placement" : "on a wall",
+    "reference_height" : null,
+    "size" : [
+      256,
+      96
+    ],
+    "source" : "carrier\/item\/wall_screen.png"
+  },
+  {
+    "alpha_bbox" : [
+      4,
+      63,
+      124,
+      92
+    ],
+    "anchor" : [
+      64,
+      96
+    ],
+    "description" : "small horizontal teal wall-mounted light fixture with warm amber luminous strip, shallow front south facing, landscape 128 by 96 proportions, no wall",
+    "file" : "wall-light-v1.png",
+    "footprint" : [
+      1,
+      1
+    ],
+    "headroom" : 0,
+    "id" : "core.carrier.item.wall_light",
+    "layer" : "wall",
+    "placement" : "on a wall",
+    "reference_height" : null,
+    "size" : [
+      128,
+      96
+    ],
+    "source" : "carrier\/item\/wall_light.png"
+  },
+  {
+    "alpha_bbox" : [
+      4,
+      12,
+      124,
+      92
+    ],
+    "anchor" : [
+      64,
+      96
+    ],
+    "description" : "compact teal wall-mounted tool rack holding a wrench pliers and screwdriver with orange grips, front facing south with slight visible top edge, landscape 128 by 96 proportions, no wall",
+    "file" : "tool-rack-v1.png",
+    "footprint" : [
+      1,
+      1
+    ],
+    "headroom" : 0,
+    "id" : "core.carrier.item.tool_rack",
+    "layer" : "wall",
+    "placement" : "on a wall",
+    "reference_height" : null,
+    "size" : [
+      128,
+      96
+    ],
+    "source" : "carrier\/item\/tool_rack.png"
+  }
+]
