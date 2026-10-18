@@ -31,7 +31,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         gameplay_affecting: false,
     });
 
-    for (extension, kind) in [("png", "image/png"), ("ttf", "font/ttf")] {
+    for (extension, kind) in [
+        ("png", "image/png"),
+        ("ttf", "font/ttf"),
+        ("json", "application/json"),
+    ] {
         for file in discover(&assets_root.join("source/core"), extension)? {
             let source_path = assets_root.join(&file.source);
             let bytes = fs::read(&source_path)?;

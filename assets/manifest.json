@@ -6,7 +6,7 @@
       "id": "core",
       "version": "0.2.0",
       "gameplay_affecting": false,
-      "content_hash": "d0bc36b4846ddf1b914c74c417c6fe1bb4d59d6276c9a86a84cf2d9d4a4bc8dd",
+      "content_hash": "8fc1dce39eec37f85c11079deddf782d017e37c9188d57896d9beb2bfc535fa8",
       "assets": [
         {
           "id": "core.battle.enemy.void_spitter",
@@ -1059,6 +1059,15 @@
           "processed": "packs/core/processed/carrier/tile/wall/1111.png",
           "compressed": "packs/core/bundles/carrier/tile/wall/1111.png.zst",
           "hash": "0d98468e7f2e49905fad3b20f52c6f7f73a90c9072ab6b430a1554e610a43349",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.codex",
+          "kind": "application/json",
+          "source": "source/core/codex.json",
+          "processed": "packs/core/processed/codex.json",
+          "compressed": "packs/core/bundles/codex.json.zst",
+          "hash": "32fa9304eb56ac0ce366e66eee1e52334edf80e0e2156dd3a2164974a58255e4",
           "gameplay_affecting": false
         },
         {

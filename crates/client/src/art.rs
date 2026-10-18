@@ -74,6 +74,13 @@ impl ContentImages {
         handle
     }
 
+    /// The text shipped under `id` (e.g. the Codex's JSON), read each
+    /// call, or `None` if it is missing.
+    pub fn text(&mut self, id: &str) -> Option<String> {
+        self.read(id)
+            .and_then(|bytes| String::from_utf8(bytes).ok())
+    }
+
     /// The processed bytes shipped under `id`.
     fn read(&mut self, id: &str) -> Option<Vec<u8>> {
         let root = self.root.clone().unwrap_or_else(|| "assets".into());

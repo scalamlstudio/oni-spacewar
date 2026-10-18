@@ -11,6 +11,7 @@
 
 mod art;
 mod carrier;
+mod codex;
 mod flow;
 mod input;
 mod layout;
@@ -283,6 +284,7 @@ fn main() {
                 flow::FlowPlugin,
                 carrier::CarrierPlugin,
                 settings::SettingsPlugin,
+                codex::CodexPlugin,
             ))
             .insert_resource(flow::KillTarget(args.kill_target()));
         if args.autoplay {

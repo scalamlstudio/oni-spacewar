@@ -13,6 +13,7 @@ use crate::carrier::{
     self, BuildCursor, CarrierArrival, CarrierScene, CarrierView, Entry, Hotspot, Overlay, Pilot,
     PilotDrag, Tool, WalkOrder,
 };
+use crate::codex::CodexScreen;
 use crate::input::{self, MovePress};
 use crate::layout::{ItemId, RoomSize};
 use crate::mission::{self, MissionOutcome, MissionRequest, MissionResult};
@@ -156,6 +157,17 @@ impl Autoplay {
             .observe(save_to_disk(path));
     }
 }
+
+/// The Codex tabs the autoplay shoots, in order, and the entry it selects
+/// in each (Spitter, Berth, Aquarium (scrolled into view), Gunner,
+/// Bulwark).
+const CODEX_SHOTS: [(&str, usize); 5] = [
+    ("enemies", 1),
+    ("stations", 2),
+    ("furniture", 11),
+    ("characters", 1),
+    ("battleships", 1),
+];
 
 /// First Carrier visit: when the autoplay's 8-direction Pilot tour starts,
 /// and the time per walk (the longest, a 209 px diagonal, takes 1.3 s).
@@ -1147,13 +1159,14 @@ fn autoplay_flow(
     mut save: ResMut<SaveSlot>,
     mut next: ResMut<NextState<GameScreen>>,
     mut overlay: ResMut<Overlay>,
-    (mut view, mut cursor, mut walk, scene, mut settings_screen, mut pause): (
+    (mut view, mut cursor, mut walk, scene, mut settings_screen, mut pause, mut codex): (
         ResMut<CarrierView>,
         ResMut<BuildCursor>,
         ResMut<WalkOrder>,
         Res<CarrierScene>,
         ResMut<SettingsScreen>,
         ResMut<PauseMenu>,
+        ResMut<CodexScreen>,
     ),
     mut drag: ResMut<PilotDrag>,
     pilot: Query<(&Transform, &Pilot)>,
@@ -1184,23 +1197,38 @@ fn autoplay_flow(
             if at(1.0) {
                 autoplay.shoot(&mut commands, name);
             }
-            // The Settings screen over the first Title.
-            if !autoplay.reloaded && !autoplay.resume {
+            // The Settings screen over the first Title, then its Codex:
+            // every tab, each with an entry's details.
+            let first = !autoplay.reloaded && !autoplay.resume;
+            if first {
                 if at(1.8) {
                     settings_screen.open(&mut pause, false);
                 }
                 if at(2.4) {
                     autoplay.shoot(&mut commands, "02-title-settings");
                 }
-                if at(2.8) {
+                for (i, (slug, entry)) in CODEX_SHOTS.iter().enumerate() {
+                    let t = 2.6 + 0.7 * i as f32;
+                    if at(t) {
+                        codex.show(i, *entry);
+                    }
+                    if at(t + 0.5) {
+                        autoplay.shoot(&mut commands, &format!("{:02}-codex-{slug}", 3 + i));
+                    }
+                }
+                if at(6.2) {
+                    codex.close();
+                }
+                if at(6.4) {
                     settings_screen.close(&mut pause);
                 }
             }
             // The same view later, to show the nebula sky drifting.
-            if at(3.5) {
+            let later = if first { 7.0 } else { 3.5 };
+            if at(later) {
                 autoplay.shoot(&mut commands, &format!("{name}-later"));
             }
-            if at(4.0) {
+            if at(later + 0.5) {
                 if autoplay.resume || autoplay.reloaded {
                     println!("autoplay: continue ({})", save.status);
                     next.set(transition(
