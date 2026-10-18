@@ -15,6 +15,7 @@ mod codex;
 mod flow;
 mod input;
 mod layout;
+mod loading;
 mod mission;
 mod net;
 mod pacing;
@@ -24,6 +25,7 @@ mod save;
 mod settings;
 mod sky;
 mod stats;
+mod tips;
 mod workshop;
 mod zoom;
 
@@ -282,6 +284,7 @@ fn main() {
             .init_resource::<Stats>()
             .add_plugins((
                 flow::FlowPlugin,
+                loading::LoadingPlugin,
                 carrier::CarrierPlugin,
                 settings::SettingsPlugin,
                 codex::CodexPlugin,

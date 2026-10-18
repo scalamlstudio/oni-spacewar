@@ -30,6 +30,15 @@ impl ContentImages {
         }
     }
 
+    /// Reads `root` instead (tests: a missing assets directory).
+    #[cfg(test)]
+    pub fn at(root: impl Into<std::path::PathBuf>) -> Self {
+        Self {
+            root: Some(root.into()),
+            ..default()
+        }
+    }
+
     /// The image shipped under `id`, or `None` (logged once) if it is missing.
     pub fn get(&mut self, images: &mut Assets<Image>, id: &str) -> Option<Handle<Image>> {
         if let Some(handle) = self.loaded.get(id) {
@@ -223,7 +232,11 @@ mod tests {
             ids::RESULT_BACKDROP.into(),
             ids::FONT_DISPLAY.into(),
         ];
-        wanted.extend(crate::render::sprite_ids().iter().map(|s| s.to_string()));
+        wanted.extend(
+            crate::render::battle_image_ids()
+                .iter()
+                .map(|s| s.to_string()),
+        );
         wanted.extend(crate::carrier::image_ids());
         wanted.extend(
             crate::workshop::UPGRADES
