@@ -16,6 +16,16 @@ Characters must come from the concept crew in
 Do not invent new cat faces, use generic stand-ins, or substitute silhouettes
 that read as different characters.
 
+**Scale (carrier).** A carrier tile is 64 world px (128 px at 2×). The Pilot
+and every crew member are about **56 px tall in game, 112 px at 2×**
+(TAKOAI-94; was 70 / 140), and their footprint is no wider than 0.6 tile, so a
+character fits on one tile. Draw stations and furniture against that height
+(reference heights: design/READINESS.md § Carrier › Art spec).
+
+**No hull plating.** The carrier has no bare-hull tiles: anywhere that isn't a
+room's floor, wall or doorway shows the shared space sky, and the rooms' outer
+walls are the ship's edge.
+
 ## Rendering Style
 
 Finished demo assets use painted detail at the level of

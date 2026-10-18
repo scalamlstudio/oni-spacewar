@@ -8,6 +8,7 @@
 //! marker and the off-screen fissure pointers are gizmo effects.
 
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
+use bevy::input::mouse::AccumulatedMouseScroll;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy_ggrs::{LocalPlayers, Session};
@@ -15,8 +16,10 @@ use sim::tuning::{FISSURE_RADIUS, SHOCKWAVE_RADIUS, TICKS_PER_SEC};
 use sim::{EnemyKind, FxVec2, LootKind, MissionStatus, Ship, ShipKind, SimState, SUB};
 
 use crate::art::ContentImages;
+use crate::flow::PauseMenu;
 use crate::rollback::{GameConfig, SimWorld};
 use crate::stats::Stats;
+use crate::zoom::{self, Zoom};
 use crate::{ContentStatus, NetStatus};
 
 pub struct RenderPlugin;
@@ -36,7 +39,6 @@ impl Plugin for RenderPlugin {
                     draw_world,
                     draw_sprites,
                     draw_fissure_pointers,
-                    battle_zoom,
                     follow_camera,
                     update_hud,
                     update_banner,
@@ -625,46 +627,73 @@ fn draw_fissure_pointers(
     }
 }
 
-/// Zoom out while a battle world exists, back to 1:1 when it goes (the
-/// Carrier sets its own zoom on entry).
-fn battle_zoom(world: Option<Res<SimWorld>>, mut camera: Query<&mut Projection, With<Camera2d>>) {
-    let Ok(mut projection) = camera.single_mut() else {
+/// Battle camera: follows our ship with a damped spring, zoomed with the
+/// mouse wheel about the cursor (`crate::zoom`) on top of `BATTLE_ZOOM`.
+/// Each battle starts at zoom 1; when the battle world goes, the camera
+/// goes back to 1:1 (the Carrier sets its own zoom on entry).
+#[derive(Resource, Default)]
+struct CameraFollow {
+    vel: Vec2,
+    zoom: Zoom,
+    active: bool,
+}
+
+const CAMERA_STICKY: f32 = 0.3;
+
+#[allow(clippy::too_many_arguments)]
+fn follow_camera(
+    time: Res<Time>,
+    world: Option<Res<SimWorld>>,
+    local: Option<Res<LocalPlayers>>,
+    scroll: Res<AccumulatedMouseScroll>,
+    pause: Option<Res<PauseMenu>>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+    mut follow: ResMut<CameraFollow>,
+    mut camera: Query<(&mut Transform, &mut Projection), With<Camera2d>>,
+) {
+    let Ok((mut cam, mut projection)) = camera.single_mut() else {
         return;
     };
     let Projection::Orthographic(ortho) = &mut *projection else {
         return;
     };
-    let want = match world {
-        Some(w) if w.is_added() => BATTLE_ZOOM,
-        None if ortho.scale == BATTLE_ZOOM => 1.0,
-        _ => return,
-    };
-    ortho.scale = want;
-}
-
-/// Camera follows our ship with a damped spring.
-#[derive(Resource, Default)]
-struct CameraFollow {
-    vel: Vec2,
-}
-
-const CAMERA_STICKY: f32 = 0.3;
-
-fn follow_camera(
-    world: Option<Res<SimWorld>>,
-    local: Option<Res<LocalPlayers>>,
-    mut follow: ResMut<CameraFollow>,
-    mut camera: Query<&mut Transform, With<Camera2d>>,
-) {
-    let (Some(world), Ok(mut cam)) = (world, camera.single_mut()) else {
+    let Some(world) = world else {
+        if follow.active {
+            *follow = CameraFollow::default();
+            ortho.scale = 1.0;
+        }
         return;
     };
-    let Some(ship) = world.ships.get(local_handle(local.as_deref())) else {
-        return;
-    };
+    if world.is_added() || !follow.active {
+        *follow = CameraFollow {
+            active: true,
+            ..default()
+        };
+    }
+    if !pause.is_some_and(|p| p.open) {
+        follow.zoom.scroll(zoom::notches(&scroll));
+    }
+    let window = windows.single().ok();
+    let size = window.map_or(crate::DEFAULT_WINDOW.as_vec2(), Window::size);
+    let cursor = window.and_then(Window::cursor_position);
+    let base = 1.0 / BATTLE_ZOOM;
     let pos = cam.translation.truncate();
+    let pos = follow
+        .zoom
+        .update(time.delta_secs(), base, pos, cursor, size);
+    let scale = BATTLE_ZOOM / follow.zoom.shown;
+    if ortho.scale != scale {
+        ortho.scale = scale;
+    }
+    // No arena edge, so the clamp is our ship staying on screen.
+    follow.zoom.keep_in_view(size / 2.0 * scale);
+    let Some(ship) = world.ships.get(local_handle(local.as_deref())) else {
+        cam.translation = pos.extend(cam.translation.z);
+        return;
+    };
+    let target = to_world(ship.pos) + follow.zoom.offset;
     let next = pos + follow.vel;
-    follow.vel = follow.vel * CAMERA_STICKY + (to_world(ship.pos) - next) * (1.0 - CAMERA_STICKY);
+    follow.vel = follow.vel * CAMERA_STICKY + (target - next) * (1.0 - CAMERA_STICKY);
     cam.translation = next.extend(cam.translation.z);
 }
 

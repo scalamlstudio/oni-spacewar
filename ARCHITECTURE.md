@@ -56,6 +56,7 @@ crates/
     src/stats.rs        rollback / frame-time / desync measurement + report (from the spike)
     src/pacing.rs       frame-pacing profiler (windowed): main / render / swapchain-acquire split + OS-stall probe
     src/render.rs       battle sprites keyed by stable content IDs + gizmo FX, fissure pointers, camera follow, battle HUD (Update, outside rollback)
+    src/zoom.rs         mouse-wheel zoom for the local camera (Carrier and battle): 0.5×–2× target, eased, about the cursor; follow offset kept on screen; picking maths (`world_at`)
     src/sky.rs          procedural nebula sky: SkyMaterial (Material2d, `sky.wgsl`) on a quad that follows the camera; one sky behind every scene
 ```
 
@@ -275,8 +276,8 @@ tests on any `assets/**` or `crates/content/**` change.
 (linear min / mag / mip) and appends a full mip chain built on the CPU
 (2×2 box filter on premultiplied alpha, so the black RGB of transparent
 pixels doesn't darken edges). Painted sprites are drawn 2–3× smaller than
-their canvas on a 1× display (the Pilot's 192 px canvas is ~90 px at
-Carrier zoom 1, ~58 px at 0.65); without mips that skips texels and outlines
+their canvas on a 1× display (the Pilot's 192 px canvas is ~72 px at
+Carrier zoom 1, ~36 px at 0.5); without mips that skips texels and outlines
 shimmer while walking. Level 0 stays first in `Image::data`, so CPU readers
 of the full-size pixels (e.g. `empty_rows`) are unaffected.
 
@@ -379,8 +380,14 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   next / leave, launch, Workshop tab / row, build card / category) that
   `carrier_input` reads alongside the keys. The
   camera follows the Pilot, clamped to one cell past the hull
-  (`clamp_camera`), with three zoom levels on the mouse wheel (`ZOOMS`); Build
-  mode switches to Overview and pans with WASD instead. Pure helpers
+  (`clamp_camera`); the mouse wheel zooms 0.5×–2× about the cursor
+  (`crate::zoom`, TAKOAI-94), leaving a follow offset that keeps the Pilot
+  on screen. Build mode switches to Overview (`OVERVIEW`, 0.5) and pans with
+  WASD instead; the wheel zooms the pan. Nothing is drawn outside the rooms
+  and corridors: space (the shared sky) shows there, and the rooms' outer
+  walls are the ship's edge. Characters are `CHARACTER_H` = 56 px tall
+  (0.875 of a Revision 3 tile) on a 24 px footprint (`layout::PILOT_RADIUS`,
+  capped at `MAX_FOOTPRINT_TILES` = 0.6 tile). Pure helpers
   (`hotspots`, `nearest_hotspot`, `clicked_hotspot`, `interact_with`,
   `ship_at`, `apply_build_click`, `ghost`, `crew_lines`, `ship_card`,
   `upgrade_preview`) hold the rules and are unit tested. The Dock's Launch
@@ -458,7 +465,12 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   (longest side ≈ 1.2× the hit-circle diameter, `render::SPRITE_SCALE`, so
   what you see is what gets hit). The battle camera zooms out to
   `render::BATTLE_ZOOM` (1.265 ≈ √1.6, i.e. 1.6× the visible area) while a
-  battle world exists; HUD text is UI and keeps its screen size.
+  battle world exists, and the mouse wheel zooms 0.5×–2× on top of that
+  about the cursor (`crate::zoom`, reset each battle; there is no arena
+  edge, so the clamp keeps our ship on screen). Local camera only, never
+  sim, rollback or network state. HUD text is UI and keeps its screen size;
+  move targets go through `Camera::viewport_to_world_2d`, so they land
+  under the cursor at any zoom.
   Ship facing is visual-only client state (from the move target / dash).
   Player bolts are a generated soft glow tinted per player; shields, the
   Shockwave ring, hull bars and the move marker stay gizmo effects. The
@@ -492,7 +504,7 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   each frame, passing the camera centre (parallax) and elapsed time
   (nebula drift, twinkle) as a uniform. One entity, always visible, so every
   scene shares the same live sky and a new scene gets it with no code
-  (TAKOAI-83): behind the battle, the Carrier's hull, and the Title key art
+  (TAKOAI-83): behind the battle, around the Carrier's rooms, and the Title key art
   and Result backdrop (UI images with a transparent sky, drawn over it; the
   menu screens never move the camera, so there the sky only drifts and
   twinkles, with no parallax). `content/tests/scene_sky.rs` keeps those two
