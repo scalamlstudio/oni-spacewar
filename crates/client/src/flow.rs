@@ -27,6 +27,8 @@ pub enum GameScreen {
     #[default]
     Title,
     Carrier,
+    /// The mission transition screen (`crate::loading`).
+    Loading,
     Battle,
     Result,
 }
@@ -36,6 +38,8 @@ pub enum FlowEvent {
     NewGame,
     Continue,
     LaunchMission,
+    /// Every battle asset is loaded (`crate::loading`).
+    AssetsLoaded,
     FinishMission,
     ReturnToCarrier,
     QuitToTitle,
@@ -45,7 +49,9 @@ pub fn transition(from: GameScreen, event: FlowEvent, has_save: bool) -> GameScr
     match (from, event) {
         (GameScreen::Title, FlowEvent::NewGame) => GameScreen::Carrier,
         (GameScreen::Title, FlowEvent::Continue) if has_save => GameScreen::Carrier,
-        (GameScreen::Carrier, FlowEvent::LaunchMission) => GameScreen::Battle,
+        (GameScreen::Carrier, FlowEvent::LaunchMission) => GameScreen::Loading,
+        (GameScreen::Loading, FlowEvent::AssetsLoaded) => GameScreen::Battle,
+        (GameScreen::Loading, FlowEvent::ReturnToCarrier) => GameScreen::Carrier,
         (GameScreen::Battle, FlowEvent::FinishMission) => GameScreen::Result,
         (GameScreen::Result, FlowEvent::ReturnToCarrier) => GameScreen::Carrier,
         (_, FlowEvent::QuitToTitle) => GameScreen::Title,
@@ -76,6 +82,7 @@ impl Plugin for FlowPlugin {
                 OnExit(GameScreen::Carrier),
                 (cleanup_screen, close_pause_menu).chain(),
             )
+            .add_systems(OnExit(GameScreen::Loading), cleanup_screen)
             .add_systems(
                 OnExit(GameScreen::Battle),
                 (cleanup_screen, remove_battle_world, close_pause_menu).chain(),
@@ -549,7 +556,8 @@ pub(crate) fn enter_carrier(
     }
 }
 
-/// Launch from the Dock: remember the picked battleship and enter Battle.
+/// Launch from the Dock: remember the picked battleship and enter the
+/// transition screen, which loads the battle's assets.
 fn apply_mission_request(
     mut requests: MessageReader<MissionRequest>,
     state: Res<State<GameScreen>>,
@@ -1632,7 +1640,20 @@ fn autoplay_flow(
                 });
             }
         }
+        GameScreen::Loading => {
+            // The first frame: loading takes a handful of frames at most.
+            if before == 0.0 {
+                println!("autoplay: loading mission {}", n + 1);
+                autoplay.shoot(
+                    &mut commands,
+                    &format!("{:02}b-loading-{}", 14 + n * 10, n + 1),
+                );
+            }
+        }
         GameScreen::Battle => {
+            if before == 0.0 {
+                println!("autoplay: battle {} started", n + 1);
+            }
             for (i, t) in [1.0, 6.0, 20.0, 35.0].into_iter().enumerate() {
                 if at(t) {
                     autoplay.shoot(
@@ -1728,6 +1749,8 @@ mod tests {
         state = transition(state, FlowEvent::NewGame, false);
         assert_eq!(state, GameScreen::Carrier);
         state = transition(state, FlowEvent::LaunchMission, true);
+        assert_eq!(state, GameScreen::Loading);
+        state = transition(state, FlowEvent::AssetsLoaded, true);
         assert_eq!(state, GameScreen::Battle);
         state = transition(state, FlowEvent::FinishMission, true);
         assert_eq!(state, GameScreen::Result);
@@ -1859,6 +1882,38 @@ mod tests {
             checked += 1;
         }
         assert!(checked > 10, "only {checked} source files found");
+    }
+
+    /// TAKOAI-103: every mission goes through the transition screen, which
+    /// only leaves for the Battle once loaded, or back to the Carrier.
+    #[test]
+    fn every_launch_passes_through_loading() {
+        assert_eq!(
+            transition(GameScreen::Carrier, FlowEvent::LaunchMission, true),
+            GameScreen::Loading
+        );
+        for screen in [GameScreen::Title, GameScreen::Carrier, GameScreen::Result] {
+            assert_ne!(
+                transition(screen, FlowEvent::AssetsLoaded, true),
+                GameScreen::Battle,
+                "{screen:?} skips the transition screen"
+            );
+        }
+        for event in [
+            FlowEvent::NewGame,
+            FlowEvent::Continue,
+            FlowEvent::LaunchMission,
+            FlowEvent::FinishMission,
+        ] {
+            assert_eq!(
+                transition(GameScreen::Loading, event, true),
+                GameScreen::Loading
+            );
+        }
+        assert_eq!(
+            transition(GameScreen::Loading, FlowEvent::ReturnToCarrier, true),
+            GameScreen::Carrier
+        );
     }
 
     #[test]

@@ -133,9 +133,9 @@ const SPRITES: &[SpriteArt] = &[
     },
 ];
 
-/// Every manifest image the battle draws.
-#[cfg(test)]
-pub fn sprite_ids() -> Vec<&'static str> {
+/// Every manifest image the battle draws (the transition screen loads
+/// them all before the battle starts).
+pub fn battle_image_ids() -> Vec<&'static str> {
     SPRITES.iter().map(|s| s.id).collect()
 }
 

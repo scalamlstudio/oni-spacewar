@@ -45,7 +45,9 @@ crates/
   client/             package `oni-client`, bin `oni-spacewar` — everything else
     src/main.rs         CLI (synctest / p2p modes), app + GGRS session setup, ICE (STUN/TURN) config
     src/art.rs          ContentImages: shipped images and fonts by stable content ID (manifest -> processed file), cached; linear sampler + CPU mip chain
-    src/flow.rs         first-playable scene state machine, Title / Result UI, --autoplay QA driver: Title → Carrier → Battle → Result
+    src/flow.rs         first-playable scene state machine, Title / Result UI, --autoplay QA driver: Title → Carrier → Loading → Battle → Result
+    src/loading.rs      mission transition screen (GameScreen::Loading): mission name, progress bar, a tip; loads the battle's images, then Battle; error + Back to Carrier
+    src/tips.rs         TIPS (transition-screen tip list) + TipDeck (random pick, no back-to-back repeat)
     src/layout.rs       carrier interior Revision 3 rules, no Bevy, no clock: rooms (Small / Large shells) → derived tiles, walls, doorways + clearance; item catalogue; construction sites (`tick(ms)`); can_place_room / can_remove_room / can_place / can_move / can_remove with the spec's reasons; reachability, crew posts, walkable rects, validation, refunds; click-to-move pathing (A*)
     src/carrier.rs      Carrier scene (Revision 3): draws the rooms' tiles and the items by layer, construction sites with progress bars, click-to-move / hold-to-drag + 8-direction WASD walking, crew at their posts, stations as hotspots, berths with their ships (board → briefing → launch), camera / zoom, Workshop upgrades panel, Build mode (B: Rooms / Stations / Furniture / Decor, Move, Remove; builder UI kit), clickable panels
     src/workshop.rs     Workshop rules: upgrade costs / levels / buy(), and Build mode's wallet side: build_room / build_item (pay up front) / remove_room / remove_item (full refund)
@@ -505,7 +507,7 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   ends in the launch confirm panel for that ship. The selected ship gets a
   highlight ring and "Selected" in its berth's label; the other is dimmed.
   Launch writes a `mission::MissionRequest`; the flow stores the picked
-  battleship in the save and enters Battle, where `config_from_save` builds
+  battleship in the save and enters the transition screen, then Battle, where `config_from_save` builds
   the `MissionConfig`.
 - **Ship numbers have one source.** `sim::ShipSheet::new(loadout)` gives a
   battleship's stats after upgrades in human units; `ShipStats` (what the
@@ -523,11 +525,23 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   after.
   Continue goes to the Carrier, whose `enter_carrier` books the result into
   the save (`record_mission_return`) and stores it.
-- **No in-scene tips** (TAKOAI-98): gameplay tips belong only on a
-  transition (loading) screen, so neither the Carrier nor the Battle spawns a
-  tip box (`flow::tests::no_scene_spawns_a_tip_box`). The game has no
-  transition screen yet; the retired tutorial-hint texts are in git history
-  (`crates/client/src/hints.rs` before TAKOAI-98).
+- **Mission transition screen** (`loading.rs`, TAKOAI-103): Launch goes
+  Carrier → `GameScreen::Loading` → Battle (`flow::transition`; nothing
+  else reaches Battle). The screen shows the mission name, a progress bar
+  and one tip, and decodes every image the battle draws
+  (`render::battle_image_ids`) through `ContentImages`, one per frame. It
+  enters Battle the frame they are all in `Assets<Image>`, with no minimum
+  time; a missing or broken image stops on an error with Back to Carrier
+  (button or Enter). UI and assets only: the `SimWorld` is still created on
+  entering Battle. The demo is offline; networked missions will need every
+  peer to report its load done before Battle (no ready handshake exists
+  yet; synctest / p2p runs don't use the flow). `--autoplay` passes through
+  it and shoots `NNb-loading-M.png`.
+- **Tips only on the transition screen** (TAKOAI-98): `tips::TIPS` is the
+  list (the retired tutorial hints, reworded); `tips::TipDeck` picks one at
+  random per transition, never the last one (UI RNG seeded from the clock,
+  not the sim's). Neither the Carrier nor the Battle spawns a tip box
+  (`flow::tests::no_scene_spawns_a_tip_box`).
 - Battle visuals are sprites drawn by stable content ID
   (`core.battle.ship.kite`, `core.battle.enemy.void_swarmer`,
   `core.battle.fx.spit`, loot as `core.ui.icon.*`, ... in `render::ids`)
