@@ -46,44 +46,6 @@ const SPRITES: [(&str, &str, u32, u32); 6] = [
     ),
 ];
 
-/// The 2.5D carrier's modular pieces: the detailed painted set
-/// (`design/art/carrier-2_5d-v2/`, TAKOAI-69) on the grid TAKOAI-55 set up.
-/// Already transparent and authored at 2× on a shared 256 px-per-cell grid,
-/// so they are copied as they are (the size is checked). Design file stem,
-/// pack-relative output, expected width × height.
-const CARRIER_DIR: &str = "carrier-2_5d-v2";
-const CARRIER_2_5D: [(&str, &str, u32, u32); 28] = [
-    ("room-bridge", "carrier/room/bridge", 768, 512),
-    // The one-berth Dock (TAKOAI-60), drawn as one by Art since TAKOAI-69.
-    ("room-dock", "carrier/room/dock", 512, 768),
-    ("dock-berth", "carrier/dock/berth", 480, 244),
-    ("room-crew-quarters", "carrier/room/crew_quarters", 512, 512),
-    ("room-workshop", "carrier/room/workshop", 768, 512),
-    ("room-salvage-bay", "carrier/room/salvage_bay", 512, 512),
-    ("room-training-room", "carrier/room/training_room", 512, 512),
-    ("door-n", "carrier/door/n", 256, 96),
-    ("door-e", "carrier/door/e", 24, 256),
-    ("door-s", "carrier/door/s", 256, 24),
-    ("door-w", "carrier/door/w", 24, 256),
-    ("corridor-n", "carrier/corridor/n", 256, 256),
-    ("corridor-e", "carrier/corridor/e", 256, 256),
-    ("corridor-s", "carrier/corridor/s", 256, 256),
-    ("corridor-w", "carrier/corridor/w", 256, 256),
-    ("corridor-ns", "carrier/corridor/ns", 256, 256),
-    ("corridor-ew", "carrier/corridor/ew", 256, 256),
-    ("corridor-ne", "carrier/corridor/ne", 256, 256),
-    ("corridor-es", "carrier/corridor/es", 256, 256),
-    ("corridor-sw", "carrier/corridor/sw", 256, 256),
-    ("corridor-nw", "carrier/corridor/nw", 256, 256),
-    ("corridor-nes", "carrier/corridor/nes", 256, 256),
-    ("corridor-esw", "carrier/corridor/esw", 256, 256),
-    ("corridor-nsw", "carrier/corridor/nsw", 256, 256),
-    ("corridor-new", "carrier/corridor/new", 256, 256),
-    ("corridor-nesw", "carrier/corridor/nesw", 256, 256),
-    ("hull-floor", "carrier/hull_floor", 256, 256),
-    ("build-slot", "carrier/build_slot", 256, 256),
-];
-
 /// Transparent margin (px, after scaling) around every single sprite, so no
 /// opaque pixel touches the canvas edge (design/ART_GUIDELINES.md § Cropping;
 /// checked by `crates/content/tests/asset_crop.rs`).
@@ -157,17 +119,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             fit_within(&open(&root, stem)?, max_w, max_h),
             &mut contact,
         )?;
-    }
-    for (stem, out, w, h) in CARRIER_2_5D {
-        let image = open(&root, &format!("{CARRIER_DIR}/{stem}"))?;
-        if image.dimensions() != (w, h) {
-            return Err(format!(
-                "{CARRIER_DIR}/{stem}: {:?}, expected {w}x{h}",
-                image.dimensions()
-            )
-            .into());
-        }
-        write(&root, out, image, &mut contact)?;
     }
     for (stem, dir, names, max_w, max_h) in SHEETS {
         let sheet = open(&root, stem)?;

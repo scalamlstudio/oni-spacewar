@@ -9,8 +9,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::layout::Carrier;
-use crate::layout_v1::{CarrierLayout, RoomId};
+use crate::layout::{Carrier, ItemId};
 use crate::workshop::Cost;
 
 /// v2 (TAKOAI-42): adds `last_result` and `missions_won`. v3 (TAKOAI-56):
@@ -45,11 +44,6 @@ pub struct SaveGame {
     /// (version 5)). Checked on load; see [`migrate`].
     #[serde(default)]
     pub carrier: Carrier,
-    /// Transitional: the Revision 1 layout the Carrier scene still runs on
-    /// until the Revision 3 scene lands (TAKOAI-88, Engineer B), which
-    /// drops this field. Checked on load like the old `carrier` was.
-    #[serde(default)]
-    pub carrier_rev1: CarrierLayout,
     /// A v1–v4 save was migrated and the `carrier_refit` hint hasn't been
     /// shown yet (design/READINESS.md § Tutorial hints).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -107,13 +101,12 @@ impl Default for SaveGame {
             last_result: LastResult::None,
             missions_won: 0,
             carrier: Carrier::starting(),
-            carrier_rev1: CarrierLayout::starting(),
             carrier_refit: false,
         }
     }
 }
 
-/// Salvage Bay: +25% of what a successful mission keeps (success bonus
+/// Salvage Sorter: +25% of what a successful mission keeps (success bonus
 /// included), rounded down.
 pub const SALVAGE_BONUS_PCT: u32 = 25;
 
@@ -133,15 +126,15 @@ impl SaveGame {
         save
     }
 
-    /// What the Salvage Bay adds to a mission that kept `credits` and
-    /// `resources`: nothing on failure or without the room.
+    /// What the Salvage Sorter adds to a mission that kept `credits` and
+    /// `resources`: nothing on failure or without a finished one.
     pub fn salvage_bonus(
         &self,
         success: bool,
         credits: u32,
         resources: &BTreeMap<String, u32>,
     ) -> (u32, BTreeMap<String, u32>) {
-        if !success || !self.carrier_rev1.has_room(RoomId::SalvageBay) {
+        if !success || !self.carrier.has_finished(ItemId::SalvageSorter) {
             return (0, BTreeMap::new());
         }
         let pct = |v: u32| v.saturating_mul(SALVAGE_BONUS_PCT) / 100;
@@ -154,7 +147,7 @@ impl SaveGame {
     }
 
     /// Books a finished mission: adds what the player keeps (plus the
-    /// Salvage Bay's share) and counts it.
+    /// Salvage Sorter's share) and counts it.
     pub fn record_mission_return(
         &mut self,
         success: bool,
@@ -258,16 +251,20 @@ pub fn load(path: &Path) -> Result<SaveGame, SaveError> {
 
 /// Parses a save of any supported version and brings it up to
 /// [`SAVE_VERSION`] ([`migrate`]). Up to v4 the `carrier` field holds a
-/// Revision 1 layout; it is taken out and handed to the migration.
+/// Revision 1 layout; it is taken out and handed to the migration. Early
+/// v5 builds still kept the Revision 1 layout their scene ran on in
+/// `carrier_rev1`; it is taken out the same way and refunded.
 pub fn from_json(bytes: &[u8]) -> Result<SaveGame, SaveError> {
     let mut value: serde_json::Value = serde_json::from_slice(bytes)?;
     let version = value.get("version").and_then(|v| v.as_u64()).unwrap_or(0);
     let mut old_carrier = None;
-    if version <= LAST_REV1_VERSION as u64 {
-        if let Some(obj) = value.as_object_mut() {
-            old_carrier = obj.remove("carrier");
-            obj.remove("carrier_rev1");
-        }
+    if let Some(obj) = value.as_object_mut() {
+        let rev1 = obj.remove("carrier_rev1");
+        old_carrier = if version <= LAST_REV1_VERSION as u64 {
+            obj.remove("carrier")
+        } else {
+            rev1
+        };
     }
     let save: SaveGame = serde_json::from_value(value)?;
     let old_carrier = match old_carrier {
@@ -285,17 +282,18 @@ pub fn from_json(bytes: &[u8]) -> Result<SaveGame, SaveError> {
 /// v1–v4 (§ Carrier › Save › Migration): `old_carrier` is the save's
 /// Revision 1 layout, if it had one. The full cost of every room and
 /// corridor the player built in it is refunded at Revision 1's prices
-/// (a v3 Dock is split first, as v4 did, so its corridors count right),
-/// the carrier becomes the starting layout and the `carrier_refit` hint is
-/// queued. Credits, Void Crystal, upgrades, hints, stats and the last ship
-/// are kept.
+/// ([`rev1::refund`]), the carrier becomes the starting layout and the
+/// `carrier_refit` hint is queued. Credits, Void Crystal, upgrades, hints,
+/// stats and the last ship are kept. A v5 save's leftover `carrier_rev1`
+/// is refunded the same way (its `carrier` is kept); the hint is queued
+/// only if it held something the player built.
 ///
 /// Then the layout is checked: a broken one resets to the starting layout
 /// and refunds every non-starter room and item (unknown IDs refund
 /// nothing), with a warning.
 pub fn migrate(
     mut save: SaveGame,
-    old_carrier: Option<CarrierLayout>,
+    old_carrier: Option<rev1::Layout>,
 ) -> Result<SaveGame, SaveError> {
     if !(OLDEST_SUPPORTED_VERSION..=SAVE_VERSION).contains(&save.version) {
         return Err(SaveError::VersionMismatch {
@@ -303,17 +301,14 @@ pub fn migrate(
             expected: SAVE_VERSION,
         });
     }
+    let refund = old_carrier
+        .map(|old| rev1::refund(&old, save.version))
+        .unwrap_or_default();
+    add_refund(&mut save, refund);
     if save.version <= LAST_REV1_VERSION {
-        if let Some(mut old) = old_carrier {
-            if save.version == 3 {
-                let refund = old.split_v3_dock();
-                add_refund(&mut save, refund);
-            }
-            let refund = old.refund();
-            add_refund(&mut save, refund);
-        }
         save.carrier = Carrier::starting();
-        save.carrier_rev1 = CarrierLayout::starting();
+        save.carrier_refit = true;
+    } else if refund.credits > 0 || refund.void_crystal > 0 {
         save.carrier_refit = true;
     }
     save.version = SAVE_VERSION;
@@ -327,18 +322,98 @@ pub fn migrate(
         add_refund(&mut save, refund);
         save.carrier = Carrier::starting();
     }
-    // Transitional (see `SaveGame::carrier_rev1`).
-    save.carrier_rev1.normalize();
-    if let Err(e) = save.carrier_rev1.validate() {
-        let refund = save.carrier_rev1.refund();
-        eprintln!(
-            "warning: saved Revision 1 carrier layout is invalid ({e:?}); reset, refunded {} cr + {} VC",
-            refund.credits, refund.void_crystal
-        );
-        add_refund(&mut save, refund);
-        save.carrier_rev1 = CarrierLayout::starting();
-    }
     Ok(save)
+}
+
+/// What the save migration still reads of the retired Revision 1 carrier
+/// (rooms and corridors on 12 × 8 cells, saves v3–v4 and early v5's
+/// `carrier_rev1`): just enough to refund what the player built at
+/// Revision 1's prices, which live only here (design/READINESS.md
+/// § Carrier › Save › Migration).
+pub mod rev1 {
+    use serde::Deserialize;
+
+    use crate::workshop::Cost;
+
+    #[derive(Clone, Debug, Default, Deserialize)]
+    pub struct Layout {
+        #[serde(default)]
+        pub rooms: Vec<Room>,
+        #[serde(default)]
+        pub corridors: Vec<(i32, i32)>,
+    }
+
+    #[derive(Clone, Debug, Deserialize)]
+    pub struct Room {
+        pub id: String,
+        pub x: i32,
+        pub y: i32,
+    }
+
+    const CORRIDOR: Cost = Cost {
+        credits: 10,
+        void_crystal: 0,
+    };
+
+    /// The v4 starting corridors; the starting rooms cost nothing.
+    const STARTING_CORRIDORS: [(i32, i32); 10] = [
+        (1, 3),
+        (2, 3),
+        (3, 3),
+        (4, 3),
+        (3, 4),
+        (3, 5),
+        (3, 6),
+        (4, 7),
+        (5, 7),
+        (6, 7),
+    ];
+
+    fn room_cost(id: &str) -> Option<Cost> {
+        match id {
+            "salvage_bay" => Some(Cost {
+                credits: 120,
+                void_crystal: 3,
+            }),
+            "training_room" => Some(Cost {
+                credits: 200,
+                void_crystal: 6,
+            }),
+            _ => None,
+        }
+    }
+
+    /// The full cost of every room and corridor the player built in `old`,
+    /// a save of `version`. Unknown rooms refund nothing. Up to v3 a Dock
+    /// had two berths and the three corridors on the row below it weren't
+    /// part of the starting carrier yet (v4 added them), so there a player
+    /// corridor on that row counts too.
+    pub fn refund(old: &Layout, version: u32) -> Cost {
+        let mut total = Cost::default();
+        let mut add = |c: Cost| {
+            total.credits = total.credits.saturating_add(c.credits);
+            total.void_crystal = total.void_crystal.saturating_add(c.void_crystal);
+        };
+        for c in old.rooms.iter().filter_map(|r| room_cost(&r.id)) {
+            add(c);
+        }
+        let v3_dock_row = |c: &(i32, i32)| {
+            version <= 3
+                && old
+                    .rooms
+                    .iter()
+                    .any(|r| r.id == "dock" && c.1 == r.y + 3 && (r.x..r.x + 3).contains(&c.0))
+        };
+        let mut corridors = old.corridors.clone();
+        corridors.sort_unstable();
+        corridors.dedup();
+        for c in &corridors {
+            if !STARTING_CORRIDORS.contains(c) || v3_dock_row(c) {
+                add(CORRIDOR);
+            }
+        }
+        total
+    }
 }
 
 fn add_refund(save: &mut SaveGame, refund: Cost) {
@@ -448,7 +523,6 @@ mod tests {
         let save = from_json(v3).unwrap();
         assert_eq!(save.version, SAVE_VERSION);
         assert_eq!(save.carrier, Carrier::starting());
-        assert_eq!(save.carrier_rev1, CarrierLayout::starting());
         assert_eq!((save.credits, vc(&save)), (5 + 120 + 10 + 10, 1 + 3));
         assert_eq!(save.selected_battleship, "bulwark");
         assert!(save.purchased_upgrades.contains("hull_plating_1"));
@@ -469,15 +543,16 @@ mod tests {
         assert_eq!((save.credits, vc(&save)), (10, 0));
     }
 
+    /// The v4 starting carrier plus the spec's old examples: a Salvage Bay
+    /// on its corridor (8,6) and a Training Room on its corridor (6,1).
+    const V4_BUILT: &str = r#"{"rooms":[{"id":"bridge","x":0,"y":1},
+        {"id":"crew_quarters","x":4,"y":1},{"id":"dock","x":4,"y":4},{"id":"dock","x":6,"y":4},
+        {"id":"salvage_bay","x":9,"y":5},{"id":"training_room","x":7,"y":0},
+        {"id":"workshop","x":0,"y":4}],
+        "corridors":[[1,3],[2,3],[3,3],[3,4],[3,5],[3,6],[4,3],[4,7],[5,7],[6,1],[6,7],[8,6]]}"#;
+
     #[test]
     fn v4_save_refunds_rooms_and_corridors() {
-        use crate::layout_v1::Piece;
-        let mut old = CarrierLayout::starting();
-        old.place(Piece::Corridor, 8, 6);
-        old.place(Piece::Room(RoomId::SalvageBay), 9, 5);
-        old.place(Piece::Corridor, 6, 1);
-        old.place(Piece::Room(RoomId::TrainingRoom), 7, 0);
-        assert_eq!(old.validate(), Ok(()));
         let mut v4 = serde_json::to_value(SaveGame {
             version: 4,
             credits: 7,
@@ -485,13 +560,37 @@ mod tests {
         })
         .unwrap();
         let obj = v4.as_object_mut().unwrap();
-        obj.insert("carrier".into(), serde_json::to_value(&old).unwrap());
-        obj.remove("carrier_rev1");
+        obj.insert("carrier".into(), serde_json::from_str(V4_BUILT).unwrap());
         let save = from_json(&serde_json::to_vec(&v4).unwrap()).unwrap();
         assert_eq!(save.carrier, Carrier::starting());
-        assert_eq!(save.carrier_rev1, CarrierLayout::starting());
         assert_eq!((save.credits, vc(&save)), (7 + 120 + 200 + 20, 3 + 6));
         assert!(save.carrier_refit);
+        // The Revision 1 layout is gone from the file.
+        let text = serde_json::to_string(&save).unwrap();
+        assert!(!text.contains("corridors"), "{text}");
+    }
+
+    #[test]
+    fn early_v5_carrier_rev1_is_refunded_and_dropped() {
+        // An early v5 build kept the scene's Revision 1 layout next to the
+        // new carrier: refund it, keep the carrier, show the refit hint.
+        let mut v5 = serde_json::to_value(SaveGame {
+            credits: 3,
+            carrier: built_carrier(),
+            ..SaveGame::release_start()
+        })
+        .unwrap();
+        v5["carrier_rev1"] = serde_json::from_str(V4_BUILT).unwrap();
+        let save = from_json(&serde_json::to_vec(&v5).unwrap()).unwrap();
+        assert_eq!(save.carrier, built_carrier());
+        assert_eq!((save.credits, vc(&save)), (3 + 120 + 200 + 20, 3 + 6));
+        assert!(save.carrier_refit);
+        // Only the starting Revision 1 pieces: nothing to refund, no hint.
+        let start = r#"{"rooms":[{"id":"bridge","x":0,"y":1}],"corridors":[[1,3],[4,7]]}"#;
+        v5["carrier_rev1"] = serde_json::from_str(start).unwrap();
+        let save = from_json(&serde_json::to_vec(&v5).unwrap()).unwrap();
+        assert_eq!((save.credits, vc(&save)), (3, 0));
+        assert!(!save.carrier_refit);
     }
 
     #[test]
@@ -584,15 +683,16 @@ mod tests {
     }
 
     #[test]
-    fn salvage_bay_adds_a_quarter_on_success_only() {
-        use crate::layout_v1::Piece;
+    fn salvage_sorter_adds_a_quarter_on_success_only() {
         let mut save = SaveGame::release_start();
         let res = BTreeMap::from([("void_crystal".to_string(), 6)]);
         save.record_mission_return(true, 180, &res);
         assert_eq!((save.credits, save.resources["void_crystal"]), (180, 6));
-        save.carrier_rev1.place(Piece::Corridor, 8, 6);
-        save.carrier_rev1
-            .place(Piece::Room(RoomId::SalvageBay), 9, 5);
+        // A Salvage Sorter still being built does nothing yet.
+        save.carrier = built_carrier();
+        assert!(!save.carrier.has_finished(ItemId::SalvageSorter));
+        assert_eq!(save.salvage_bonus(true, 180, &res), (0, BTreeMap::new()));
+        save.carrier.tick(3000);
         assert_eq!(
             save.salvage_bonus(true, 180, &res),
             (45, BTreeMap::from([("void_crystal".to_string(), 1)]))

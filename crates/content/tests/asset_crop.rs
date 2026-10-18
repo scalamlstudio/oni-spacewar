@@ -10,17 +10,11 @@ use std::path::{Path, PathBuf};
 const OPAQUE_ALPHA: u8 = 8;
 
 /// Paths (relative to `assets/source/core/`) that are meant to fill their
-/// canvas: full-bleed backdrops, room and corridor tiles that join their
-/// neighbours, and 9-slice UI panels. A directory entry ends in `/`.
+/// canvas: full-bleed backdrops, carrier tiles that join their neighbours,
+/// and 9-slice UI panels. A directory entry ends in `/`.
 const FULL_BLEED: &[&str] = &[
     "title/",
     "result/",
-    "carrier/room/",
-    "carrier/corridor/",
-    "carrier/door/",
-    "carrier/dock/",
-    "carrier/hull_floor.png",
-    "carrier/build_slot.png",
     // Revision 3 floor, wall and doorway tiles and the tileable scaffold
     // overlay (TAKOAI-95).
     "carrier/tile/",

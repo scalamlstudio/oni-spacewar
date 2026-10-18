@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use sim::{Loadout, Loot, ShipKind, SimState, Upgrades};
 
+use crate::layout::ItemId;
 use crate::save::SaveGame;
 
 /// Stable battleship IDs (save file, Dock selection, content IDs).
@@ -96,13 +97,14 @@ pub fn ship_kind(battleship_id: &str) -> ShipKind {
     }
 }
 
-/// Upgrade ID prefix a built Training Room adds to the mission
-/// (`training_room_1`, design/READINESS.md § Carrier › Engineer scope).
-const TRAINING_ROOM_PREFIX: &str = "training_room";
+/// Upgrade ID prefix a finished Combat Simulator adds to the mission
+/// (`combat_simulator_1`, design/READINESS.md § Carrier › Retired with
+/// Revision 1). The sim still sees it as `Upgrades::training`.
+const COMBAT_SIMULATOR_PREFIX: &str = "combat_simulator";
 
 /// Upgrade levels from purchased upgrade IDs `<upgrade>_<level>`, e.g.
-/// `hull_plating_2`, plus `training_room_1` for a built Training Room. The
-/// highest level wins.
+/// `hull_plating_2`, plus `combat_simulator_1` for a finished Combat
+/// Simulator. The highest level wins.
 pub fn upgrade_levels<'a>(ids: impl IntoIterator<Item = &'a String>) -> Upgrades {
     let mut up = Upgrades::default();
     for id in ids {
@@ -116,7 +118,7 @@ pub fn upgrade_levels<'a>(ids: impl IntoIterator<Item = &'a String>) -> Upgrades
             "hull_plating" => (&mut up.hull, sim::tuning::MAX_UPGRADE_LEVEL),
             "weapon_tuning" => (&mut up.weapon, sim::tuning::MAX_UPGRADE_LEVEL),
             "thruster_tuning" => (&mut up.thruster, sim::tuning::MAX_UPGRADE_LEVEL),
-            TRAINING_ROOM_PREFIX => (&mut up.training, sim::tuning::MAX_TRAINING_LEVEL),
+            COMBAT_SIMULATOR_PREFIX => (&mut up.training, sim::tuning::MAX_TRAINING_LEVEL),
             _ => continue,
         };
         *slot = (*slot).max(level.min(max));
@@ -132,15 +134,13 @@ pub struct MissionRequest {
 }
 
 /// Everything in the save that changes a battleship: Workshop purchases
-/// plus `training_room_1` once the Training Room is built. The battle, the
-/// Dock card and the Workshop preview all read this list.
+/// plus `combat_simulator_1` once a Combat Simulator is finished (one under
+/// construction has no effect yet). The battle, the Dock card and the
+/// Workshop preview all read this list.
 pub fn upgrade_ids(save: &SaveGame) -> Vec<String> {
     let mut ids: Vec<String> = save.purchased_upgrades.iter().cloned().collect();
-    if save
-        .carrier_rev1
-        .has_room(crate::layout_v1::RoomId::TrainingRoom)
-    {
-        ids.push(format!("{TRAINING_ROOM_PREFIX}_1"));
+    if save.carrier.has_finished(ItemId::CombatSimulator) {
+        ids.push(format!("{COMBAT_SIMULATOR_PREFIX}_1"));
     }
     ids
 }
@@ -280,20 +280,23 @@ mod tests {
     }
 
     #[test]
-    fn training_room_reaches_the_sim_through_the_upgrade_ids() {
-        use crate::layout_v1::{Piece, RoomId};
+    fn combat_simulator_reaches_the_sim_through_the_upgrade_ids() {
         let mut save = SaveGame::default();
         assert!(upgrade_ids(&save).is_empty());
-        save.carrier_rev1.place(Piece::Corridor, 6, 1);
-        save.carrier_rev1
-            .place(Piece::Room(RoomId::TrainingRoom), 7, 0);
+        // The spec's example spot, in the Hangar. No effect while building.
+        save.carrier.place(ItemId::CombatSimulator, 12, 9, None);
+        assert!(upgrade_ids(&save).is_empty());
+        save.carrier.tick(4000);
         let config = config_from_save(&save, sim::tuning::KILL_TARGET);
-        assert_eq!(config.ship_loadouts[0].upgrade_ids, ["training_room_1"]);
+        assert_eq!(config.ship_loadouts[0].upgrade_ids, ["combat_simulator_1"]);
         assert_eq!(sim_loadouts(&config)[0].upgrades.training, 1);
         let sim = launch_sim(&config);
         assert_eq!(sim.ships[0].q_cooldown_max(), 204);
         // Clamped to the one level the room has.
-        assert_eq!(upgrade_levels(&["training_room_3".to_string()]).training, 1);
+        assert_eq!(
+            upgrade_levels(&["combat_simulator_3".to_string()]).training,
+            1
+        );
     }
 
     #[test]
