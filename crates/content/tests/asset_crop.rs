@@ -19,6 +19,10 @@ const FULL_BLEED: &[&str] = &[
     // overlay (TAKOAI-95).
     "carrier/tile/",
     "carrier/scaffold.png",
+    // The berth is floor (TAKOAI-107): edge-to-edge tiles, and its item
+    // image is those tiles assembled flat.
+    "carrier/berth/",
+    "carrier/item/berth.png",
     "ui/builder/panel/",
     "ui/builder/module/",
     "ui/builder/grid_cell_overlay.png",

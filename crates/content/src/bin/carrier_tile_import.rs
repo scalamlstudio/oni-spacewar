@@ -3,7 +3,8 @@
 //! wall and doorway tiles, the six stations, the scaffold and the front
 //! marker; batch B (TAKOAI-92, TAKOAI-93), the 19 furniture and decor
 //! pieces; the hull-edge wall tiles (TAKOAI-101, TAKOAI-102); and patch
-//! catalogues that redraw some of those (TAKOAI-99). The selection is Art's
+//! catalogues that redraw some of those (TAKOAI-99); and the flat berth
+//! floor (TAKOAI-108, see [`import_berth_floor`]). The selection is Art's
 //! catalogues under `design/art/carrier-furniture/` (design file, stable ID,
 //! destination under `assets/source/core/`, size, alpha bounds; batch B adds
 //! footprint, headroom, anchor, layer and placement). The art is already
@@ -136,7 +137,114 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         import(&root, dir, e, *min_alpha)?;
     }
     println!("imported {} carrier assets", rows.len());
+    import_berth_floor(&root)?;
     Ok(())
+}
+
+/// Art's flat berth floor catalogue (TAKOAI-108): nine opaque one-cell
+/// pieces and a transparent 2×2 ring overlay.
+#[derive(Deserialize)]
+struct BerthFloor {
+    tile_px: u32,
+    pieces: Vec<BerthPiece>,
+    marking: BerthMarking,
+}
+
+#[derive(Deserialize)]
+struct BerthPiece {
+    /// `fill`, `edge-n`, `corner-nw`, ...
+    piece: String,
+    file: String,
+    size: [u32; 2],
+}
+
+#[derive(Deserialize)]
+struct BerthMarking {
+    file: String,
+    size: [u32; 2],
+}
+
+/// The berth's footprint in tiles (`layout::CATALOGUE`).
+const BERTH: u32 = 4;
+
+/// The berth is a floor-layer tile area (TAKOAI-107): each piece goes to
+/// `carrier/berth/<piece>.png` (`core.carrier.berth.edge_n`, ...) and the
+/// overlay to `carrier/berth/marking.png`. The berth's item image
+/// (`core.carrier.item.berth`, Build mode's ghost and icon, the Codex) is
+/// replaced by the same tiles assembled flat on its 4×4 footprint, the
+/// ring centred, so it shows what the deck draws.
+fn import_berth_floor(root: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let dir = root.join(ART_DIR);
+    let cat: BerthFloor =
+        serde_json::from_slice(&fs::read(dir.join("berth-floor-import-v1.json"))?)?;
+    if cat.tile_px != TILE {
+        return Err(format!("berth floor: tile {} px, expected {TILE}", cat.tile_px).into());
+    }
+    let open = |file: &str, size: [u32; 2]| -> Result<image::RgbaImage, String> {
+        let image = image::open(dir.join(file)).map_err(|e| format!("{file}: {e}"))?;
+        if image.dimensions() != (size[0], size[1]) {
+            return Err(format!(
+                "{file}: {:?}, expected {size:?}",
+                image.dimensions()
+            ));
+        }
+        Ok(image.to_rgba8())
+    };
+    let out = root.join("assets/source/core/carrier/berth");
+    fs::create_dir_all(&out)?;
+    let mut pieces = BTreeMap::new();
+    for p in &cat.pieces {
+        if p.size != [TILE, TILE] {
+            return Err(format!("{}: not one tile", p.file).into());
+        }
+        let image = open(&p.file, p.size)?;
+        let key = p.piece.replace('-', "_");
+        fs::copy(dir.join(&p.file), out.join(format!("{key}.png")))?;
+        println!("{} -> core.carrier.berth.{key}", p.file);
+        pieces.insert(key, image);
+    }
+    let marking = open(&cat.marking.file, cat.marking.size)?;
+    fs::copy(dir.join(&cat.marking.file), out.join("marking.png"))?;
+    println!("{} -> core.carrier.berth.marking", cat.marking.file);
+
+    let mut flat = image::RgbaImage::new(BERTH * TILE, BERTH * TILE);
+    for y in 0..BERTH {
+        for x in 0..BERTH {
+            let key = berth_piece(x, y, BERTH, BERTH);
+            let piece = pieces
+                .get(&key)
+                .ok_or_else(|| format!("berth floor: no {key} piece"))?;
+            image::imageops::overlay(&mut flat, piece, (x * TILE).into(), (y * TILE).into());
+        }
+    }
+    let (mx, my) = (
+        (flat.width() - marking.width()) / 2,
+        (flat.height() - marking.height()) / 2,
+    );
+    image::imageops::overlay(&mut flat, &marking, mx.into(), my.into());
+    flat.save(root.join("assets/source/core/carrier/item/berth.png"))?;
+    println!("berth floor -> core.carrier.item.berth (flat {BERTH}x{BERTH})");
+    Ok(())
+}
+
+/// The piece for cell (x, y) of a `w × d` berth, north up; the client's
+/// `carrier::berth_piece` picks the same.
+fn berth_piece(x: u32, y: u32, w: u32, d: u32) -> String {
+    let ns = match y {
+        0 => "n",
+        _ if y + 1 == d => "s",
+        _ => "",
+    };
+    let ew = match x {
+        0 => "w",
+        _ if x + 1 == w => "e",
+        _ => "",
+    };
+    match (ns, ew) {
+        ("", "") => "fill".into(),
+        (a, "") | ("", a) => format!("edge_{a}"),
+        (a, b) => format!("corner_{a}{b}"),
+    }
 }
 
 /// A patch row may change the art only: same canvas, and a footprint row

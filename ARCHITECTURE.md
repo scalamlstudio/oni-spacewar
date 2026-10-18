@@ -40,7 +40,7 @@ crates/
     src/cutouts.rs                     background keying, sheet slicing, single-sprite crop, resize
     src/bin/sprite_sheet_cutouts.rs    expression sheets -> portraits
     src/bin/demo_art_import.rs         design/art/demo (+ demo-v2 battle art and backdrops) -> battle / title / result / icon sources
-    src/bin/carrier_tile_import.rs     design/art/carrier-furniture catalogues (batches A/B, patches, hull edge) -> carrier/tile, carrier/item, scaffold, front marker sources
+    src/bin/carrier_tile_import.rs     design/art/carrier-furniture catalogues (batches A/B, patches, hull edge, berth floor) -> carrier/tile, carrier/item, carrier/berth, scaffold, front marker sources
     hull-wall/build-hull-wall-extra.py every reachable hull-edge case Art's catalogue lacks, drawn by Art's generator -> hull-wall/extra-v1/ (PNGs + catalogue)
   client/             package `oni-client`, bin `oni-spacewar` — everything else
     src/main.rs         CLI (synctest / p2p modes), app + GGRS session setup, ICE (STUN/TURN) config
@@ -412,7 +412,11 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   `TileMap::art` on top of that floor, so wall art that leaves floor
   showing drops in unchanged; a doorway that is still shut (one of its
   rooms under construction) is dimmed; rooms being built get the scaffold
-  over every tile. Items follow by layer: rugs and wall-mounted pieces on
+  over every tile. A berth is part of the floor (TAKOAI-107): one
+  `core.carrier.berth.<piece>` tile per footprint cell (`berth_piece`:
+  corners, edges, fill) and the 2×2 ring `core.carrier.berth.marking`
+  centred on it, on `Z_BERTH` over the deck floor and under walls, rugs,
+  objects and characters, never y-sorted. Items follow by layer: rugs and wall-mounted pieces on
   fixed layers over the floor and walls, objects y-sorted with the
   characters by their front edge (`depth`); each item's art is pinned at
   its bottom centre, the middle of its footprint's front edge. Sites are
@@ -498,7 +502,11 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   rounded down) is added in `record_mission_return` and shown as its own
   Result line ("Salvage Sorter +45 cr +1 VC"). A site has no effect yet.
 - **Berths.** One `berth` item per battleship (§ Dock and berths); each
-  stores its ship, so berths can move. `docked_ship` draws the ship's
+  stores its ship, so berths can move. It stays a catalogue item (saves,
+  placement, Move, hotspots unchanged); only its drawing is floor tiles
+  (above). Its item image `core.carrier.item.berth` (Build ghost, icon,
+  Codex) is those tiles assembled flat by `carrier-tile-import`; the
+  berth keeps its own teal, not the floor colour setting. `docked_ship` draws the ship's
   battle sprite on the pad, nose north, its longest side
   `ShipInfo::berth_len` (`DockedShip`). The ship is the interaction: E at
   the berth's use point or a click on the ship calls `interact_with`,

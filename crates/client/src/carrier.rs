@@ -93,6 +93,8 @@ const SHUT: Color = Color::srgb(0.45, 0.45, 0.5);
 /// items; then objects and characters sorted by their feet (`depth`, 1 and
 /// up); Build mode's ghost and labels over everything.
 const Z_FLOOR: f32 = -20.0;
+/// Berth floor tiles and their ring, over the deck floor.
+const Z_BERTH: f32 = -19.8;
 const Z_WALL: f32 = -19.5;
 const Z_SCAFFOLD: f32 = -19.3;
 const Z_RUG: f32 = -19.0;
@@ -1245,6 +1247,7 @@ pub fn image_ids() -> Vec<String> {
     ids.extend(["ns", "ew"].map(|a| format!("core.carrier.tile.doorway.{a}")));
     ids.extend([SCAFFOLD, FRONT_MARKER].map(String::from));
     ids.extend(CATALOGUE.iter().map(|d| d.id.content_id()));
+    ids.extend(berth_ids());
     for facing in Facing::BY_ANGLE {
         ids.push(pilot_frame(facing, false, 0.0).0);
         for i in 0..PILOT_WALK.len() {
@@ -1419,7 +1422,9 @@ pub struct Draw {
 /// keep their new doorways shut (dimmed). Items follow: rugs and
 /// wall-mounted pieces on their flat layers, objects sorted with the
 /// characters by their front edge; sites in the blueprint tint. Hull tiles
-/// draw nothing: space shows there.
+/// draw nothing: space shows there. A berth is part of the floor
+/// (TAKOAI-107): one berth tile per footprint cell and its ring on top, all
+/// under the walls, rugs and objects.
 pub fn deck(carrier: &Carrier) -> Vec<Draw> {
     let map = carrier.tile_map();
     let tile = |id: String, t: Tile, z: f32, tint: Color| Draw {
@@ -1453,21 +1458,79 @@ pub fn deck(carrier: &Carrier) -> Vec<Draw> {
         }
     }
     for (i, item) in carrier.items.iter().enumerate() {
+        let tint = if item.finished() {
+            Color::WHITE
+        } else {
+            BLUEPRINT
+        };
+        if item.id == ItemId::Berth {
+            let (w, d) = item_size(item.id);
+            for (dx, dy) in (0..d).flat_map(|dy| (0..w).map(move |dx| (dx, dy))) {
+                out.push(Draw {
+                    item: Some(i),
+                    ..tile(
+                        berth_piece(dx, dy, w, d),
+                        (item.x + dx, item.y + dy),
+                        Z_BERTH,
+                        tint,
+                    )
+                });
+            }
+            let (centre, _) = tile_rect((item.x, item.y), (w, d));
+            out.push(Draw {
+                id: BERTH_MARKING.into(),
+                at: centre,
+                pin: Pin::Centre,
+                z: Z_BERTH + 0.01,
+                tint,
+                item: Some(i),
+            });
+            continue;
+        }
         let at = item_feet(item);
         out.push(Draw {
             id: item.id.content_id(),
             at,
             pin: Pin::Feet,
             z: item_z(item.layer(), at.y),
-            tint: if item.finished() {
-                Color::WHITE
-            } else {
-                BLUEPRINT
-            },
+            tint,
             item: Some(i),
         });
     }
     out
+}
+
+/// The berth's ring overlay, two tiles square, over its middle.
+const BERTH_MARKING: &str = "core.carrier.berth.marking";
+
+/// The berth floor tile for cell (x, y) of a `w × d` berth, north up:
+/// corners, edges and fill (Art's TAKOAI-108 set).
+fn berth_piece(x: i32, y: i32, w: i32, d: i32) -> String {
+    let ns = match y {
+        0 => "n",
+        _ if y + 1 == d => "s",
+        _ => "",
+    };
+    let ew = match x {
+        0 => "w",
+        _ if x + 1 == w => "e",
+        _ => "",
+    };
+    match (ns, ew) {
+        ("", "") => "core.carrier.berth.fill".into(),
+        (a, "") | ("", a) => format!("core.carrier.berth.edge_{a}"),
+        (a, b) => format!("core.carrier.berth.corner_{a}{b}"),
+    }
+}
+
+/// Every berth floor image `deck` can draw.
+#[cfg(test)]
+fn berth_ids() -> Vec<String> {
+    let mut ids: Vec<String> = (0..3)
+        .flat_map(|y| (0..3).map(move |x| berth_piece(x, y, 3, 3)))
+        .collect();
+    ids.push(BERTH_MARKING.into());
+    ids
 }
 
 /// Grid px of the middle of an item's front edge, where its art's bottom
@@ -1730,9 +1793,27 @@ fn spawn_layout(
             ));
             continue;
         };
-        let item = &carrier.items[i];
-        let (w, depth_tiles) = item_size(item.id);
-        if let Some(sprite) = item_sprite(art, images, item.id, d.tint) {
+        if d.pin == Pin::Centre {
+            // A berth's floor tiles and ring, at 2× like every carrier image.
+            let Some(image) = art.get(images, &d.id) else {
+                continue;
+            };
+            let size = ContentImages::size(images, &image) / 2.0;
+            commands.spawn((
+                ScreenEntity,
+                LayoutSprite,
+                ItemSprite(i),
+                Sprite {
+                    image,
+                    custom_size: Some(size),
+                    color: d.tint,
+                    ..default()
+                },
+                Transform::from_translation(world(d.at).extend(d.z)),
+            ));
+            continue;
+        }
+        if let Some(sprite) = item_sprite(art, images, carrier.items[i].id, d.tint) {
             commands.spawn((
                 ScreenEntity,
                 LayoutSprite,
@@ -1742,16 +1823,21 @@ fn spawn_layout(
                 Transform::from_translation(world(d.at).extend(d.z)),
             ));
         }
+    }
+    // Each item's ship, label and progress bar, once.
+    for (i, item) in carrier.items.iter().enumerate() {
+        let at = item_feet(item);
+        let (w, depth_tiles) = item_size(item.id);
         if let (ItemId::Berth, Some(ship)) = (item.id, item.ship.as_deref()) {
             let ship = ship_index(ship);
-            let pad = Vec2::new(d.at.x, d.at.y - depth_tiles as f32 * TILE / 2.0);
-            docked_ship(commands, art, images, pad, d.at.y, ship, i);
+            let pad = Vec2::new(at.x, at.y - depth_tiles as f32 * TILE / 2.0);
+            docked_ship(commands, art, images, pad, at.y, ship, i);
             commands.spawn((
                 label(
                     "",
                     13.0,
                     Color::srgb(0.7, 0.9, 1.0),
-                    world(Vec2::new(d.at.x, item.y as f32 * TILE - 12.0)).extend(Z_LABEL),
+                    world(Vec2::new(at.x, item.y as f32 * TILE - 12.0)).extend(Z_LABEL),
                 ),
                 LayoutSprite,
                 ItemSprite(i),
@@ -1759,7 +1845,7 @@ fn spawn_layout(
             ));
         }
         if !item.finished() {
-            let at = d.at - Vec2::Y * 10.0;
+            let at = at - Vec2::Y * 10.0;
             site_bar(commands, at, w as f32 * TILE - 16.0, Site::Item(i), Some(i));
         }
     }
@@ -4399,10 +4485,16 @@ mod tests {
         }
         assert!(tiles_at(&draws, (3, -1)).is_empty());
         assert!(tiles_at(&draws, (15, 11)).is_empty());
-        // Every item once, pinned at its front edge; rugs under wall pieces
-        // under objects, and objects sorted by their front edge.
-        let items: Vec<&Draw> = draws.iter().filter(|d| d.item.is_some()).collect();
-        assert_eq!(items.len(), c.items.len());
+        // Every item but the berths once, pinned at its front edge; rugs
+        // under wall pieces under objects, and objects sorted by their
+        // front edge.
+        let items: Vec<&Draw> = draws
+            .iter()
+            .filter(|d| d.item.is_some() && d.pin == Pin::Feet)
+            .collect();
+        let berths = c.items.iter().filter(|i| i.id == ItemId::Berth).count();
+        assert_eq!(berths, 2);
+        assert_eq!(items.len(), c.items.len() - berths);
         let find = |id: ItemId| *items.iter().find(|d| d.id == id.content_id()).unwrap();
         let console = find(ItemId::CommandConsole);
         assert_eq!(
@@ -4412,7 +4504,35 @@ mod tests {
         assert!(find(ItemId::Rug).z < find(ItemId::WallScreen).z);
         assert!(find(ItemId::WallScreen).z < find(ItemId::Table).z);
         assert!(find(ItemId::CommandConsole).z < find(ItemId::UpgradeBench).z);
-        assert!(find(ItemId::UpgradeBench).z < find(ItemId::Berth).z);
+        // A berth is floor (TAKOAI-107): a tile per footprint cell and its
+        // ring, over the deck floor and under walls, rugs and objects.
+        let b = c.berth_of(crate::mission::KITE_ID).unwrap();
+        let (bx, by) = (c.items[b].x, c.items[b].y);
+        let berth: Vec<&Draw> = draws.iter().filter(|d| d.item == Some(b)).collect();
+        assert_eq!(berth.len(), 4 * 4 + 1);
+        assert!(berth
+            .iter()
+            .all(|d| d.pin == Pin::Centre && d.z > Z_FLOOR && d.z < Z_WALL));
+        assert!(berth.iter().all(|d| d.z < find(ItemId::Rug).z));
+        let at = |t: Tile| {
+            berth
+                .iter()
+                .find(|d| d.at == tile_centre(t))
+                .unwrap()
+                .id
+                .as_str()
+        };
+        assert_eq!(at((bx, by)), "core.carrier.berth.corner_nw");
+        assert_eq!(at((bx + 3, by)), "core.carrier.berth.corner_ne");
+        assert_eq!(at((bx + 1, by)), "core.carrier.berth.edge_n");
+        assert_eq!(at((bx, by + 2)), "core.carrier.berth.edge_w");
+        assert_eq!(at((bx + 2, by + 2)), "core.carrier.berth.fill");
+        assert_eq!(at((bx + 3, by + 3)), "core.carrier.berth.corner_se");
+        let ring = berth.iter().find(|d| d.id == BERTH_MARKING).unwrap();
+        assert_eq!(
+            ring.at,
+            Vec2::new((bx + 2) as f32 * TILE, (by + 2) as f32 * TILE)
+        );
 
         // A room site: scaffold over its tiles and its doorways shut.
         c.place_room(RoomSize::Small, 14, 10);
