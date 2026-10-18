@@ -2,8 +2,11 @@
 //! upgrades). Client-only economy: buying writes a purchase ID into the save;
 //! the battle reads those IDs through `mission::upgrade_levels` into the sim
 //! `Loadout`, so the effect itself lives in `sim` and stays deterministic.
+//! Also the wallet side of Build mode: building pays up front, removing
+//! refunds in full (design/READINESS.md § Carrier › Cost, refunds and
+//! unlocks); the layout rules themselves are `crate::layout`'s.
 
-use crate::layout_v1::{DemolishError, Piece, PlaceError};
+use crate::layout::{ItemId, Reason, RoomSize, Tile};
 use crate::mission::VOID_CRYSTAL_ID;
 use crate::save::SaveGame;
 use sim::tuning::MAX_UPGRADE_LEVEL;
@@ -17,7 +20,7 @@ pub enum Upgrade {
 }
 
 /// Credits and Void Crystal.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct Cost {
     pub credits: u32,
     pub void_crystal: u32,
@@ -90,8 +93,8 @@ impl Upgrade {
     }
 }
 
-/// Every battleship modifier in the save: Workshop levels and the Training
-/// Room.
+/// Every battleship modifier in the save: Workshop levels and the Combat
+/// Simulator.
 pub fn levels(save: &SaveGame) -> Upgrades {
     crate::mission::upgrade_levels(&crate::mission::upgrade_ids(save))
 }
@@ -145,46 +148,55 @@ fn refund(save: &mut SaveGame, cost: Cost) {
     *vc = vc.saturating_add(cost.void_crystal);
 }
 
-/// Why the Build tab can't offer `piece` right now (already built, can't
-/// afford), or `None` when it can.
-pub fn build_lock(save: &SaveGame, piece: Piece) -> Option<PlaceError> {
-    if let Piece::Room(id) = piece {
-        if save.carrier_rev1.has_room(id) {
-            return Some(PlaceError::AlreadyBuilt);
-        }
-    }
-    let cost = piece.cost();
-    (!can_afford(save, cost)).then_some(PlaceError::CantAfford(cost))
-}
-
-/// Whether `piece` can be built at (x, y) now: the layout rules, then the
-/// wallet.
-pub fn can_build(save: &SaveGame, piece: Piece, x: i32, y: i32) -> Result<(), PlaceError> {
-    save.carrier_rev1.can_place(piece, x, y)?;
-    match build_lock(save, piece) {
-        Some(e) => Err(e),
-        None => Ok(()),
+/// What the save's wallet holds, as a [`Cost`].
+pub fn wallet(save: &SaveGame) -> Cost {
+    Cost {
+        credits: save.credits,
+        void_crystal: void_crystal(save),
     }
 }
 
-/// Build `piece` at (x, y): pays its cost and places it. The caller saves.
-pub fn build(save: &mut SaveGame, piece: Piece, x: i32, y: i32) -> Result<(), PlaceError> {
-    can_build(save, piece, x, y)?;
-    spend(save, piece.cost());
-    save.carrier_rev1.place(piece, x, y);
-    Ok(())
-}
-
-/// Demolish the player-built piece on cell (x, y) for a full refund. The
+/// Builds a room of `size` anchored at (x, y): checks the layout and the
+/// wallet, pays, and starts the construction site. Returns its index. The
 /// caller saves.
-pub fn demolish(save: &mut SaveGame, x: i32, y: i32) -> Result<Piece, DemolishError> {
-    save.carrier_rev1.can_demolish(x, y)?;
-    let piece = save
-        .carrier_rev1
-        .demolish(x, y)
-        .ok_or(DemolishError::Nothing)?;
-    refund(save, piece.cost());
-    Ok(piece)
+pub fn build_room(save: &mut SaveGame, size: RoomSize, x: i32, y: i32) -> Result<usize, Reason> {
+    save.carrier.can_place_room(size, x, y, wallet(save))?;
+    spend(save, size.cost());
+    Ok(save.carrier.place_room(size, x, y))
+}
+
+/// Builds `id` anchored at (x, y) (`pilot`: the tile under the Pilot's
+/// feet): checks, pays, and starts the site. Returns its index. The caller
+/// saves.
+pub fn build_item(
+    save: &mut SaveGame,
+    id: ItemId,
+    x: i32,
+    y: i32,
+    pilot: Option<Tile>,
+) -> Result<usize, Reason> {
+    save.carrier.can_place(id, x, y, wallet(save), pilot)?;
+    let cost = id.def().ok_or(Reason::Blocked)?.cost;
+    spend(save, cost);
+    Ok(save.carrier.place(id, x, y, None))
+}
+
+/// Removes room `i` (an empty one the player built, or its site) for a
+/// full refund. The caller saves.
+pub fn remove_room(save: &mut SaveGame, i: usize) -> Result<Cost, Reason> {
+    save.carrier.can_remove_room(i)?;
+    let cost = save.carrier.remove_room(i);
+    refund(save, cost);
+    Ok(cost)
+}
+
+/// Removes item `i` (or cancels its site) for a full refund; starter
+/// pieces refund nothing. The caller saves.
+pub fn remove_item(save: &mut SaveGame, i: usize) -> Result<Cost, Reason> {
+    save.carrier.can_remove(i)?;
+    let cost = save.carrier.remove(i);
+    refund(save, cost);
+    Ok(cost)
 }
 
 #[cfg(test)]
@@ -238,34 +250,53 @@ mod tests {
     }
 
     #[test]
-    fn building_pays_and_demolishing_refunds_in_full() {
-        use crate::layout_v1::{CarrierLayout, RoomId};
-        let bay = Piece::Room(RoomId::SalvageBay);
-        let mut save = rich(129, 3);
-        assert_eq!(build(&mut save, Piece::Corridor, 8, 6), Ok(()));
-        assert_eq!(save.credits, 119);
+    fn building_pays_and_removing_refunds_in_full() {
+        // The spec's example edits: a Small Room south of the Workshop and a
+        // Salvage Sorter in it.
+        let mut save = rich(179, 4);
+        let room = build_room(&mut save, RoomSize::Small, 14, 10).unwrap();
+        assert_eq!((save.credits, void_crystal(&save)), (119, 3));
+        assert!(!save.carrier.rooms[room].finished());
+        // Nothing goes into a room still being built.
         assert_eq!(
-            can_build(&save, bay, 9, 5),
-            Err(PlaceError::CantAfford(Cost {
+            build_item(&mut save, ItemId::SalvageSorter, 19, 11, None),
+            Err(Reason::StillBeingBuilt)
+        );
+        save.carrier.tick(5000);
+        // Layout reasons come before the wallet.
+        assert_eq!(
+            build_item(&mut save, ItemId::SalvageSorter, 30, 18, None),
+            Err(Reason::NeedsFloor)
+        );
+        assert_eq!(
+            build_item(&mut save, ItemId::SalvageSorter, 19, 11, None),
+            Err(Reason::Need(Cost {
                 credits: 120,
                 void_crystal: 3
             }))
         );
-        assert_eq!(build_lock(&save, bay), can_build(&save, bay, 9, 5).err());
         save.credits += 1;
-        // Layout reasons come before the wallet.
-        assert_eq!(can_build(&save, bay, 9, 4), Err(PlaceError::MustConnect));
-        assert_eq!(build(&mut save, bay, 9, 5), Ok(()));
+        let sorter = build_item(&mut save, ItemId::SalvageSorter, 19, 11, None).unwrap();
         assert_eq!((save.credits, void_crystal(&save)), (0, 0));
-        assert_eq!(build_lock(&save, bay), Some(PlaceError::AlreadyBuilt));
         assert_eq!(
-            demolish(&mut save, 8, 6),
-            Err(DemolishError::WouldDisconnect)
+            build_item(&mut save, ItemId::SalvageSorter, 15, 12, None),
+            Err(Reason::AlreadyBuilt)
         );
-        assert_eq!(demolish(&mut save, 9, 5), Ok(bay));
-        assert_eq!(demolish(&mut save, 8, 6), Ok(Piece::Corridor));
-        assert_eq!((save.credits, void_crystal(&save)), (130, 3));
-        assert_eq!(save.carrier_rev1, CarrierLayout::starting());
-        assert_eq!(demolish(&mut save, 3, 4), Err(DemolishError::Starting));
+        // The room isn't empty until the sorter (a site, cancelled) goes.
+        let room = save.carrier.room_at((15, 12)).unwrap();
+        assert_eq!(remove_room(&mut save, room), Err(Reason::RoomNotEmpty));
+        assert_eq!(remove_item(&mut save, sorter).map(|c| c.credits), Ok(120));
+        assert_eq!(remove_room(&mut save, room).map(|c| c.credits), Ok(60));
+        assert_eq!((save.credits, void_crystal(&save)), (180, 4));
+        assert_eq!(save.carrier, crate::layout::Carrier::starting());
+        // Starter pieces: rooms can't go, fixed stations move instead,
+        // furniture goes for nothing back.
+        let bridge = save.carrier.room_at((2, 2)).unwrap();
+        assert_eq!(remove_room(&mut save, bridge), Err(Reason::StarterPiece));
+        let bench = save.carrier.find(ItemId::UpgradeBench).unwrap();
+        assert_eq!(remove_item(&mut save, bench), Err(Reason::MoveItInstead));
+        let lamp = save.carrier.find(ItemId::FloorLamp).unwrap();
+        assert_eq!(remove_item(&mut save, lamp).map(|c| c.credits), Ok(0));
+        assert_eq!(save.credits, 180);
     }
 }

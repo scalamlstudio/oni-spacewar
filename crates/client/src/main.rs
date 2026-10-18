@@ -15,7 +15,6 @@ mod flow;
 mod hints;
 mod input;
 mod layout;
-mod layout_v1;
 mod mission;
 mod net;
 mod pacing;
@@ -367,8 +366,8 @@ fn main() {
 }
 
 /// Synctest / p2p fleet: even handles fly Kite, odd handles Bulwark;
-/// handles 2 and up have the Training Room, so the gate covers its
-/// cooldowns too.
+/// handles 2 and up have the Combat Simulator (`Upgrades::training`), so
+/// the gate covers its cooldowns too.
 fn test_loadouts(players: usize) -> Vec<Loadout> {
     (0..players)
         .map(|h| Loadout {

@@ -19,16 +19,19 @@ pub enum Hint {
     CarrierWalk,
     /// First time the Pilot stands at something they can use.
     CarrierInteract,
-    /// First time the Pilot walks into the Dock.
+    /// First time the Pilot stands near a berth.
     Dock,
     /// First time the Workshop upgrade panel opens.
     Workshop,
     /// First return from a mission with loot.
     ReturnWithLoot,
-    /// First Carrier arrival that can afford a room, with none built yet.
+    /// First Carrier arrival that can afford a Salvage Sorter, with none on
+    /// board yet.
     CarrierCanBuild,
     /// First time in Build mode.
     CarrierBuild,
+    /// First Carrier load after a Revision 1 carrier was refunded on load.
+    CarrierRefit,
     /// First battle start.
     BattleMove,
     /// First enemy in basic-attack range.
@@ -48,6 +51,7 @@ impl Hint {
             Hint::ReturnWithLoot => "carrier_return_with_loot",
             Hint::CarrierCanBuild => "carrier_can_build",
             Hint::CarrierBuild => "carrier_build",
+            Hint::CarrierRefit => "carrier_refit",
             Hint::BattleMove => "battle_move",
             Hint::BattleSkills => "battle_skills",
             Hint::BattleLoot => "battle_loot",
@@ -57,19 +61,20 @@ impl Hint {
     pub fn text(self) -> &'static str {
         match self {
             Hint::CarrierWalk => {
-                "Click or hold to walk. Click a crew member, ship or the Workshop bench to use it."
+                "Click or hold to walk. Click a crew member, ship or the Upgrade Bench to use it."
             }
             Hint::CarrierInteract => {
                 "Click what the label points at to use it. E works too when you stand next to it."
             }
-            Hint::Dock => "Click a battleship here to board it and start a mission.",
-            Hint::Workshop => {
-                "W / S pick an upgrade, E buys it. Tab switches to Build for new rooms."
-            }
-            Hint::ReturnWithLoot => "Spend credits and Void Crystal at the Workshop.",
-            Hint::CarrierCanBuild => "You can afford a new room. Build it at the Workshop bench.",
+            Hint::Dock => "Pick a battleship here to start a mission.",
+            Hint::Workshop => "W / S pick an upgrade, E buys it.",
+            Hint::ReturnWithLoot => "Spend credits and Void Crystal at the Upgrade Bench.",
+            Hint::CarrierCanBuild => "You can afford a Salvage Sorter. Press B to build.",
             Hint::CarrierBuild => {
-                "Click a glowing slot to build. Rooms need a corridor at one of their doors."
+                "Pick a room or an item, then click to build. Rooms open into their neighbours. Keep the front of a station clear."
+            }
+            Hint::CarrierRefit => {
+                "The carrier has been refitted. Everything you built was refunded. Press B to rebuild it your way."
             }
             Hint::BattleMove => "Click or hold to move. Your guns fire on their own.",
             Hint::BattleSkills => "Q / W use skills. Watch the cooldowns.",
@@ -277,6 +282,7 @@ mod tests {
             Hint::ReturnWithLoot,
             Hint::CarrierCanBuild,
             Hint::CarrierBuild,
+            Hint::CarrierRefit,
             Hint::BattleMove,
             Hint::BattleSkills,
             Hint::BattleLoot,

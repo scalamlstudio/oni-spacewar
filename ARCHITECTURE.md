@@ -39,16 +39,15 @@ crates/
     src/bin/content_manifest_diff.rs   compare manifests and list packs/assets a patch needs
     src/cutouts.rs                     background keying, sheet slicing, single-sprite crop, resize
     src/bin/sprite_sheet_cutouts.rs    expression sheets -> portraits
-    src/bin/demo_art_import.rs         design/art/demo (+ demo-v2 battle art and backdrops, carrier-2_5d-v2 pieces) -> battle / carrier / title / result / icon sources
+    src/bin/demo_art_import.rs         design/art/demo (+ demo-v2 battle art and backdrops) -> battle / title / result / icon sources
     src/bin/carrier_tile_import.rs     design/art/carrier-furniture batch A catalogue -> carrier/tile, carrier/item, scaffold, front marker sources
   client/             package `oni-client`, bin `oni-spacewar` — everything else
     src/main.rs         CLI (synctest / p2p modes), app + GGRS session setup, ICE (STUN/TURN) config
     src/art.rs          ContentImages: shipped images and fonts by stable content ID (manifest -> processed file), cached; linear sampler + CPU mip chain
     src/flow.rs         first-playable scene state machine, Title / Result UI, --autoplay QA driver: Title → Carrier → Battle → Result
     src/layout.rs       carrier interior Revision 3 rules, no Bevy, no clock: rooms (Small / Large shells) → derived tiles, walls, doorways + clearance; item catalogue; construction sites (`tick(ms)`); can_place_room / can_remove_room / can_place / can_move / can_remove with the spec's reasons; reachability, crew posts, walkable rects, validation, refunds; click-to-move pathing (A*)
-    src/layout_v1.rs    retired Revision 1 layout (rooms + corridors on 12 × 8 cells) the Carrier scene still runs on until the Revision 3 scene lands (TAKOAI-88, Engineer B), then deleted
-    src/carrier.rs      Carrier scene: draws the layout, click-to-move / hold-to-drag + 8-direction WASD walking, crew dialogue, one-berth Docks (board a ship → briefing → launch), camera / zoom, Workshop panel (Upgrades + Build tabs), ONI-style Build mode screen (builder UI kit), clickable panels
-    src/workshop.rs     Workshop rules: upgrade costs / levels / buy(), and Build: build_lock / can_build / build / demolish (full refund)
+    src/carrier.rs      Carrier scene (Revision 3): draws the rooms' tiles and the items by layer, construction sites with progress bars, click-to-move / hold-to-drag + 8-direction WASD walking, crew at their posts, stations as hotspots, berths with their ships (board → briefing → launch), camera / zoom, Workshop upgrades panel, Build mode (B: Rooms / Stations / Furniture / Decor, Move, Remove; builder UI kit), clickable panels
+    src/workshop.rs     Workshop rules: upgrade costs / levels / buy(), and Build mode's wallet side: build_room / build_item (pay up front) / remove_room / remove_item (full refund)
     src/hints.rs        one-time tutorial hints: triggers, display queue, seen IDs in the save
     src/save.rs         versioned JSON save data in the OS data directory (override: ONI_SAVE_DIR) + migration
     src/mission.rs      typed client mission config/result handoff into `sim::SimState`; reward rules (survives_failure)
@@ -230,17 +229,10 @@ has a transparent background is only cropped), cuts the icon sheet (5 icons) wit
 sheet slicer as the portraits, scales everything down to its in-game size
 (single sprites get a `SPRITE_MARGIN` transparent border after scaling, so
 nothing touches the canvas edge) and writes `assets/source/core/{battle,carrier,title,ui/icon}/...`. Restyled
-pieces from `design/art/demo-v2/` are rows in its `SPRITES` table. The 2.5D
-carrier's modular pieces (the detailed set in `design/art/carrier-2_5d-v2/`,
-TAKOAI-69, on the TAKOAI-55 grid; `CARRIER_DIR`) are rows in `CARRIER_2_5D`,
-including Art's own one-berth Dock and the ship-free Dock berth
-(`core.carrier.dock.berth`, no longer drawn since the Dock room has its own
-pad). They are
-already transparent and authored at 2× on a 256 px-per-cell grid, so they are
-copied unchanged after a size check, as `core.carrier.room.<id>`,
-`core.carrier.door.<n|e|s|w>`, `core.carrier.corridor.<mask>`,
-`core.carrier.hull_floor` and `core.carrier.build_slot` (drawn at 1×, 128 px
-per cell). The scene backdrops (`BACKDROPS`) are the transparent demo-v3 title
+pieces from `design/art/demo-v2/` are rows in its `SPRITES` table. (The
+Revision 1 carrier's rooms, doors, corridors, hull floor and build slot were
+retired with their `CARRIER_2_5D` rows in TAKOAI-91; the carrier's art now
+comes from `carrier-tile-import`, below.) The scene backdrops (`BACKDROPS`) are the transparent demo-v3 title
 key art and Result backdrop (`core.title.key_art`, `core.result.backdrop`),
 shipped at 2000 × 1160 so they stay crisp up to that window size while the
 runtime nebula shader shows through. They follow `design/ART_GUIDELINES.md`:
@@ -260,7 +252,7 @@ cargo run --release --bin content-pipeline -- .
 ```
 
 `carrier-tile-import` reads Art's catalogue
-`design/art/carrier-furniture/batch-a-import-v2.json` (selected file,
+`design/art/carrier-furniture/batch-a-import-v3.json` (selected file,
 stable ID, destination, size, alpha bounds), checks each row (the ID must
 be the one the pipeline derives from the destination path; size and alpha
 bounds must match the file) and copies the file unchanged: the art is
@@ -270,9 +262,15 @@ masks, digits in n-e-s-w order), `core.carrier.tile.doorway.<ns|ew>`,
 `core.carrier.item.<id>` for the six stations, `core.carrier.scaffold` and
 `core.carrier.front_marker`. No hull tiles: space shows through outside
 the rooms (TAKOAI-94). A new Art batch means a new catalogue file and a
-new constant here.
+new constant here. The 19 furniture and decor pieces (Art batch B) aren't
+imported yet (TAKOAI-93): until they are, the scene draws each as a
+placeholder box over its footprint with its name, and the real sprite
+replaces it with no code change once its `core.carrier.item.<id>` ships.
 
-`layout::TileMap::art(tile)` is the one place that picks a tile's image:
+`layout::TileMap::art(tile)` is the one place that picks a tile's image
+(`TileMap::floor_art` the floor drawn on or under it), and
+`carrier::deck` the one place that turns them into sprites, so a later
+recolour (TAKOAI-96) hooks in there:
 walls by `wall_mask` (wall neighbours only; a doorway ends a wall, so the
 wall beside it shows its end trim and jamb), floors cycling the three
 variants by `x + y`, doorways by axis (`ew` in a north–south wall), hull
@@ -285,7 +283,7 @@ a corner, so a run of wall tiles draws as one wall.
 loads every PNG under `assets/source/core/` and fails if a pixel with
 alpha > 8 touches the canvas edge (design/ART_GUIDELINES.md § Cropping).
 Art allowed to touch its canvas edge is listed by path in `FULL_BLEED`: the
-transparent title and Result scene art, carrier rooms / corridors / doors / dock / hull tiles, the Revision 3 floor / wall / doorway tiles and scaffold,
+transparent title and Result scene art, the Revision 3 floor / wall / doorway tiles and scaffold,
 and the builder UI's 9-slice panels, module cards and grid overlay. Real
 clipped cut-outs waiting for an art fix go in `KNOWN_CLIPPED`, which fails
 once the asset is fixed so the entry is removed.
@@ -360,116 +358,115 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   construction site. `walkable()` merges walkable tiles into rectangles for
   the same `find_path` / `walk` / `can_stand` pathing; `crew_post` and
   `Item::use_point` place crew and use points. `validate()` is the load-time
-  check; `refund()` is what a reset gives back. The pathing lives here and is
-  re-exported by `layout_v1` for the old scene. Floats appear only in the
+  check; `refund()` is what a reset gives back. The pathing lives here too.
+  Floats appear only in the
   pixel helpers; the rules are integer tile math (this is client code, not
   `sim`).
-- **The 2.5D carrier, Revision 1** (`layout_v1.rs` rules, `carrier.rs` scene;
-  retired, still running until the Revision 3 scene lands). Plain Bevy in
-  `Update`, gated on `GameScreen::Carrier`; it owns no sim state.
-  `layout_v1::CarrierLayout` (in the save as the transitional `carrier_rev1`) is rooms (id + anchor
-  cell) and corridor cells on a 12 × 8 hull of 128 px cells; grid y grows
-  south and the scene flips it (`carrier::world` / `grid`). Corridors shape
-  themselves from a 4-bit mask (`mask`, which picks the corridor art); a
-  socket with a corridor in front is a door (door overlay art). Everything
-  must stay connected to the Bridge (`connected`, a flood fill over rooms and
-  corridors). `can_place` / `can_demolish` return the spec's reasons, which the
-  build ghost shows. `walkable()` turns the layout into rectangles (room
-  interiors, door gaps, corridor lanes); `can_stand` checks the Pilot's 12 px
-  circle (centre + 8 rim points, each inside some rectangle) and `walk`
-  slides along walls. **Click-to-move** (TAKOAI-60, same control as the
-  battle): `find_path` runs A* over an 8 px lattice of standable points (8
-  directions, octile costs), snaps a goal off the floor to the nearest floor
-  within `SNAP_RANGE` (64 px), then string-pulls the route to the corners
-  that block a straight line (`clear_line`). `carrier::click_to_move` turns
-  a left click into a `WalkOrder` (`order_walk`: the floor point, or the
-  `APPROACH` spot in front of a clicked ship / crew member / bench with the
-  hotspot to use on arrival); `carrier_input` follows it (`follow`, still
-  through `walk`) and interacts on arrival when in reach. **Hold-to-move**
-  (TAKOAI-87): the battle and the carrier read the button through one
-  helper, `input::MovePress` (Start / Hold / Idle), so they can't drift
-  apart. A press on the floor also starts a `PilotDrag`; while the button
-  is held `drag_pilot` re-paths to the cursor whenever it has moved
-  `DRAG_REPATH` (8 px) from the last target, and a cursor within
-  `DRAG_DEAD_ZONE` (12 px) of the Pilot's feet stops it instead, so the
-  facing doesn't jitter (`drag_step`). A press on a ship / crew member /
-  bench stays a click; presses and drags over UI nodes (any non-`None`
-  `Interaction`) are ignored; opening a panel or pausing ends the drag.
-  WASD cancels the order; Build mode keeps its own clicks (`build_click`). The destination is
-  drawn with the battle's move marker (`render::move_marker`). `sync_layout` redraws the scene whenever the saved
-  layout changes, recomputing the walkable rects and the hotspots (crew, the
-  Workshop bench, one per Dock). Characters and docked ships are y-sorted
-  by their feet (`depth`); floors, doors, slots and the ghost are fixed
-  layers. Characters are scaled by their visible pixels (`standing`), so the
-  Pilot and the crew are the same height (`CHARACTER_H`), and anchored at
-  their visible feet (`Anchor`), so the Pilot's translation is the point
-  walking and collision use. The Pilot faces 8 directions
-  (`carrier::Facing::of`, its movement snapped to the nearest octant; client
-  code, so a float `atan2` is fine): S, SE, E, NE and N are drawn
-  (`core.carrier.pilot.<dir>.{idle,walk_1..4}`, exported by
-  `design/art/demo-v3/pilot-8dir/make-pilot-8dir.py`, not by
-  `demo-art-import`) and SW, W, NW mirror SE, E, NE (`Facing::art`);
-  standing keeps the last facing's idle frame (`pilot_frame`). Every Carrier
-  panel is also clickable: its parts carry a `Click` component (dialogue
-  next / leave, launch, Workshop tab / row, build card / category) that
-  `carrier_input` reads alongside the keys. The
-  camera follows the Pilot, clamped to one cell past the hull
-  (`clamp_camera`); the mouse wheel zooms 0.5×–2× about the cursor
-  (`crate::zoom`, TAKOAI-94), leaving a follow offset that keeps the Pilot
-  on screen. Build mode switches to Overview (`OVERVIEW`, 0.5) and pans with
-  WASD instead; the wheel zooms the pan. Nothing is drawn outside the rooms
-  and corridors: space (the shared sky) shows there, and the rooms' outer
-  walls are the ship's edge. Characters are `CHARACTER_H` = 56 px tall
-  (0.875 of a Revision 3 tile) on a 24 px footprint (`layout::PILOT_RADIUS`,
-  capped at `MAX_FOOTPRINT_TILES` = 0.6 tile). Pure helpers
-  (`hotspots`, `nearest_hotspot`, `clicked_hotspot`, `interact_with`,
-  `ship_at`, `apply_build_click`, `ghost`, `crew_lines`, `ship_card`,
-  `upgrade_preview`) hold the rules and are unit tested. The Dock's Launch
-  writes a `mission::MissionRequest` message; the flow stores the picked
+- **The Carrier scene** (`carrier.rs`, TAKOAI-91; design/READINESS.md
+  § Carrier). Plain Bevy in `Update`, gated on `GameScreen::Carrier`; it
+  owns no sim state and draws the save's `layout::Carrier`; grid y grows
+  south and the scene flips it (`carrier::world` / `grid`). **Drawing:**
+  `deck(carrier)` lists the sprites back to front: every room tile gets its
+  floor (`TileMap::floor_art`), and every wall and doorway tile its
+  `TileMap::art` on top of that floor, so wall art that leaves floor
+  showing drops in unchanged; a doorway that is still shut (one of its
+  rooms under construction) is dimmed; rooms being built get the scaffold
+  over every tile. Items follow by layer: rugs and wall-mounted pieces on
+  fixed layers over the floor and walls, objects y-sorted with the
+  characters by their front edge (`depth`); each item's art is pinned at
+  its bottom centre, the middle of its footprint's front edge. Sites are
+  drawn in the blueprint tint with a progress bar (`SiteBar`,
+  `update_site_bars`). Hull tiles draw nothing: space (the shared sky)
+  shows there. `sync_layout` respawns the deck when the layout's *shape*
+  changes (`drawn_shape`: a site counts as a site however long it has
+  left, so ticking timers don't redraw every frame; a site finishing does),
+  and recomputes the walkable rects (`Carrier::walkable`) and hotspots.
+  **Construction timers:** `run_sites` advances `Carrier::tick` by whole
+  ms of frame time while the Carrier is open and unpaused (client code, so
+  frame time is fine) and saves when a site finishes.
+  **Scene:** `hotspots` gives the crew at their posts (`Carrier::crew_post`,
+  recomputed after every edit, so crew follow their station) and every
+  finished station's use point: the Upgrade Bench (Workshop upgrades) and
+  one per berth (`Hotspot::Berth(ship)`, from the berth's `ship`). The
+  Command Console and Sample Analyzer are posts only in the demo. The Pilot
+  spawns at the Command Console's use point, or after a mission at the
+  launched ship's berth (`spawn_point`). **Walking** is unchanged from
+  Revision 1 (TAKOAI-60/87), now over the tile rectangles: `find_path`
+  runs A* over an 8 px lattice of standable points and string-pulls the
+  route (`clear_line`); `carrier::click_to_move` turns a left click into a
+  `WalkOrder` (`order_walk`: the floor point, or the `APPROACH` spot in
+  front of a clicked ship / crew member / station with the hotspot to use
+  on arrival); `carrier_input` follows it (`follow`, through `walk`) and
+  interacts on arrival when in reach. Hold-to-move reads the button through
+  `input::MovePress` like the battle: a press on the floor starts a
+  `PilotDrag` that re-paths to the cursor every `DRAG_REPATH` px and stops
+  inside `DRAG_DEAD_ZONE` (`drag_step`); presses over UI nodes are ignored.
+  WASD cancels the order. The destination is drawn with the battle's move
+  marker. Characters are scaled by their visible pixels (`standing`) to
+  `CHARACTER_H` = 56 px (0.875 tile) on a 24 px footprint
+  (`layout::PILOT_RADIUS`, capped at `MAX_FOOTPRINT_TILES` = 0.6 tile) and
+  anchored at their visible feet. The Pilot faces 8 directions
+  (`Facing::of`; S, SE, E, NE, N drawn, SW, W, NW mirrored, `Facing::art`;
+  standing keeps the last facing's idle frame, `pilot_frame`). Every panel
+  part carries a `Click` component that `carrier_input` reads alongside the
+  keys. The camera follows the Pilot, clamped to 2 tiles past the hull
+  (`clamp_camera`); the wheel zooms 0.5×–2× about the cursor
+  (`crate::zoom`). Deck labels sit on a dark backing (`label`), so they
+  read over any floor art. Pure helpers (`deck`, `hotspots`,
+  `nearest_hotspot`, `clicked_hotspot`, `spawn_point`, `interact_with`,
+  `ship_at`, `apply_build_click`, `ghost`, `entry_card`, `crew_lines`,
+  `ship_card`, `upgrade_preview`) hold the rules and are unit tested.
+- **Build mode** (`Overlay::Build`, § Building). **B** or the HUD's Build
+  button opens it from anywhere aboard (B or Esc with nothing picked
+  closes it); the Upgrade Bench has no Build tab any more. The camera goes
+  to Overview (`OVERVIEW`, 0.5) and WASD pans it; the wheel still zooms,
+  and the cursor tile is picked through the camera (`track_build_cursor`),
+  so ghosts and clicks work at every zoom. The screen (`spawn_build_ui`,
+  the builder kit) is the category bar (`BuildCategory`: Rooms, Stations,
+  Furniture, Decor, then the Move and Remove tools), the flyout of cards
+  (`BuildCategory::entries`, catalogue order; an item card shows its
+  sprite, a room card its outline at scale; name, cost chip, build time;
+  greyed with the reason, `entry_lock`: fixed-count stations, a buy-once
+  station already on board, the price) and the detail panel (`entry_card`:
+  size, placement rule, effect, cost, build time, lock, last feedback,
+  Back). 1–9 pick cards. The panels carry `Interaction`, so deck clicks
+  ignore the mouse over them. `ghost` is what shows at the cursor: a room's
+  wall-and-floor outline anchored so the mouse is its middle floor tile
+  (`Room::anchor_for`), with the doorways it would open marked; an item's
+  sprite with its footprint centred on the mouse (`item_anchor`) and its
+  front strip marked with the front-marker chevrons; tinted with the kit's
+  valid / invalid swatch, with one line over it: the cost and build time
+  or the `layout::Reason`. Items that block a new doorway flash. A left
+  click runs `apply_build_click`: Place pays and starts a construction
+  site (`workshop::build_room` / `build_item`; the entry stays picked, a
+  buy-once station goes back to the flyout), Move lifts a finished item
+  (hidden while held; its own tiles count as free) and puts it down free
+  and instant (a berth carries its ship), Remove takes an item, a site or
+  an empty room for a full refund (`workshop::remove_item` /
+  `remove_room`); every change saves. Right click / Esc puts a held item
+  back or drops the pick (`back_out`). `build_grid` shows the kit's grid
+  overlay on every hull tile while Build mode is open.
+- **Station effects.** Combat Simulator: once finished, `mission::upgrade_ids`
+  adds `combat_simulator_1` to the mission's upgrade IDs, which
+  `upgrade_levels` maps to `sim::Upgrades::training` (the sim is untouched);
+  `ShipSheet::new` applies × 85 / 100 (integer) to the Q / W cooldowns
+  (`tuning::trained`), the ship keeps them in `ShipStats`, and the launch
+  card / Workshop preview read the same sheet. The determinism gate's
+  fleet gives handles 2–3 `training`. Salvage Sorter: once finished,
+  `SaveGame::salvage_bonus` (+25% of what a successful mission kept,
+  rounded down) is added in `record_mission_return` and shown as its own
+  Result line ("Salvage Sorter +45 cr +1 VC"). A site has no effect yet.
+- **Berths.** One `berth` item per battleship (§ Dock and berths); each
+  stores its ship, so berths can move. `docked_ship` draws the ship's
+  battle sprite on the pad, nose north, its longest side
+  `ShipInfo::berth_len` (`DockedShip`). The ship is the interaction: E at
+  the berth's use point or a click on the ship calls `interact_with`,
+  which writes it to `selected_battleship`, plays the Pilot's briefing and
+  ends in the launch confirm panel for that ship. The selected ship gets a
+  highlight ring and "Selected" in its berth's label; the other is dimmed.
+  Launch writes a `mission::MissionRequest`; the flow stores the picked
   battleship in the save and enters Battle, where `config_from_save` builds
   the `MissionConfig`.
-- **Building** (Workshop bench → Build tab → `Overlay::Build`). The Build tab
-  lists `BUILD_TOOLS` (Corridor, Salvage Bay, Training Room, Demolish) with
-  `workshop::build_lock` (already built / can't afford). Build mode's screen
-  (`spawn_build_ui`, after `design/art/demo-v2/builder-ui/`) is one row of
-  9-sliced `core.ui.builder.*` panels along the bottom: the category bar
-  (`BuildCategory`, `category_tool`), the flyout of cards and the detail
-  panel, both filled from `tool_card` (name, module icon, cost chip, effect,
-  size, doors, lock); `pick_tool` refuses a greyed-out card with its reason.
-  The 9-slices fill the whole node (`VisualBox::BorderBox`; `ImageNode`
-  defaults to the content box) and the text is padded in past the art's rim
-  (`UI_PANEL_PAD`, `UI_CARD_PAD`); the detail panel has a fixed width so its
-  wrapped text is measured at the width it's drawn at.
-  The panels carry `Interaction`, so `build_click` / `track_build_cursor`
-  ignore the mouse over them, and `clamp_camera` lets the Build camera pan
-  `BUILD_UI_H` further south. `build_preview` draws the grid overlay, the
-  slots and the ghost (the piece's art plus the kit's valid / invalid
-  swatch, and one cost or reason line over it) at `BuildCursor`;
-  a left click runs `apply_build_click` → `workshop::build` (pays and places)
-  or `workshop::demolish` (full refund) and saves. Right click / Esc go back
-  to the tab (Esc on the Carrier closes panels before it opens the pause
-  menu: `flow::toggle_pause_menu` skips while an overlay is open).
-- **Room effects.** Training Room: `mission::upgrade_ids` adds
-  `training_room_1` to the mission's upgrade IDs, which `upgrade_levels`
-  maps to `sim::Upgrades::training`; `ShipSheet::new` applies × 85 / 100
-  (integer) to the Q / W cooldowns (`tuning::trained`), the ship keeps them
-  in `ShipStats`, and the Dock card / Workshop preview read the same sheet.
-  The determinism gate's fleet gives handles 2–3 the Training Room. Salvage
-  Bay: `SaveGame::salvage_bonus` (+25% of what a successful mission kept,
-  rounded down) is added in `record_mission_return` and shown as its own
-  Result line.
-- **Dock berths.** A Dock is a 2 × 3 room with one berth (TAKOAI-60); the
-  starting carrier has two, side by side. `CarrierLayout::docks()` lists
-  them west to east and Dock `i` holds `SHIPS[i]` (`docked_ship`), so the
-  save needs no ship field. `carrier::berth()` places the Dock's
-  `Berth { ship }` on its 2 × 2-cell pad and the ship's battle sprite on it
-  (`DockedShip`), nose north, its
-  longest side `ShipInfo::berth_len` (design/READINESS.md § Dock and
-  berths). The ship is the interaction: E near the pad's front edge
-  (`Hotspot::Berth`) or a click on the ship calls `interact_with`, which
-  writes it to `selected_battleship`, plays the Pilot's briefing and ends in
-  the launch confirm panel for that ship. The selected ship gets a highlight
-  ring and "Selected" in its Dock's "Next: Elimination" label; the other is dimmed.
 - **Ship numbers have one source.** `sim::ShipSheet::new(loadout)` gives a
   battleship's stats after upgrades in human units; `ShipStats` (what the
   battle uses) is derived from it, and the Dock card and Workshop preview
@@ -482,7 +479,7 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   `sim::Upgrades` in the `Loadout`, so upgrades change the sim only through
   its deterministic launch input (identical on every peer).
 - **Result scene** (`flow.rs`): banner, kills, mission time (sim ticks),
-  collected / bonus / kept / Salvage Bay / lost loot and the wallet before →
+  collected / bonus / kept / Salvage Sorter / lost loot and the wallet before →
   after.
   Continue goes to the Carrier, whose `enter_carrier` books the result into
   the save (`record_mission_return`) and stores it.
@@ -550,10 +547,13 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   [--abandon] [--shots DIR] [--kill-target N]` is a QA mode for the whole
   demo loop; its battles end at 10 kills unless `--kill-target` says otherwise: New Game
   (or Continue the existing save), fly N battles (default 1) with a scripted
-  pilot (input only, like a player); between them, build the corridor at
-  (8,6) and the Salvage Bay at (9,5) if they're affordable and not built yet,
-  else buy the first affordable Workshop upgrade, then click-to-move to the
-  ship's Dock and board it on arrival; return to the Carrier after the last
+  pilot (input only, like a player). The first Carrier visit shows Build
+  mode's flyouts and walks the Pilot in all 8 directions. Between missions
+  it builds the spec's example edits when it can afford them: a Small
+  Room at (14,10) (mouse tile (17,12)), waits for it, then the Salvage
+  Sorter at (19,11), and waits again; else it buys the first affordable
+  Workshop upgrade. Then it click-to-moves to the ship's berth and boards
+  it on arrival; return to the Carrier after the last
   one, quit to the Title, reload the save from disk and Continue (a restart
   inside the same process), then quit (saving). `--abandon` quits the last mission from the pause menu 20 s in;
   `--shots` saves a screenshot of every scene. Use a scratch `ONI_SAVE_DIR`.
@@ -574,8 +574,9 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   `save::from_json` loads any supported version: up to v4 the `carrier`
   field is a Revision 1 layout, so it is taken out of the JSON and handed to
   `save::migrate`, which refunds every player-built room and corridor in it
-  at Revision 1's prices (a v3 Dock is split first so its corridors count
-  right), sets the starting carrier and the `carrier_refit` flag (the hint
+  at Revision 1's prices (`save::rev1`, the only code left that reads a
+  Revision 1 layout; a v3 Dock's corridors that v4 made starting pieces
+  count as refunded), sets the starting carrier and the `carrier_refit` flag (the hint
   the Revision 3 scene shows once); newer versions are refused. `migrate`
   then validates the carrier (`Carrier::validate`: known IDs, rooms inside
   the hull and overlapping only on walls, every starter room, the station
@@ -583,12 +584,12 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   every item's placement rule, layer, doorway clearance and front strip,
   every front strip reachable); a broken one resets to the starting layout
   and refunds every non-starter room and item (unknown IDs nothing), with a
-  warning. Transitional until the Revision 3 scene: `carrier_rev1` holds the
-  Revision 1 layout the scene still edits, validated and reset the old way;
-  its removal (TAKOAI-88, Engineer B) should refund what it holds. Saved on
-  New Game, every return to the
-  Carrier, every Workshop purchase, build and demolish, Launch, the first
-  showing of each hint, and Quit.
+  warning. Early v5 builds also stored a transitional `carrier_rev1` (the
+  Revision 1 layout their scene ran on): it is dropped on load and what the
+  player built in it is refunded the same way (the refit hint shows if it
+  held anything). Saved on New Game, every return to the Carrier, every
+  Workshop purchase, every place, move and remove, a construction site
+  finishing, Launch, the first showing of each hint, and Quit.
 
 ### Simulation structure
 

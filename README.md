@@ -13,12 +13,14 @@ under [`crates/`](crates/), separate from the design docs — see
 
  - `cargo run --release --bin oni-spacewar` — the demo (Title screen → New Game / Continue)
    - Carrier: left-click the floor to walk there (WASD / arrows also walk),
-     left-click a crew member, the Workshop bench or a battleship to walk up
-     and use it (or walk up and press E), mouse wheel zoom; each battleship
-     has its own Dock: board it, then launch
-   - Building: Workshop bench → Tab to the Build tab → pick a piece, then
-     left-click a spot (green = legal); X toggles demolish (full refund),
-     WASD / arrows pan, mouse wheel zooms, right click / Esc goes back
+     left-click a crew member, the Upgrade Bench or a docked battleship to
+     walk up and use it (or walk up and press E), mouse wheel zoom; board a
+     battleship at its berth, then launch
+   - Building: B (or the HUD's Build button) opens Build mode: pick a room
+     or an item from Rooms / Stations / Furniture / Decor, then left-click
+     to start building it (the ghost says why not); Move and Remove (full
+     refund) work on what is there; WASD / arrows pan, mouse wheel zooms,
+     right click / Esc drops the pick, Esc / B again leaves
    - Battle: left-click to move, auto-fire, Q / W skills, Esc pause;
      destroy 20 enemies and fly over loot to collect it
    - Save: `~/Library/Application Support/oni-spacewar/save.json` (macOS),

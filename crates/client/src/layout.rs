@@ -5,16 +5,11 @@
 //! construction sites advanced by an explicit [`Carrier::tick`], what may
 //! be placed, moved or removed where and why, reachability, the walkable
 //! area, crew posts, save validation and refunds. Also the click-to-move
-//! pathing over walkable rectangles (`find_path`, `walk`, `can_stand`),
-//! which the Revision 1 scene (`crate::layout_v1`) still shares.
+//! pathing over walkable rectangles (`find_path`, `walk`, `can_stand`).
 //!
 //! Grid coordinates: tile (0,0) is the hull's north-west corner, x grows
 //! east, y grows south. "Grid px" are world px in the same orientation
 //! ([`TILE`] per tile); the Carrier scene flips y for Bevy.
-
-// The Revision 3 scene and Build mode (TAKOAI-88, Engineer B) are the first
-// callers of most of this; until then only the save and the tests use it.
-#![allow(dead_code)]
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt;
@@ -247,7 +242,8 @@ fn doorway_between(a: &Room, b: &Room) -> Option<([Tile; 2], bool)> {
 /// What a hull tile is, derived from the rooms.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum TileKind {
-    /// Outside every room: drawn, not walkable, free for new rooms.
+    /// Outside every room: not drawn (space shows), not walkable, free for
+    /// new rooms.
     Hull,
     Wall,
     Floor,
@@ -371,7 +367,7 @@ impl TileMap {
     pub fn art(&self, (x, y): Tile) -> Option<String> {
         Some(match self.kind((x, y)) {
             TileKind::Hull => return None,
-            TileKind::Floor => format!("core.carrier.tile.floor.{}", (x + y).rem_euclid(3)),
+            TileKind::Floor => return self.floor_art((x, y)),
             TileKind::Wall => {
                 let mask = self.wall_mask((x, y));
                 let bits: String = (0..4)
@@ -389,6 +385,15 @@ impl TileMap {
                 format!("core.carrier.tile.doorway.{axis}")
             }
         })
+    }
+
+    /// The floor drawn on (or under) a room tile: the floor variant for
+    /// `x + y`. The scene puts it under every wall and doorway tile too, so
+    /// wall art that leaves floor showing (TAKOAI-89) drops in unchanged.
+    /// `None` for hull.
+    pub fn floor_art(&self, (x, y): Tile) -> Option<String> {
+        (self.kind((x, y)) != TileKind::Hull)
+            .then(|| format!("core.carrier.tile.floor.{}", (x + y).rem_euclid(3)))
     }
 }
 
@@ -933,8 +938,6 @@ pub enum Crew {
 }
 
 impl Crew {
-    pub const ALL: [Crew; 3] = [Crew::Gunner, Crew::Engineer, Crew::Researcher];
-
     pub fn post(self) -> ItemId {
         match self {
             Crew::Gunner => ItemId::CommandConsole,
@@ -1727,6 +1730,7 @@ impl Rect {
 pub const PILOT_RADIUS: f32 = 12.0;
 /// The widest a character's footprint may be, in tiles.
 pub const MAX_FOOTPRINT_TILES: f32 = 0.6;
+const _: () = assert!(2.0 * PILOT_RADIUS <= MAX_FOOTPRINT_TILES * TILE);
 
 /// Whether a circle of `PILOT_RADIUS` at grid px (x, y) stands on walkable
 /// floor: its centre and eight points on its rim are each inside some

@@ -10,12 +10,12 @@ use sim::{FxVec2, NetInput, SimState, SUB};
 
 use crate::art::ContentImages;
 use crate::carrier::{
-    self, BuildCursor, CarrierArrival, CarrierScene, CarrierView, Hotspot, Overlay, Pilot,
-    PilotDrag, Tool, WalkOrder, WorkshopTab,
+    self, BuildCursor, CarrierArrival, CarrierScene, CarrierView, Entry, Hotspot, Overlay, Pilot,
+    PilotDrag, Tool, WalkOrder,
 };
 use crate::hints::{Hint, Hints};
 use crate::input::{self, MovePress};
-use crate::layout_v1::{Piece, RoomId};
+use crate::layout::{ItemId, RoomSize};
 use crate::mission::{self, MissionOutcome, MissionRequest, MissionResult};
 use crate::rollback::SimWorld;
 use crate::save::{self, SaveError, SaveGame};
@@ -101,8 +101,10 @@ impl Plugin for FlowPlugin {
 
 /// `--autoplay`: QA mode for the demo loop. Starts a new game (or, with
 /// `resume`, Continues the saved one), flies `missions` battles with `ship`
-/// and a scripted pilot, buys the first affordable Workshop upgrade between
-/// them, returns to the Carrier after the last one and quits (saving, like
+/// and a scripted pilot; between them it builds the spec's example Small
+/// Room at (14,10), waits for it, places a Salvage Sorter at (19,11) and
+/// waits again when it can afford both, else buys the first affordable
+/// Workshop upgrade; returns to the Carrier after the last one and quits (saving, like
 /// the pause menu's Quit). With `shots`, saves a window screenshot of every
 /// scene to that directory. With `abandon`, the last mission is quit from
 /// the pause menu 20 s in (Failed, loot lost). Before each mission the
@@ -131,8 +133,10 @@ pub struct Autoplay {
     pub abandon: bool,
     /// Missions flown so far in this run.
     pub flown: u32,
-    /// This Carrier visit builds the Salvage Bay (decided on arrival).
+    /// This Carrier visit builds (decided on arrival), and what: the spec's
+    /// example Small Room, its Salvage Sorter.
     pub building: bool,
+    pub build_plan: (bool, bool),
     /// When (scene seconds) the Pilot boarded the ship this Carrier visit.
     pub boarded: Option<f32>,
     /// Already quit to the Title and Continued from the reloaded save.
@@ -154,13 +158,19 @@ impl Autoplay {
 
 /// First Carrier visit: when the autoplay's 8-direction Pilot tour starts,
 /// and the time per walk (the longest, a 209 px diagonal, takes 1.3 s).
-const TOUR_START: f32 = 3.5;
+const TOUR_START: f32 = 5.6;
 const TOUR_LEG: f32 = 1.4;
 /// Then the hold-to-move drag: pressed after the tour, released once the
 /// cursor has swept all its legs.
 const DRAG_START: f32 = TOUR_START + carrier::PILOT_TOUR.len() as f32 * TOUR_LEG + 0.2;
 const DRAG_END: f32 =
     DRAG_START + (carrier::PILOT_DRAG.len() - 1) as f32 * carrier::PILOT_DRAG_LEG + 0.3;
+
+/// The spec's example edits (§ Starting layout): a Small Room anchored at
+/// (14,10), and the Salvage Sorter at (19,11), which is also its Build-mode
+/// mouse tile (a 2 × 2 footprint's middle rounds to its north-west tile).
+const EXAMPLE_ROOM: (i32, i32) = (14, 10);
+const EXAMPLE_SORTER_MOUSE: (i32, i32) = (19, 11);
 
 /// Upgrade preference for the autoplay pilot: the spec's most visible first
 /// buy first.
@@ -487,12 +497,12 @@ pub(crate) fn enter_carrier(
             save.store();
         }
     }
+    // § Tutorial hints: enough for a Salvage Sorter and none on board yet.
     let can_build = save.game.as_ref().is_some_and(|g| {
-        !g.carrier_rev1.has_built_room()
-            && RoomId::BUILDABLE
-                .iter()
-                .filter_map(|r| r.cost())
-                .any(|c| crate::workshop::can_afford(g, c))
+        g.carrier.find(ItemId::SalvageSorter).is_none()
+            && ItemId::SalvageSorter
+                .def()
+                .is_some_and(|d| crate::workshop::can_afford(g, d.cost))
     });
     if can_build {
         hints.trigger(&mut save, Hint::CarrierCanBuild);
@@ -544,8 +554,8 @@ pub fn mission_time(ticks: u32) -> String {
 }
 
 /// The Result scene's body text (below the banner). `salvage` is the
-/// Salvage Bay's extra credits and Void Crystal (zero without the room or
-/// on failure).
+/// Salvage Sorter's extra credits and Void Crystal (zero without a finished
+/// one or on failure).
 pub fn result_text(r: &MissionResult, wallet: (u32, u32), salvage: (u32, u32)) -> String {
     let crystal = r
         .resources
@@ -575,7 +585,10 @@ pub fn result_text(r: &MissionResult, wallet: (u32, u32), salvage: (u32, u32)) -
         r.credits
     ));
     if salvage != (0, 0) {
-        lines.push(format!("Salvage Bay   +{} cr +{} VC", salvage.0, salvage.1));
+        lines.push(format!(
+            "Salvage Sorter +{} cr +{} VC",
+            salvage.0, salvage.1
+        ));
     }
     if r.lost != sim::Loot::default() {
         lines.push(format!(
@@ -1171,13 +1184,18 @@ fn autoplay_flow(
                         g.tutorial_seen.len()
                     );
                     println!(
-                        "autoplay: layout rooms {:?} corridors {:?}",
-                        g.carrier_rev1
+                        "autoplay: layout rooms {:?} items {:?}",
+                        g.carrier
                             .rooms
                             .iter()
-                            .map(|r| format!("{}@{},{}", r.id.id(), r.x, r.y))
+                            .map(|r| format!("{}@{},{}", r.size.id(), r.x, r.y))
                             .collect::<Vec<_>>(),
-                        g.carrier_rev1.corridors
+                        g.carrier
+                            .items
+                            .iter()
+                            .filter(|i| !i.starter)
+                            .map(|i| format!("{}@{},{}", i.id.key(), i.x, i.y))
+                            .collect::<Vec<_>>()
                     );
                 }
             }
@@ -1222,16 +1240,30 @@ fn autoplay_flow(
             let first_visit = n == 0 && !autoplay.reloaded;
             if first_visit {
                 if at(2.3) {
-                    *overlay = Overlay::Build {
-                        tool: Tool::Place(Piece::Room(RoomId::SalvageBay)),
-                        message: String::new(),
-                    };
-                    cursor.0 = Some((7, 1));
+                    *overlay = Overlay::building(Tool::Place(Entry::Room(RoomSize::Small)));
+                    cursor.0 = Some(carrier::room_mouse(RoomSize::Small, EXAMPLE_ROOM));
                 }
                 if at(2.9) {
                     autoplay.shoot(&mut commands, "11b-build-mode-first-visit");
                 }
-                if at(3.2) {
+                // Then the other flyouts and a tool, each with its ghost
+                // on the Bridge.
+                let flyouts = [
+                    (Tool::Place(Entry::Item(ItemId::Stool)), (3, 3), "furniture"),
+                    (Tool::Place(Entry::Item(ItemId::Rug)), (2, 3), "decor"),
+                    (Tool::Remove, (6, 1), "remove"),
+                ];
+                for (i, (tool, at_tile, name)) in flyouts.into_iter().enumerate() {
+                    let t = 3.1 + i as f32 * 0.7;
+                    if at(t) {
+                        *overlay = Overlay::building(tool);
+                        cursor.0 = Some(at_tile);
+                    }
+                    if at(t + 0.5) {
+                        autoplay.shoot(&mut commands, &format!("11b-build-mode-{name}"));
+                    }
+                }
+                if at(5.3) {
                     *overlay = Overlay::None;
                 }
                 for (i, (to, name)) in carrier::PILOT_TOUR.into_iter().enumerate() {
@@ -1286,90 +1318,76 @@ fn autoplay_flow(
                     *drag = PilotDrag::default();
                 }
             }
-            // Between missions: build the spec's example Salvage Bay (and its
-            // corridor) when it's affordable and not built yet, else buy the
-            // first affordable upgrade.
-            let bay = Piece::Room(RoomId::SalvageBay);
-            let can_build = save.game.as_ref().is_some_and(|g| {
-                !g.carrier_rev1.has_room(RoomId::SalvageBay)
-                    && crate::workshop::can_afford(
-                        g,
-                        crate::workshop::Cost {
-                            credits: bay.cost().credits + Piece::Corridor.cost().credits,
-                            void_crystal: bay.cost().void_crystal,
-                        },
-                    )
-            });
+            // Between missions: build the spec's example Small Room, wait
+            // for it, then place the Salvage Sorter in it and wait again,
+            // each as soon as it is affordable (a 10-kill mission pays for
+            // the room, the next one for the sorter); else buy the first
+            // affordable upgrade.
+            let room = Tool::Place(Entry::Room(RoomSize::Small));
+            let sorter = Tool::Place(Entry::Item(ItemId::SalvageSorter));
+            let room_mouse = carrier::room_mouse(RoomSize::Small, EXAMPLE_ROOM);
             if at(2.5) {
-                autoplay.building = n > 0 && can_build;
+                let plan = save
+                    .game
+                    .as_ref()
+                    .map(|g| autoplay_build_plan(g, room_mouse))
+                    .unwrap_or_default();
+                autoplay.building = n > 0 && (plan.0 || plan.1);
+                autoplay.build_plan = plan;
             }
             let build_run = autoplay.building;
-            if n > 0 && at(2.5) {
-                *overlay = Overlay::workshop(
-                    if build_run {
-                        WorkshopTab::Build
-                    } else {
-                        WorkshopTab::Upgrades
-                    },
-                    0,
-                    String::new(),
-                );
-            }
             if n > 0 && build_run {
-                if at(3.0) {
-                    autoplay.shoot(
-                        &mut commands,
-                        &format!("{:02}a-workshop-build", 12 + n * 10),
-                    );
+                let shot = |name: &str| format!("{:02}{name}", 12 + n * 10);
+                let (build_room, build_sorter) = autoplay.build_plan;
+                if build_room {
+                    if at(2.5) {
+                        *overlay = Overlay::building(room);
+                        cursor.0 = Some(room_mouse);
+                    }
+                    if at(3.1) {
+                        autoplay.shoot(&mut commands, &shot("a-build-preview-room"));
+                    }
+                    if at(3.4) {
+                        autoplay_build(&mut save, &mut overlay, room, room_mouse);
+                    }
+                    if at(4.4) {
+                        autoplay.shoot(&mut commands, &shot("b-room-under-construction"));
+                    }
                 }
-                if at(3.5) {
-                    *overlay = Overlay::Build {
-                        tool: Tool::Place(Piece::Corridor),
-                        message: String::new(),
-                    };
-                    cursor.0 = Some((8, 6));
+                // The room takes 5 s; timers run in Build mode too.
+                if build_sorter {
+                    if at(9.0) {
+                        *overlay = Overlay::building(sorter);
+                        cursor.0 = Some(EXAMPLE_SORTER_MOUSE);
+                    }
+                    if at(9.5) {
+                        autoplay.shoot(&mut commands, &shot("c-build-preview-sorter"));
+                    }
+                    if at(9.8) {
+                        autoplay_build(&mut save, &mut overlay, sorter, EXAMPLE_SORTER_MOUSE);
+                    }
+                    if at(10.6) {
+                        autoplay.shoot(&mut commands, &shot("d-sorter-under-construction"));
+                    }
                 }
-                if at(4.2) {
-                    autoplay.shoot(
-                        &mut commands,
-                        &format!("{:02}b-build-preview-corridor", 12 + n * 10),
-                    );
-                }
-                if at(4.5) {
-                    autoplay_build(
-                        &mut save,
-                        &mut overlay,
-                        Tool::Place(Piece::Corridor),
-                        (8, 6),
-                    );
-                }
-                if at(4.8) {
-                    *overlay = Overlay::Build {
-                        tool: Tool::Place(bay),
-                        message: String::new(),
-                    };
-                    cursor.0 = Some((9, 5));
-                }
-                if at(5.3) {
-                    autoplay.shoot(
-                        &mut commands,
-                        &format!("{:02}c-build-preview-room", 12 + n * 10),
-                    );
-                }
-                if at(5.6) {
-                    autoplay_build(&mut save, &mut overlay, Tool::Place(bay), (9, 5));
+                // The sorter takes 4 s.
+                if at(14.3) {
                     *overlay = Overlay::None;
-                }
-                if at(6.2) {
                     view.zoom.set(carrier::OVERVIEW);
+                    if let Some(g) = &save.game {
+                        println!(
+                            "autoplay: built: room {} sorter {}",
+                            g.carrier
+                                .room_at(room_mouse)
+                                .is_some_and(|i| g.carrier.rooms[i].finished()),
+                            g.carrier.has_finished(ItemId::SalvageSorter)
+                        );
+                    }
                 }
-                if at(6.6) {
-                    autoplay.shoot(
-                        &mut commands,
-                        &format!("{:02}d-expanded-carrier", 12 + n * 10),
-                    );
+                if at(14.8) {
+                    autoplay.shoot(&mut commands, &shot("e-expanded-carrier"));
                 }
-                if at(7.0) {
+                if at(15.2) {
                     view.zoom.set(1.0);
                 }
             } else if n > 0 {
@@ -1392,7 +1410,7 @@ fn autoplay_flow(
                                 crate::workshop::UPGRADES.iter().position(|&x| x == u)
                             })
                             .unwrap_or(0);
-                        *overlay = Overlay::workshop(WorkshopTab::Upgrades, index, message);
+                        *overlay = Overlay::workshop(index, message);
                     }
                     save.store();
                 }
@@ -1404,8 +1422,15 @@ fn autoplay_flow(
                 }
             }
             let berth = carrier::ship_index(&autoplay.ship);
-            // The first visit's Pilot tour runs past the usual 7.5 s.
-            let dock = if first_visit { DRAG_END + 0.6 } else { 7.5 };
+            // The first visit's Pilot tour and a build visit run past the
+            // usual 7.5 s.
+            let dock = if first_visit {
+                DRAG_END + 0.6
+            } else if n > 0 && build_run {
+                15.6
+            } else {
+                7.5
+            };
             if at(dock) {
                 // Click the ship: the Pilot walks to its Dock and boards it
                 // on arrival (selects it and starts the briefing).
@@ -1530,18 +1555,43 @@ fn autoplay_flow(
     }
 }
 
-/// One autoplay Build-mode click, logged and saved like a player's.
-fn autoplay_build(save: &mut SaveSlot, overlay: &mut Overlay, tool: Tool, cell: (i32, i32)) {
+/// What the autoplay builds this Carrier visit: the example Small Room
+/// (mouse tile `room_mouse`) if it isn't there and is affordable, and the
+/// Salvage Sorter if there is none and it is affordable after the room (it
+/// goes into that room once it's finished).
+fn autoplay_build_plan(g: &SaveGame, room_mouse: (i32, i32)) -> (bool, bool) {
+    let room_cost = RoomSize::Small.cost();
+    let sorter_cost = Entry::Item(ItemId::SalvageSorter).cost();
+    let have_room = g.carrier.room_at(room_mouse).is_some();
+    let room = !have_room && crate::workshop::can_afford(g, room_cost);
+    let mut left = g.clone();
+    if room {
+        left.credits -= room_cost.credits;
+        if let Some(vc) = left.resources.get_mut(mission::VOID_CRYSTAL_ID) {
+            *vc -= room_cost.void_crystal;
+        }
+    }
+    let sorter = (have_room || room)
+        && g.carrier.find(ItemId::SalvageSorter).is_none()
+        && crate::workshop::can_afford(&left, sorter_cost);
+    (room, sorter)
+}
+
+/// One autoplay Build-mode click on the mouse tile `at`, logged and saved
+/// like a player's.
+fn autoplay_build(save: &mut SaveSlot, overlay: &mut Overlay, tool: Tool, at: (i32, i32)) {
     if let Some(game) = &mut save.game {
-        let (_, text, _) = carrier::apply_build_click(game, tool, cell);
+        let out = carrier::apply_build_click(game, tool, at, None);
         println!(
-            "autoplay: build {cell:?}: {text} credits {} VC {}",
+            "autoplay: build {at:?}: {} credits {} VC {}",
+            out.message,
             game.credits,
             crate::workshop::void_crystal(game)
         );
         *overlay = Overlay::Build {
-            tool,
-            message: text,
+            category: carrier::BuildCategory::of(tool),
+            tool: out.tool,
+            message: out.message,
         };
     }
     save.store();
@@ -1610,6 +1660,38 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// The autoplay builds the spec's example Small Room, then its Salvage
+    /// Sorter, each as soon as it can pay for it.
+    #[test]
+    fn autoplay_builds_the_example_edits_when_affordable() {
+        let wallet = |credits, vc| {
+            let mut g = SaveGame {
+                credits,
+                ..Default::default()
+            };
+            g.resources.insert(mission::VOID_CRYSTAL_ID.into(), vc);
+            g
+        };
+        let mouse = carrier::room_mouse(RoomSize::Small, EXAMPLE_ROOM);
+        assert_eq!(autoplay_build_plan(&wallet(0, 0), mouse), (false, false));
+        // One 10-kill run (150 cr + 5 VC) pays for the room only.
+        assert_eq!(autoplay_build_plan(&wallet(150, 5), mouse), (true, false));
+        assert_eq!(autoplay_build_plan(&wallet(180, 4), mouse), (true, true));
+        // The next visit places the sorter in the finished room.
+        let mut g = wallet(240, 9);
+        crate::workshop::build_room(&mut g, RoomSize::Small, 14, 10).unwrap();
+        g.carrier.tick(5000);
+        assert_eq!(autoplay_build_plan(&g, mouse), (false, true));
+        let out = carrier::apply_build_click(
+            &mut g,
+            Tool::Place(Entry::Item(ItemId::SalvageSorter)),
+            EXAMPLE_SORTER_MOUSE,
+            None,
+        );
+        assert!(out.changed, "{}", out.message);
+        assert_eq!(autoplay_build_plan(&g, mouse), (false, false));
     }
 
     #[test]

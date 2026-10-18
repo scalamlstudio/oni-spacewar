@@ -1,7 +1,7 @@
 //! Imports Art batch A for the carrier interior Revision 3 (TAKOAI-89,
 //! TAKOAI-95): floor, wall and doorway tiles, the six stations, the scaffold
 //! and the front marker. The selection is Art's catalogue
-//! `design/art/carrier-furniture/batch-a-import-v2.json` (design file, stable
+//! `design/art/carrier-furniture/batch-a-import-v3.json` (design file, stable
 //! ID, destination under `assets/source/core/`, size, alpha bounds). The art
 //! is already transparent and authored at 2×, so each file is copied
 //! byte-for-byte after checking it against its catalogue row.
@@ -17,7 +17,7 @@ use std::path::PathBuf;
 use image::GenericImageView;
 use serde::Deserialize;
 
-const CATALOGUE: &str = "design/art/carrier-furniture/batch-a-import-v2.json";
+const CATALOGUE: &str = "design/art/carrier-furniture/batch-a-import-v3.json";
 const ART_DIR: &str = "design/art/carrier-furniture";
 
 #[derive(Deserialize)]
