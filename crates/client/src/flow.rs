@@ -171,6 +171,17 @@ const DRAG_END: f32 =
 /// mouse tile (a 2 × 2 footprint's middle rounds to its north-west tile).
 const EXAMPLE_ROOM: (i32, i32) = (14, 10);
 const EXAMPLE_SORTER_MOUSE: (i32, i32) = (19, 11);
+/// Art batch B pieces the autoplay adds to the example room with the
+/// sorter, so its screenshots show them: a sofa against the north wall,
+/// a wall screen over it, a rug in front and a cat tree in the south-east
+/// corner, clear of both doorways and the sorter's front strip. Each tile
+/// is the piece's mouse tile, which for these footprints is its anchor.
+const EXAMPLE_FURNISHING: [(ItemId, (i32, i32)); 4] = [
+    (ItemId::Sofa, (15, 11)),
+    (ItemId::WallScreen, (15, 10)),
+    (ItemId::Rug, (15, 12)),
+    (ItemId::CatTree, (20, 14)),
+];
 
 /// Upgrade preference for the autoplay pilot: the spec's most visible first
 /// buy first.
@@ -1366,11 +1377,17 @@ fn autoplay_flow(
                     if at(9.8) {
                         autoplay_build(&mut save, &mut overlay, sorter, EXAMPLE_SORTER_MOUSE);
                     }
+                    for (k, &(id, mouse)) in EXAMPLE_FURNISHING.iter().enumerate() {
+                        if at(10.0 + k as f32 * 0.1) {
+                            let piece = Tool::Place(Entry::Item(id));
+                            autoplay_build(&mut save, &mut overlay, piece, mouse);
+                        }
+                    }
                     if at(10.6) {
                         autoplay.shoot(&mut commands, &shot("d-sorter-under-construction"));
                     }
                 }
-                // The sorter takes 4 s.
+                // The sorter takes 4 s, the furniture 2 s.
                 if at(14.3) {
                     *overlay = Overlay::None;
                     view.zoom.set(carrier::OVERVIEW);
@@ -1692,6 +1709,23 @@ mod tests {
         );
         assert!(out.changed, "{}", out.message);
         assert_eq!(autoplay_build_plan(&g, mouse), (false, false));
+        // Then furnishes the room around it, every piece placed and the
+        // layout still valid once they are finished.
+        g.credits += 200;
+        for (id, at) in EXAMPLE_FURNISHING {
+            let out = carrier::apply_build_click(&mut g, Tool::Place(Entry::Item(id)), at, None);
+            assert!(out.changed, "{id:?} at {at:?}: {}", out.message);
+        }
+        g.carrier.tick(4000);
+        assert_eq!(g.carrier.validate(), Ok(()));
+        for (id, at) in EXAMPLE_FURNISHING {
+            let placed = g
+                .carrier
+                .items
+                .iter()
+                .find(|i| i.id == id && (i.x, i.y) == at);
+            assert!(placed.is_some_and(|i| i.finished()), "{id:?} at {at:?}");
+        }
     }
 
     #[test]

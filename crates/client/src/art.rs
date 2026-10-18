@@ -12,12 +12,24 @@ use content::ContentManifest;
 
 #[derive(Resource, Default)]
 pub struct ContentImages {
+    /// The assets directory; `assets` (the working directory's) if unset.
+    root: Option<std::path::PathBuf>,
     manifest: Option<ContentManifest>,
     loaded: HashMap<String, Option<Handle<Image>>>,
     fonts: HashMap<String, Option<Handle<Font>>>,
 }
 
 impl ContentImages {
+    /// Reads the repo's `assets/` whatever the working directory (tests run
+    /// in the crate's).
+    #[cfg(test)]
+    pub fn repo() -> Self {
+        Self {
+            root: Some(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets").into()),
+            ..default()
+        }
+    }
+
     /// The image shipped under `id`, or `None` (logged once) if it is missing.
     pub fn get(&mut self, images: &mut Assets<Image>, id: &str) -> Option<Handle<Image>> {
         if let Some(handle) = self.loaded.get(id) {
@@ -64,12 +76,13 @@ impl ContentImages {
 
     /// The processed bytes shipped under `id`.
     fn read(&mut self, id: &str) -> Option<Vec<u8>> {
+        let root = self.root.clone().unwrap_or_else(|| "assets".into());
         if self.manifest.is_none() {
-            self.manifest = ContentManifest::load("assets/manifest.json").ok();
+            self.manifest = ContentManifest::load(root.join("manifest.json")).ok();
         }
         self.manifest
             .as_ref()
-            .and_then(|m| m.processed_path("assets", id).ok())
+            .and_then(|m| m.processed_path(&root, id).ok())
             .and_then(|path| std::fs::read(path).ok())
     }
 

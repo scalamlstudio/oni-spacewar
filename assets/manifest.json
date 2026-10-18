@@ -6,7 +6,7 @@
       "id": "core",
       "version": "0.2.0",
       "gameplay_affecting": false,
-      "content_hash": "e9ee75ca5d9d374bb16d0f8c44cb742e872b313460b7957fd5a1d7fca326b717",
+      "content_hash": "9240e3ce1b675f3c9ae13bcafe8c4cde16819434de88a2f9ad85c1bbdf824282",
       "assets": [
         {
           "id": "core.battle.enemy.void_spitter",
@@ -72,12 +72,48 @@
           "gameplay_affecting": false
         },
         {
+          "id": "core.carrier.item.aquarium",
+          "kind": "image/png",
+          "source": "source/core/carrier/item/aquarium.png",
+          "processed": "packs/core/processed/carrier/item/aquarium.png",
+          "compressed": "packs/core/bundles/carrier/item/aquarium.png.zst",
+          "hash": "0bb5293b564dd5a3dabeb283e890e3dad14c68778198179888a1dc9a8ac9ba5f",
+          "gameplay_affecting": false
+        },
+        {
           "id": "core.carrier.item.berth",
           "kind": "image/png",
           "source": "source/core/carrier/item/berth.png",
           "processed": "packs/core/processed/carrier/item/berth.png",
           "compressed": "packs/core/bundles/carrier/item/berth.png.zst",
           "hash": "72b2c8f59d97bce3321a86d7f9bd870b9ef264d898cb725509d36a5f55c1fa80",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.item.bunk_bed",
+          "kind": "image/png",
+          "source": "source/core/carrier/item/bunk_bed.png",
+          "processed": "packs/core/processed/carrier/item/bunk_bed.png",
+          "compressed": "packs/core/bundles/carrier/item/bunk_bed.png.zst",
+          "hash": "1f301953a51a1a4991f69bd4310202cd09458e4a95319dca4f517d76a7ffe524",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.item.cat_bed",
+          "kind": "image/png",
+          "source": "source/core/carrier/item/cat_bed.png",
+          "processed": "packs/core/processed/carrier/item/cat_bed.png",
+          "compressed": "packs/core/bundles/carrier/item/cat_bed.png.zst",
+          "hash": "217f6ce970dcc66438e875ed400b88c9a88d9bf705543d940241efebf2d0e464",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.item.cat_tree",
+          "kind": "image/png",
+          "source": "source/core/carrier/item/cat_tree.png",
+          "processed": "packs/core/processed/carrier/item/cat_tree.png",
+          "compressed": "packs/core/bundles/carrier/item/cat_tree.png.zst",
+          "hash": "c461961a710254298d6ffdda3899e7a4a5660f0df7081eef8f85c072fb99194f",
           "gameplay_affecting": false
         },
         {
@@ -99,6 +135,69 @@
           "gameplay_affecting": false
         },
         {
+          "id": "core.carrier.item.crate_stack",
+          "kind": "image/png",
+          "source": "source/core/carrier/item/crate_stack.png",
+          "processed": "packs/core/processed/carrier/item/crate_stack.png",
+          "compressed": "packs/core/bundles/carrier/item/crate_stack.png.zst",
+          "hash": "57d0408347e65454cc9fbfaeb3538a654873efe73bb5d31aded765e41e6b9186",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.item.floor_lamp",
+          "kind": "image/png",
+          "source": "source/core/carrier/item/floor_lamp.png",
+          "processed": "packs/core/processed/carrier/item/floor_lamp.png",
+          "compressed": "packs/core/bundles/carrier/item/floor_lamp.png.zst",
+          "hash": "362d94a072a6fc7349cb849ee17c04260d469c5ddaf569a6ca8498c2083b40c0",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.item.food_bowls",
+          "kind": "image/png",
+          "source": "source/core/carrier/item/food_bowls.png",
+          "processed": "packs/core/processed/carrier/item/food_bowls.png",
+          "compressed": "packs/core/bundles/carrier/item/food_bowls.png.zst",
+          "hash": "d1b77fa878b4cecabe6ffa6508d53e5a3c5d476e7bf77116b9443640402259e5",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.item.hydro_planter",
+          "kind": "image/png",
+          "source": "source/core/carrier/item/hydro_planter.png",
+          "processed": "packs/core/processed/carrier/item/hydro_planter.png",
+          "compressed": "packs/core/bundles/carrier/item/hydro_planter.png.zst",
+          "hash": "d67953af9f1aa67884830e602539be00f33f1770715cf62a8f8efc41b4f70a39",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.item.locker",
+          "kind": "image/png",
+          "source": "source/core/carrier/item/locker.png",
+          "processed": "packs/core/processed/carrier/item/locker.png",
+          "compressed": "packs/core/bundles/carrier/item/locker.png.zst",
+          "hash": "7175073f217af6374dce9282e09fd5f57aaeae8b5b02073d81bc58c42ec39cbf",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.item.potted_plant",
+          "kind": "image/png",
+          "source": "source/core/carrier/item/potted_plant.png",
+          "processed": "packs/core/processed/carrier/item/potted_plant.png",
+          "compressed": "packs/core/bundles/carrier/item/potted_plant.png.zst",
+          "hash": "20e06cf59b142e180fa9eba7b2b10bf21af2c6da878b02be09a5fa8c45e5e163",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.item.rug",
+          "kind": "image/png",
+          "source": "source/core/carrier/item/rug.png",
+          "processed": "packs/core/processed/carrier/item/rug.png",
+          "compressed": "packs/core/bundles/carrier/item/rug.png.zst",
+          "hash": "3dd9c52163294b4da2451ad072f86425f15996f215384ab783832406622eab5c",
+          "gameplay_affecting": false
+        },
+        {
           "id": "core.carrier.item.salvage_sorter",
           "kind": "image/png",
           "source": "source/core/carrier/item/salvage_sorter.png",
@@ -117,12 +216,84 @@
           "gameplay_affecting": false
         },
         {
+          "id": "core.carrier.item.scratch_post",
+          "kind": "image/png",
+          "source": "source/core/carrier/item/scratch_post.png",
+          "processed": "packs/core/processed/carrier/item/scratch_post.png",
+          "compressed": "packs/core/bundles/carrier/item/scratch_post.png.zst",
+          "hash": "d5833ab1c83a851b0704069ea28ee6dfc7ae2a8011c197d5f780b612be6389b4",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.item.snack_dispenser",
+          "kind": "image/png",
+          "source": "source/core/carrier/item/snack_dispenser.png",
+          "processed": "packs/core/processed/carrier/item/snack_dispenser.png",
+          "compressed": "packs/core/bundles/carrier/item/snack_dispenser.png.zst",
+          "hash": "d8ec6e96ea7c9e0940529e8a03cf7ad8089bb9d105723ea0e00e1f0711e5cb2a",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.item.sofa",
+          "kind": "image/png",
+          "source": "source/core/carrier/item/sofa.png",
+          "processed": "packs/core/processed/carrier/item/sofa.png",
+          "compressed": "packs/core/bundles/carrier/item/sofa.png.zst",
+          "hash": "826ddab8991a1d01e2ee196307c37ae5605f33656286fd1a44c1d6fd4fec905a",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.item.stool",
+          "kind": "image/png",
+          "source": "source/core/carrier/item/stool.png",
+          "processed": "packs/core/processed/carrier/item/stool.png",
+          "compressed": "packs/core/bundles/carrier/item/stool.png.zst",
+          "hash": "3f256d98e75b097ceda8a7421044685d8528a662072ca6bb818c55294253fb67",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.item.table",
+          "kind": "image/png",
+          "source": "source/core/carrier/item/table.png",
+          "processed": "packs/core/processed/carrier/item/table.png",
+          "compressed": "packs/core/bundles/carrier/item/table.png.zst",
+          "hash": "52518fece520797c79c04036b24c9f09ce95a9103a5ae4d2aaff443c8c8871a6",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.item.tool_rack",
+          "kind": "image/png",
+          "source": "source/core/carrier/item/tool_rack.png",
+          "processed": "packs/core/processed/carrier/item/tool_rack.png",
+          "compressed": "packs/core/bundles/carrier/item/tool_rack.png.zst",
+          "hash": "c1aa50ec101bb09ba893b46e6dd3a2ccb6af0773c45a263768eb46b0092f3164",
+          "gameplay_affecting": false
+        },
+        {
           "id": "core.carrier.item.upgrade_bench",
           "kind": "image/png",
           "source": "source/core/carrier/item/upgrade_bench.png",
           "processed": "packs/core/processed/carrier/item/upgrade_bench.png",
           "compressed": "packs/core/bundles/carrier/item/upgrade_bench.png.zst",
           "hash": "757aa86964d4c61458815d5330407382be97a4ca07a033d23dade66b9383ad67",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.item.wall_light",
+          "kind": "image/png",
+          "source": "source/core/carrier/item/wall_light.png",
+          "processed": "packs/core/processed/carrier/item/wall_light.png",
+          "compressed": "packs/core/bundles/carrier/item/wall_light.png.zst",
+          "hash": "2c9f2818a28ad48a7bd11a27cb291b5757abf97b7850e4a6db8d929c81ed912c",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.item.wall_screen",
+          "kind": "image/png",
+          "source": "source/core/carrier/item/wall_screen.png",
+          "processed": "packs/core/processed/carrier/item/wall_screen.png",
+          "compressed": "packs/core/bundles/carrier/item/wall_screen.png.zst",
+          "hash": "027700c9e00dbc14756ea502e55ec255d98a3aa93e14add9c700253aa5842048",
           "gameplay_affecting": false
         },
         {

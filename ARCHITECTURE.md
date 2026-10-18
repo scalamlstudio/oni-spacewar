@@ -244,28 +244,37 @@ means a new table row.
 
 ### Carrier Revision 3 art import
 
-Art batch A for the room-and-item carrier (TAKOAI-89) is imported with:
+Art batches A (TAKOAI-89) and B (TAKOAI-92) for the room-and-item carrier
+are imported with:
 
 ```sh
 cargo run --release --bin carrier-tile-import -- .
 cargo run --release --bin content-pipeline -- .
 ```
 
-`carrier-tile-import` reads Art's catalogue
-`design/art/carrier-furniture/batch-a-import-v3.json` (selected file,
-stable ID, destination, size, alpha bounds), checks each row (the ID must
-be the one the pipeline derives from the destination path; size and alpha
-bounds must match the file) and copies the file unchanged: the art is
-already transparent and authored at 2×. It ships
+`carrier-tile-import` reads Art's catalogues
+`design/art/carrier-furniture/batch-a-import-v3.json` and
+`batch-b-import-v1.json` (selected file, stable ID, destination, size,
+alpha bounds; batch B adds footprint, headroom, anchor, layer and
+placement), checks each row (the ID must be the one the pipeline derives
+from the destination path; size and alpha bounds must match the file, the
+alpha bounds counting the pixels above each batch's own threshold: any
+alpha for A, above 0.02 for B as Art's inspector does; a batch B canvas
+must be its footprint's width × 128, and 96 px tall for a wall piece or
+depth × 128 plus a multiple-of-32 headroom otherwise, anchored bottom
+centre) and copies the file unchanged: the art is already transparent and
+authored at 2×. It ships
 `core.carrier.tile.floor.<0..2>`, `core.carrier.tile.wall.<nesw>` (16
 masks, digits in n-e-s-w order), `core.carrier.tile.doorway.<ns|ew>`,
-`core.carrier.item.<id>` for the six stations, `core.carrier.scaffold` and
+`core.carrier.item.<id>` for all 25 catalogue entries (six stations, 19
+furniture and decor pieces), `core.carrier.scaffold` and
 `core.carrier.front_marker`. No hull tiles: space shows through outside
 the rooms (TAKOAI-94). A new Art batch means a new catalogue file and a
-new constant here. The 19 furniture and decor pieces (Art batch B) aren't
-imported yet (TAKOAI-93): until they are, the scene draws each as a
-placeholder box over its footprint with its name, and the real sprite
-replaces it with no code change once its `core.carrier.item.<id>` ships.
+new `CATALOGUES` row there. Every item draws as its art, bottom centre at
+the middle of its footprint's front edge, at 1 world px per 2 art px;
+there is no placeholder. `carrier::tests::catalogue_art_fits_its_footprint`
+checks every `layout::CATALOGUE` entry against its shipped canvas, so a
+new catalogue entry needs its art in the same change.
 
 `layout::TileMap::art(tile)` is the one place that picks a tile's image
 (`TileMap::floor_art` the floor drawn on or under it), and
@@ -551,7 +560,9 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   mode's flyouts and walks the Pilot in all 8 directions. Between missions
   it builds the spec's example edits when it can afford them: a Small
   Room at (14,10) (mouse tile (17,12)), waits for it, then the Salvage
-  Sorter at (19,11), and waits again; else it buys the first affordable
+  Sorter at (19,11) with a few Art batch B pieces around it
+  (`flow::EXAMPLE_FURNISHING`: sofa, wall screen, rug, cat tree), and
+  waits again; else it buys the first affordable
   Workshop upgrade. Then it click-to-moves to the ship's berth and boards
   it on arrival; return to the Carrier after the last
   one, quit to the Title, reload the save from disk and Continue (a restart
