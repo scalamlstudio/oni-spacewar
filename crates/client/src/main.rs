@@ -12,7 +12,6 @@
 mod art;
 mod carrier;
 mod flow;
-mod hints;
 mod input;
 mod layout;
 mod mission;
@@ -283,7 +282,6 @@ fn main() {
             .add_plugins((
                 flow::FlowPlugin,
                 carrier::CarrierPlugin,
-                hints::HintsPlugin,
                 settings::SettingsPlugin,
             ))
             .insert_resource(flow::KillTarget(args.kill_target()));

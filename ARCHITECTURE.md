@@ -48,7 +48,6 @@ crates/
     src/layout.rs       carrier interior Revision 3 rules, no Bevy, no clock: rooms (Small / Large shells) → derived tiles, walls, doorways + clearance; item catalogue; construction sites (`tick(ms)`); can_place_room / can_remove_room / can_place / can_move / can_remove with the spec's reasons; reachability, crew posts, walkable rects, validation, refunds; click-to-move pathing (A*)
     src/carrier.rs      Carrier scene (Revision 3): draws the rooms' tiles and the items by layer, construction sites with progress bars, click-to-move / hold-to-drag + 8-direction WASD walking, crew at their posts, stations as hotspots, berths with their ships (board → briefing → launch), camera / zoom, Workshop upgrades panel, Build mode (B: Rooms / Stations / Furniture / Decor, Move, Remove; builder UI kit), clickable panels
     src/workshop.rs     Workshop rules: upgrade costs / levels / buy(), and Build mode's wallet side: build_room / build_item (pay up front) / remove_room / remove_item (full refund)
-    src/hints.rs        one-time tutorial hints: triggers, display queue, seen IDs in the save
     src/save.rs         versioned JSON save data in the OS data directory (override: ONI_SAVE_DIR) + migration
     src/settings.rs     player settings (settings.json beside the save, not in it), the Settings screen and gear button, carrier floor / wall colour presets + contrast check, CarrierPalette (recoloured tile images)
     src/mission.rs      typed client mission config/result handoff into `sim::SimState`; reward rules (survives_failure)
@@ -493,12 +492,11 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   after.
   Continue goes to the Carrier, whose `enter_carrier` books the result into
   the save (`record_mission_return`) and stores it.
-- **Tutorial hints** (`hints.rs`): `Hints::trigger(save, hint)` queues a hint
-  the first time and writes its stable ID into `SaveGame::tutorial_seen`
-  (saved immediately). Carrier triggers live in `carrier.rs`, battle triggers
-  read `SimWorld` in `Update` (never in the rollback schedule). One box shows
-  one hint for 6 s; queued hints from a scene the player has left are
-  dropped.
+- **No in-scene tips** (TAKOAI-98): gameplay tips belong only on a
+  transition (loading) screen, so neither the Carrier nor the Battle spawns a
+  tip box (`flow::tests::no_scene_spawns_a_tip_box`). The game has no
+  transition screen yet; the retired tutorial-hint texts are in git history
+  (`crates/client/src/hints.rs` before TAKOAI-98).
 - Battle visuals are sprites drawn by stable content ID
   (`core.battle.ship.kite`, `core.battle.enemy.void_swarmer`,
   `core.battle.fx.spit`, loot as `core.ui.icon.*`, ... in `render::ids`)
@@ -602,8 +600,8 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   place (`apply_palette`), so the deck updates live without a redraw.
   Stations, scaffold, marker and characters keep their art.
 - Save data is client-only JSON with an explicit schema version (now 5). It
-  stores credits, resources, purchased upgrades, selected battleship, tutorial
-  hints seen, missions played and won, the last result and the carrier
+  stores credits, resources, purchased upgrades, selected battleship,
+  missions played and won, the last result and the carrier
   (`carrier`: Revision 3 rooms and items), and is never read by `sim`; the
   client converts it into a deterministic mission config before launch.
   A new game (`SaveGame::default`) starts with `save::STARTING_RESOURCES`,
@@ -615,8 +613,7 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   `save::migrate`, which refunds every player-built room and corridor in it
   at Revision 1's prices (`save::rev1`, the only code left that reads a
   Revision 1 layout; a v3 Dock's corridors that v4 made starting pieces
-  count as refunded), sets the starting carrier and the `carrier_refit` flag (the hint
-  the Revision 3 scene shows once); newer versions are refused. `migrate`
+  count as refunded), and sets the starting carrier; newer versions are refused. `migrate`
   then validates the carrier (`Carrier::validate`: known IDs, rooms inside
   the hull and overlapping only on walls, every starter room, the station
   counts and one berth per ship, connected to the Command Console's room,
@@ -625,10 +622,12 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   and refunds every non-starter room and item (unknown IDs nothing), with a
   warning. Early v5 builds also stored a transitional `carrier_rev1` (the
   Revision 1 layout their scene ran on): it is dropped on load and what the
-  player built in it is refunded the same way (the refit hint shows if it
-  held anything). Saved on New Game, every return to the Carrier, every
+  player built in it is refunded the same way. Saves from before
+  TAKOAI-98 also carry `tutorial_seen` and `carrier_refit` (the retired
+  hint box's state): serde ignores them on load and the next write drops
+  them. Saved on New Game, every return to the Carrier, every
   Workshop purchase, every place, move and remove, a construction site
-  finishing, Launch, the first showing of each hint, and Quit.
+  finishing, Launch, and Quit.
 
 ### Simulation structure
 

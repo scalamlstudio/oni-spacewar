@@ -31,8 +31,6 @@ pub struct SaveGame {
     pub resources: BTreeMap<String, u32>,
     pub purchased_upgrades: BTreeSet<String>,
     pub selected_battleship: String,
-    /// Tutorial hint IDs already shown (`hints::Hint::id`).
-    pub tutorial_seen: BTreeSet<String>,
     /// Missions played (also seeds the next mission).
     pub mission_count: u32,
     /// Outcome of the most recent mission; drives the crew's reaction lines.
@@ -44,10 +42,6 @@ pub struct SaveGame {
     /// (version 5)). Checked on load; see [`migrate`].
     #[serde(default)]
     pub carrier: Carrier,
-    /// A v1–v4 save was migrated and the `carrier_refit` hint hasn't been
-    /// shown yet (design/READINESS.md § Tutorial hints).
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub carrier_refit: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -96,12 +90,10 @@ impl Default for SaveGame {
             resources,
             purchased_upgrades: BTreeSet::new(),
             selected_battleship: crate::mission::KITE_ID.to_string(),
-            tutorial_seen: BTreeSet::new(),
             mission_count: 0,
             last_result: LastResult::None,
             missions_won: 0,
             carrier: Carrier::starting(),
-            carrier_refit: false,
         }
     }
 }
@@ -282,11 +274,10 @@ pub fn from_json(bytes: &[u8]) -> Result<SaveGame, SaveError> {
 /// v1–v4 (§ Carrier › Save › Migration): `old_carrier` is the save's
 /// Revision 1 layout, if it had one. The full cost of every room and
 /// corridor the player built in it is refunded at Revision 1's prices
-/// ([`rev1::refund`]), the carrier becomes the starting layout and the
-/// `carrier_refit` hint is queued. Credits, Void Crystal, upgrades, hints,
-/// stats and the last ship are kept. A v5 save's leftover `carrier_rev1`
-/// is refunded the same way (its `carrier` is kept); the hint is queued
-/// only if it held something the player built.
+/// ([`rev1::refund`]) and the carrier becomes the starting layout.
+/// Credits, Void Crystal, upgrades, stats and the last ship are kept. A v5
+/// save's leftover `carrier_rev1` is refunded the same way (its `carrier`
+/// is kept).
 ///
 /// Then the layout is checked: a broken one resets to the starting layout
 /// and refunds every non-starter room and item (unknown IDs refund
@@ -307,9 +298,6 @@ pub fn migrate(
     add_refund(&mut save, refund);
     if save.version <= LAST_REV1_VERSION {
         save.carrier = Carrier::starting();
-        save.carrier_refit = true;
-    } else if refund.credits > 0 || refund.void_crystal > 0 {
-        save.carrier_refit = true;
     }
     save.version = SAVE_VERSION;
     save.carrier.normalize();
@@ -496,16 +484,32 @@ mod tests {
         assert_eq!(save.version, SAVE_VERSION);
         assert_eq!(save.carrier, Carrier::starting());
         assert_eq!((save.credits, save.missions_won), (300, 2));
-        assert!(save.carrier_refit);
-        assert!(save.tutorial_seen.contains("carrier_walk"));
         // Written back as v5 with the new layout.
         store(&path, &save).unwrap();
         let text = fs::read_to_string(&path).unwrap();
         assert!(text.contains(r#""version": 5"#), "{text}");
         assert!(text.contains(r#""id": "command_console""#), "{text}");
-        assert!(text.contains(r#""carrier_refit": true"#), "{text}");
         assert_eq!(load(&path).unwrap(), save);
         let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn retired_hint_fields_load_and_are_dropped() {
+        // TAKOAI-98 retired the in-scene tip box. Saves from earlier builds
+        // still carry its `tutorial_seen` and `carrier_refit` fields: they
+        // load, and the next write leaves them out.
+        let mut v5 = serde_json::to_value(SaveGame {
+            credits: 42,
+            ..SaveGame::release_start()
+        })
+        .unwrap();
+        v5["tutorial_seen"] = serde_json::json!(["carrier_walk", "battle_move"]);
+        v5["carrier_refit"] = serde_json::json!(true);
+        let save = from_json(&serde_json::to_vec(&v5).unwrap()).unwrap();
+        assert_eq!(save.credits, 42);
+        let text = serde_json::to_string(&save).unwrap();
+        assert!(!text.contains("tutorial_seen"), "{text}");
+        assert!(!text.contains("carrier_refit"), "{text}");
     }
 
     #[test]
@@ -526,7 +530,6 @@ mod tests {
         assert_eq!((save.credits, vc(&save)), (5 + 120 + 10 + 10, 1 + 3));
         assert_eq!(save.selected_battleship, "bulwark");
         assert!(save.purchased_upgrades.contains("hull_plating_1"));
-        assert!(save.carrier_refit);
     }
 
     #[test]
@@ -564,7 +567,6 @@ mod tests {
         let save = from_json(&serde_json::to_vec(&v4).unwrap()).unwrap();
         assert_eq!(save.carrier, Carrier::starting());
         assert_eq!((save.credits, vc(&save)), (7 + 120 + 200 + 20, 3 + 6));
-        assert!(save.carrier_refit);
         // The Revision 1 layout is gone from the file.
         let text = serde_json::to_string(&save).unwrap();
         assert!(!text.contains("corridors"), "{text}");
@@ -573,7 +575,7 @@ mod tests {
     #[test]
     fn early_v5_carrier_rev1_is_refunded_and_dropped() {
         // An early v5 build kept the scene's Revision 1 layout next to the
-        // new carrier: refund it, keep the carrier, show the refit hint.
+        // new carrier: refund it and keep the carrier.
         let mut v5 = serde_json::to_value(SaveGame {
             credits: 3,
             carrier: built_carrier(),
@@ -584,13 +586,11 @@ mod tests {
         let save = from_json(&serde_json::to_vec(&v5).unwrap()).unwrap();
         assert_eq!(save.carrier, built_carrier());
         assert_eq!((save.credits, vc(&save)), (3 + 120 + 200 + 20, 3 + 6));
-        assert!(save.carrier_refit);
-        // Only the starting Revision 1 pieces: nothing to refund, no hint.
+        // Only the starting Revision 1 pieces: nothing to refund.
         let start = r#"{"rooms":[{"id":"bridge","x":0,"y":1}],"corridors":[[1,3],[4,7]]}"#;
         v5["carrier_rev1"] = serde_json::from_str(start).unwrap();
         let save = from_json(&serde_json::to_vec(&v5).unwrap()).unwrap();
         assert_eq!((save.credits, vc(&save)), (3, 0));
-        assert!(!save.carrier_refit);
     }
 
     #[test]
@@ -635,10 +635,8 @@ mod tests {
         assert!(text.contains(r#""size": "small""#), "{text}");
         assert!(text.contains(r#""build_left_ms": 3000"#), "{text}");
         assert!(text.contains(r#""ship": "kite""#), "{text}");
-        assert!(!text.contains("carrier_refit"), "{text}");
         let loaded = load(&path).unwrap();
         assert_eq!(loaded, save);
-        assert!(!loaded.carrier_refit);
         let _ = fs::remove_file(path);
     }
 
@@ -679,7 +677,6 @@ mod tests {
         save = from_json(&serde_json::to_vec(&v).unwrap()).unwrap();
         assert_eq!(save.carrier, Carrier::starting());
         assert_eq!((save.credits, vc(&save)), (5 + 120 + 60, 3 + 1));
-        assert!(!save.carrier_refit);
     }
 
     #[test]

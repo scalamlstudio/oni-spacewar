@@ -13,7 +13,6 @@ use crate::carrier::{
     self, BuildCursor, CarrierArrival, CarrierScene, CarrierView, Entry, Hotspot, Overlay, Pilot,
     PilotDrag, Tool, WalkOrder,
 };
-use crate::hints::{Hint, Hints};
 use crate::input::{self, MovePress};
 use crate::layout::{ItemId, RoomSize};
 use crate::mission::{self, MissionOutcome, MissionRequest, MissionResult};
@@ -526,29 +525,14 @@ pub(crate) fn enter_carrier(
     mut save: ResMut<SaveSlot>,
     mut pending_result: ResMut<LastMissionResult>,
     mut arrival: ResMut<CarrierArrival>,
-    mut hints: ResMut<Hints>,
 ) {
     save.game.get_or_insert_with(SaveGame::default);
-    hints.trigger(&mut save, Hint::CarrierWalk);
     if let Some(result) = pending_result.0.take() {
         arrival.from_mission = true;
-        if result.credits > 0 || !result.resources.is_empty() {
-            hints.trigger(&mut save, Hint::ReturnWithLoot);
-        }
         if let Some(game) = &mut save.game {
             game.record_mission_return(result.outcome.success(), result.credits, &result.resources);
             save.store();
         }
-    }
-    // § Tutorial hints: enough for a Salvage Sorter and none on board yet.
-    let can_build = save.game.as_ref().is_some_and(|g| {
-        g.carrier.find(ItemId::SalvageSorter).is_none()
-            && ItemId::SalvageSorter
-                .def()
-                .is_some_and(|d| crate::workshop::can_afford(g, d.cost))
-    });
-    if can_build {
-        hints.trigger(&mut save, Hint::CarrierCanBuild);
     }
 }
 
@@ -1250,14 +1234,13 @@ fn autoplay_flow(
                 );
                 if let Some(g) = &save.game {
                     println!(
-                        "autoplay: carrier credits {} VC {} upgrades {:?} missions {} won {} last {:?} hints {}",
+                        "autoplay: carrier credits {} VC {} upgrades {:?} missions {} won {} last {:?}",
                         g.credits,
                         crate::workshop::void_crystal(g),
                         g.purchased_upgrades,
                         g.mission_count,
                         g.missions_won,
-                        g.last_result,
-                        g.tutorial_seen.len()
+                        g.last_result
                     );
                     println!(
                         "autoplay: layout rooms {:?} items {:?}",
@@ -1807,6 +1790,35 @@ mod tests {
                 .find(|i| i.id == id && (i.x, i.y) == at);
             assert!(placed.is_some_and(|i| i.finished()), "{id:?} at {at:?}");
         }
+    }
+
+    /// TAKOAI-98: tips belong only on a transition screen, never in a scene.
+    /// No client module spawns a "Tip:" box or registers the retired
+    /// tutorial-hint UI, so neither the Carrier nor the Battle has one.
+    #[test]
+    fn no_scene_spawns_a_tip_box() {
+        let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut files = vec![src];
+        let mut checked = 0;
+        while let Some(path) = files.pop() {
+            if path.is_dir() {
+                files.extend(std::fs::read_dir(&path).unwrap().map(|e| e.unwrap().path()));
+                continue;
+            }
+            if path.extension().is_none_or(|e| e != "rs") {
+                continue;
+            }
+            let text = std::fs::read_to_string(&path).unwrap();
+            for marker in [
+                concat!("\"Tip", ": "),
+                concat!("Hint", "Ui"),
+                concat!("Hints", "Plugin"),
+            ] {
+                assert!(!text.contains(marker), "{} has {marker}", path.display());
+            }
+            checked += 1;
+        }
+        assert!(checked > 10, "only {checked} source files found");
     }
 
     #[test]
