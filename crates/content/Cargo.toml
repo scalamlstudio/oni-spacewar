@@ -23,6 +23,10 @@ path = "src/bin/sprite_sheet_cutouts.rs"
 name = "demo-art-import"
 path = "src/bin/demo_art_import.rs"
 
+[[bin]]
+name = "carrier-tile-import"
+path = "src/bin/carrier_tile_import.rs"
+
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
