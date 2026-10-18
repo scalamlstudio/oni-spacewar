@@ -64,14 +64,41 @@ pub enum LastResult {
     Failed,
 }
 
+/// What a new game starts with. Loading a save keeps that save's balances.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StartingResources {
+    pub credits: u32,
+    pub void_crystal: u32,
+}
+
+/// Demo Spec § Workshop upgrades: a new game starts with nothing.
+#[cfg_attr(not(test), allow(dead_code))] // Unused while the test values are live.
+pub const RELEASE_STARTING_RESOURCES: StartingResources = StartingResources {
+    credits: 0,
+    void_crystal: 0,
+};
+
+/// TEST VALUES (TAKOAI-97): lets Wei try the Workshop and carrier without
+/// grinding missions. Lower these before a real release.
+pub const TEST_BUILD_STARTING_RESOURCES: StartingResources = StartingResources {
+    credits: 10_000,
+    void_crystal: 1_000,
+};
+
+/// The balances [`SaveGame::default`] (every new game) starts with. To
+/// restore the release values, point this at [`RELEASE_STARTING_RESOURCES`].
+pub const STARTING_RESOURCES: StartingResources = TEST_BUILD_STARTING_RESOURCES;
+
 impl Default for SaveGame {
     fn default() -> Self {
         let mut resources = BTreeMap::new();
-        resources.insert(crate::mission::VOID_CRYSTAL_ID.to_string(), 0);
+        resources.insert(
+            crate::mission::VOID_CRYSTAL_ID.to_string(),
+            STARTING_RESOURCES.void_crystal,
+        );
         Self {
             version: SAVE_VERSION,
-            // Demo Spec § Workshop upgrades: a new game starts with nothing.
-            credits: 0,
+            credits: STARTING_RESOURCES.credits,
             resources,
             purchased_upgrades: BTreeSet::new(),
             selected_battleship: crate::mission::KITE_ID.to_string(),
@@ -91,6 +118,21 @@ impl Default for SaveGame {
 pub const SALVAGE_BONUS_PCT: u32 = 25;
 
 impl SaveGame {
+    /// A new game at [`RELEASE_STARTING_RESOURCES`], for tests whose
+    /// arithmetic assumes the release start.
+    #[cfg(test)]
+    pub(crate) fn release_start() -> Self {
+        let mut save = Self {
+            credits: RELEASE_STARTING_RESOURCES.credits,
+            ..Self::default()
+        };
+        save.resources.insert(
+            crate::mission::VOID_CRYSTAL_ID.to_string(),
+            RELEASE_STARTING_RESOURCES.void_crystal,
+        );
+        save
+    }
+
     /// What the Salvage Bay adds to a mission that kept `credits` and
     /// `resources`: nothing on failure or without the room.
     pub fn salvage_bonus(
@@ -439,7 +481,7 @@ mod tests {
         let mut v4 = serde_json::to_value(SaveGame {
             version: 4,
             credits: 7,
-            ..Default::default()
+            ..SaveGame::release_start()
         })
         .unwrap();
         let obj = v4.as_object_mut().unwrap();
@@ -526,7 +568,7 @@ mod tests {
         // know (refunds nothing).
         let mut save = SaveGame {
             credits: 5,
-            ..Default::default()
+            ..SaveGame::release_start()
         };
         let mut v = serde_json::to_value(&save).unwrap();
         let carrier = v["carrier"].as_object_mut().unwrap();
@@ -544,7 +586,7 @@ mod tests {
     #[test]
     fn salvage_bay_adds_a_quarter_on_success_only() {
         use crate::layout_v1::Piece;
-        let mut save = SaveGame::default();
+        let mut save = SaveGame::release_start();
         let res = BTreeMap::from([("void_crystal".to_string(), 6)]);
         save.record_mission_return(true, 180, &res);
         assert_eq!((save.credits, save.resources["void_crystal"]), (180, 6));
@@ -566,8 +608,21 @@ mod tests {
     }
 
     #[test]
+    fn new_game_starts_with_the_test_build_balances() {
+        let save = SaveGame::default();
+        assert_eq!(STARTING_RESOURCES, TEST_BUILD_STARTING_RESOURCES);
+        assert_eq!((save.credits, vc(&save)), (10_000, 1_000));
+        // Loading a save keeps its own balances.
+        let mut v = serde_json::to_value(&save).unwrap();
+        v["credits"] = 42.into();
+        v["resources"]["void_crystal"] = 3.into();
+        let loaded = from_json(&serde_json::to_vec(&v).unwrap()).unwrap();
+        assert_eq!((loaded.credits, vc(&loaded)), (42, 3));
+    }
+
+    #[test]
     fn mission_return_books_rewards_and_counts() {
-        let mut save = SaveGame::default();
+        let mut save = SaveGame::release_start();
         let mut res = BTreeMap::new();
         res.insert("void_crystal".to_string(), 5);
         save.record_mission_return(true, 170, &res);
