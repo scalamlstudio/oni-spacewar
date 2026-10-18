@@ -6,7 +6,7 @@
       "id": "core",
       "version": "0.2.0",
       "gameplay_affecting": false,
-      "content_hash": "8fc1dce39eec37f85c11079deddf782d017e37c9188d57896d9beb2bfc535fa8",
+      "content_hash": "f37ac472a5be22cc87c1bd73de2e83972c0719308f28f51a008fb0f4fab86b74",
       "assets": [
         {
           "id": "core.battle.enemy.void_spitter",
@@ -63,6 +63,96 @@
           "gameplay_affecting": false
         },
         {
+          "id": "core.carrier.berth.corner_ne",
+          "kind": "image/png",
+          "source": "source/core/carrier/berth/corner_ne.png",
+          "processed": "packs/core/processed/carrier/berth/corner_ne.png",
+          "compressed": "packs/core/bundles/carrier/berth/corner_ne.png.zst",
+          "hash": "887cbc5bf7c6857380d2b3be52e947ad8a8f49d13a2b067ec4a9080840a8def1",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.berth.corner_nw",
+          "kind": "image/png",
+          "source": "source/core/carrier/berth/corner_nw.png",
+          "processed": "packs/core/processed/carrier/berth/corner_nw.png",
+          "compressed": "packs/core/bundles/carrier/berth/corner_nw.png.zst",
+          "hash": "ee839541f65047198f8aea5936f5e0dab3115c19462d4ce88ce731c79f5b1a9d",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.berth.corner_se",
+          "kind": "image/png",
+          "source": "source/core/carrier/berth/corner_se.png",
+          "processed": "packs/core/processed/carrier/berth/corner_se.png",
+          "compressed": "packs/core/bundles/carrier/berth/corner_se.png.zst",
+          "hash": "d4739dcce4d7b59e492e3549ee5ed6305374ba796fbc0845dafdff7ff0e86977",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.berth.corner_sw",
+          "kind": "image/png",
+          "source": "source/core/carrier/berth/corner_sw.png",
+          "processed": "packs/core/processed/carrier/berth/corner_sw.png",
+          "compressed": "packs/core/bundles/carrier/berth/corner_sw.png.zst",
+          "hash": "7f1644c43d15e2a25c5c44747196816c7cfcac840dfcc2d3ccb83d6312a9dde1",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.berth.edge_e",
+          "kind": "image/png",
+          "source": "source/core/carrier/berth/edge_e.png",
+          "processed": "packs/core/processed/carrier/berth/edge_e.png",
+          "compressed": "packs/core/bundles/carrier/berth/edge_e.png.zst",
+          "hash": "e21f98cb51b0035ac83c458c3104e1c4bafdcfa7a0fe23d38890df99506198e6",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.berth.edge_n",
+          "kind": "image/png",
+          "source": "source/core/carrier/berth/edge_n.png",
+          "processed": "packs/core/processed/carrier/berth/edge_n.png",
+          "compressed": "packs/core/bundles/carrier/berth/edge_n.png.zst",
+          "hash": "a24e79102508bc63d5c425eea75d30f96ae7ae736689109ab74ad58ecd35f687",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.berth.edge_s",
+          "kind": "image/png",
+          "source": "source/core/carrier/berth/edge_s.png",
+          "processed": "packs/core/processed/carrier/berth/edge_s.png",
+          "compressed": "packs/core/bundles/carrier/berth/edge_s.png.zst",
+          "hash": "30980a0e08ce85e38c6ba6cd0e2474fd78983b78707b35f9bf1ff37c7a45d443",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.berth.edge_w",
+          "kind": "image/png",
+          "source": "source/core/carrier/berth/edge_w.png",
+          "processed": "packs/core/processed/carrier/berth/edge_w.png",
+          "compressed": "packs/core/bundles/carrier/berth/edge_w.png.zst",
+          "hash": "2886e520bf0041debd8d4e171777b97c5ea1ff701315ae1fd17e44a370e1e1fb",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.berth.fill",
+          "kind": "image/png",
+          "source": "source/core/carrier/berth/fill.png",
+          "processed": "packs/core/processed/carrier/berth/fill.png",
+          "compressed": "packs/core/bundles/carrier/berth/fill.png.zst",
+          "hash": "a9d8e52f1dbef9b76180010c61da5024cb6fc34d5fc56c4af9b3fe747cbbc7d2",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.carrier.berth.marking",
+          "kind": "image/png",
+          "source": "source/core/carrier/berth/marking.png",
+          "processed": "packs/core/processed/carrier/berth/marking.png",
+          "compressed": "packs/core/bundles/carrier/berth/marking.png.zst",
+          "hash": "d356426350e7b0bb2a1973abb0fa47f3093a192bc87bacf4c92800e1b46cec68",
+          "gameplay_affecting": false
+        },
+        {
           "id": "core.carrier.front_marker",
           "kind": "image/png",
           "source": "source/core/carrier/front_marker.png",
@@ -86,7 +176,7 @@
           "source": "source/core/carrier/item/berth.png",
           "processed": "packs/core/processed/carrier/item/berth.png",
           "compressed": "packs/core/bundles/carrier/item/berth.png.zst",
-          "hash": "72b2c8f59d97bce3321a86d7f9bd870b9ef264d898cb725509d36a5f55c1fa80",
+          "hash": "5bac402c70f9a97973c11ed59b87acd6b1f734b121fe2bdfabcf0cfc3b1b494e",
           "gameplay_affecting": false
         },
         {
