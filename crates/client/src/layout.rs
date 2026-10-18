@@ -1693,8 +1693,12 @@ impl Rect {
     }
 }
 
-/// Pilot collider radius, px.
+/// Pilot (and crew) collider radius, px: a 24 px footprint, 0.375 of a
+/// tile, under the 0.6-tile cap that lets a character stand on one tile and
+/// pass 1-tile gaps and 2-tile doorways without snagging (TAKOAI-94).
 pub const PILOT_RADIUS: f32 = 12.0;
+/// The widest a character's footprint may be, in tiles.
+pub const MAX_FOOTPRINT_TILES: f32 = 0.6;
 
 /// Whether a circle of `PILOT_RADIUS` at grid px (x, y) stands on walkable
 /// floor: its centre and eight points on its rim are each inside some
@@ -2409,6 +2413,63 @@ mod tests {
         assert!(!can_stand(&c.walkable(), p.0, p.1));
         c.tick(5000);
         assert!(can_stand(&c.walkable(), p.0, p.1));
+    }
+
+    #[test]
+    fn characters_are_smaller_than_a_tile() {
+        const { assert!(2.0 * PILOT_RADIUS <= MAX_FOOTPRINT_TILES * TILE) };
+        // Standing in the middle of one tile, the footprint stays on it.
+        let tile = [Rect {
+            x0: 0.0,
+            y0: 0.0,
+            x1: TILE,
+            y1: TILE,
+        }];
+        assert!(can_stand(&tile, TILE / 2.0, TILE / 2.0));
+        // Through a 1-tile gap between two rooms, by path and straight.
+        let room = |x0: f32| Rect {
+            x0,
+            y0: 0.0,
+            x1: x0 + 4.0 * TILE,
+            y1: 4.0 * TILE,
+        };
+        let gap = Rect {
+            x0: 4.0 * TILE,
+            y0: 2.0 * TILE,
+            x1: 5.0 * TILE,
+            y1: 3.0 * TILE,
+        };
+        let rects = [room(0.0), gap, room(5.0 * TILE)];
+        let (a, b) = ((TILE, 2.5 * TILE), (8.0 * TILE, 2.5 * TILE));
+        assert!(clear_line(&rects, a, b));
+        assert_eq!(
+            *find_path(&rects, (TILE, TILE), b).unwrap().last().unwrap(),
+            b
+        );
+    }
+
+    #[test]
+    fn characters_walk_through_a_two_tile_doorway() {
+        // The spec example's Small room south of the Workshop, joined by the
+        // 2-tile doorway (17,10)-(18,10).
+        let mut c = Carrier::starting();
+        c.place_room(RoomSize::Small, 14, 10);
+        c.tick(5000);
+        let map = c.tile_map();
+        assert!(map.is_open_doorway((17, 10)) && map.is_open_doorway((18, 10)));
+        let rects = c.walkable();
+        let (north, south) = ((18.0 * TILE, 9.5 * TILE), (18.0 * TILE, 11.5 * TILE));
+        assert!(can_stand(&rects, north.0, north.1));
+        assert!(can_stand(&rects, south.0, south.1));
+        // Straight through the middle, and off-centre within either tile.
+        assert!(clear_line(&rects, north, south));
+        for x in [17.0 * TILE + PILOT_RADIUS, 19.0 * TILE - PILOT_RADIUS] {
+            assert!(clear_line(&rects, (x, 9.5 * TILE), (x, 11.5 * TILE)), "{x}");
+        }
+        // And by click-to-move from deep in the new room.
+        let from = (15.5 * TILE, 12.5 * TILE);
+        let path = find_path(&rects, from, north).expect("through the doorway");
+        assert_eq!(*path.last().unwrap(), north);
     }
 
     #[test]

@@ -25,6 +25,7 @@ mod save;
 mod sky;
 mod stats;
 mod workshop;
+mod zoom;
 
 use std::time::Duration;
 

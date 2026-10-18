@@ -103,21 +103,21 @@ is a default Mika chose, and Wei can tune any of them._
 | Item | Value |
 |---|---|
 | View | 3/4 top-down, orthographic, axis-aligned square grid, light from the top left (unchanged) |
-| Tile | **64 × 64 world px** (art authored at 2×: 128 × 128). The Pilot is about 70 px tall, so about 1.1 tiles |
-| Hull | **36 × 22 tiles** (2304 × 1408 world px), one deck. Tile (0,0) is the north-west corner; x grows east, y grows south. Tiles outside every room are **bare hull**: drawn, not walkable, free for new rooms. Fixed size in the demo |
+| Tile | **64 × 64 world px** (art authored at 2×: 128 × 128). The Pilot is about **56 px** tall (0.875 tile) on a 24 px footprint, so a character fits on one tile (footprint at most 0.6 tile, TAKOAI-94) |
+| Hull | **36 × 22 tiles** (2304 × 1408 world px), one deck. Tile (0,0) is the north-west corner; x grows east, y grows south. Tiles outside every room are **bare hull**: not drawn (space shows there, so the rooms' outer walls are the ship's edge), not walkable, free for new rooms. Fixed size in the demo |
 | Tile kinds | **hull**, **wall**, **floor** or **doorway**, all derived from the rooms (§ Rooms). Nothing is painted tile by tile |
 | Wall look | auto-tiled from a 4-bit mask of which neighbours are wall. A wall tile with floor directly south shows its **48 px face** in the lower part of its own tile under a 16 px cap; any other wall shows only its top |
-| Draw order | hull and floor, rugs, wall faces, wall-mounted items, then objects and characters sorted by the y of their feet (front edge) |
-| Zoom (screen px per world px) | **Overview 0.5** (the whole hull fits 1280 × 720) · **Normal 1.0** (about 20 × 11 tiles on screen) · Close 1.5 |
+| Draw order | the space backdrop (the shared nebula sky), then floor, walls and doorways, rugs, wall faces, wall-mounted items, then objects and characters sorted by the y of their feet (front edge) |
+| Zoom (screen px per world px) | mouse wheel, smooth, **0.5 to 2**, centred on the cursor (the point under it stays put); scroll up zooms in. **Overview 0.5** (the whole hull fits 1280 × 720, Build mode) · **Normal 1.0** (about 20 × 11 tiles on screen, on entry). The HUD keeps its size. The battle uses the same wheel zoom on top of its 1.265 view (TAKOAI-94) |
 | Camera | follows the Pilot, clamped so it never shows more than 2 tiles past the hull. Build mode: Overview, pan with WASD / arrows at 600 screen px/s |
-| Behind the hull | the procedural nebula sky shared with the battle (TAKOAI-58) |
+| Behind the hull | the procedural nebula sky shared with the battle (TAKOAI-58), everywhere that isn't a room's floor, wall or doorway. No hull plating is drawn |
 
 #### Walking and interaction
 
 | Item | Value |
 |---|---|
 | Keys | unchanged from Revision 1 (TAKOAI-60/87): left click or press-and-hold on the floor walks there; left click on a crew member, a station or a docked ship walks up to it and uses it on arrival; WASD / arrows walk in 8 directions; E interacts; mouse wheel zooms; Esc pauses. **B** opens Build mode |
-| Speed, collider, Pilot size, Pilot art, panels | unchanged (160 px/s; 12 px circle at the feet; about 70 px tall; 8 directions; every panel clickable) |
+| Speed, collider, Pilot size, Pilot art, panels | unchanged (160 px/s; 12 px circle at the feet; 8 directions; every panel clickable). The Pilot and crew are now about 56 px tall (TAKOAI-94, was 70) |
 | Walkable | every floor and doorway tile of a **finished** room that no **object**-layer item covers. A room under construction isn't walkable and its doorways stay shut |
 | Pathing | the same A\* over an 8 px lattice, string-pulled (`find_path`), fed by walkable rectangles built from the tiles |
 | Use point | 24 px south of a station's front edge, at the middle of its front strip. A click on a station walks there and uses it |
@@ -419,9 +419,9 @@ bounding-box check. On top of it:
 - **Angle:** the same 3/4 top-down, orthographic view as the rest of the
   carrier, light from the top left. Tops and south-facing fronts are
   visible; heights are drawn upward at full scale (1 px of height = 1 px up),
-  as the 48 px wall face and the 70 px Pilot are.
+  as the 48 px wall face and the 56 px Pilot are.
 - **One view per item: facing S.** Nothing rotates (Wei, 2026-10-17).
-- **Scale (2×: 128 px per tile).** The Pilot is about 140 px tall at 2×.
+- **Scale (2×: 128 px per tile).** The Pilot (and every crew member) is about **112 px** tall at 2× (56 px in game, TAKOAI-94; was 140), with a footprint no wider than 0.6 tile (77 px at 2×).
   Reference heights at 2×: stool seat 36, bed top 44 (bunk's upper bunk
   104), table top 52, console desk 60 with screen up to 140, locker 180, cat
   tree 200, floor lamp 160, Combat Simulator 160, Salvage Sorter 170, berth
@@ -442,8 +442,7 @@ bounding-box check. On top of it:
   n-e-s-w order, a 96 px face in the lower part where south is open and a
   32 px cap above it), `doorway-ns.png` and `doorway-ew.png` (128 × 128, an
   open frame and threshold, no door leaf; two side by side make the 2-tile
-  doorway), `hull-0..1.png` (128 × 128, dark bare-hull plating, two
-  variants), `scaffold.png` (128 × 128, tileable overlay for rooms under
+  doorway), `scaffold.png` (128 × 128, tileable overlay for rooms under
   construction), `front-marker.png` (a small chevron, 128 × 128, for the
   front strip in Build mode).
 - **Icons:** none. Build cards show the item's sprite; room cards draw
@@ -458,9 +457,9 @@ S view each.
 
 Shipped IDs after import: `core.carrier.tile.floor.<n>`,
 `core.carrier.tile.wall.<mask>`, `core.carrier.tile.doorway.<ns|ew>`,
-`core.carrier.tile.hull.<n>`, `core.carrier.scaffold`,
+`core.carrier.scaffold`,
 `core.carrier.item.<id>`, `core.carrier.front_marker`.
-`core.carrier.hull_floor` is retired in favour of the 64 px hull tiles.
+`core.carrier.hull_floor` is retired, and there are no hull tiles: space shows outside the rooms (TAKOAI-94).
 
 #### Retired with Revision 1
 

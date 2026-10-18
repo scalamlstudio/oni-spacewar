@@ -1183,7 +1183,7 @@ fn autoplay_flow(
             }
             // The whole carrier at Overview zoom.
             if at(1.3) {
-                view.zoom = 0;
+                view.zoom.set(carrier::OVERVIEW);
             }
             if at(1.7) {
                 autoplay.shoot(
@@ -1192,7 +1192,7 @@ fn autoplay_flow(
                 );
             }
             if at(2.0) {
-                view.zoom = 1;
+                view.zoom.set(1.0);
             }
             if n >= autoplay.missions {
                 if at(2.5) {
@@ -1361,7 +1361,7 @@ fn autoplay_flow(
                     *overlay = Overlay::None;
                 }
                 if at(6.2) {
-                    view.zoom = 0;
+                    view.zoom.set(carrier::OVERVIEW);
                 }
                 if at(6.6) {
                     autoplay.shoot(
@@ -1370,7 +1370,7 @@ fn autoplay_flow(
                     );
                 }
                 if at(7.0) {
-                    view.zoom = 1;
+                    view.zoom.set(1.0);
                 }
             } else if n > 0 {
                 if at(3.5) {

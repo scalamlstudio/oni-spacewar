@@ -31,6 +31,7 @@ use crate::layout_v1::{
 use crate::mission::MissionRequest;
 use crate::save::{LastResult, SaveGame};
 use crate::workshop::{self, BuyError, Upgrade, UPGRADES};
+use crate::zoom::{self, Zoom};
 
 /// Walking speed, px/s (8 directions, diagonals normalised).
 pub const WALK_SPEED: f32 = 160.0;
@@ -41,17 +42,18 @@ pub const INTERACT_RANGE: f32 = 56.0;
 /// floor, clear of the room label and the consoles (TAKOAI-67).
 const SPAWN_NEW_GAME: (i32, i32) = (2, 2);
 const SPAWN_AFTER_MISSION: (i32, i32) = (5, 6);
-/// Zoom levels, screen px per world px: Overview (the whole hull fits
-/// 1280 × 720), Normal, Close. The mouse wheel steps between them.
-pub const ZOOMS: [f32; 3] = [0.65, 1.0, 1.5];
-const OVERVIEW: usize = 0;
-const NORMAL: usize = 1;
+/// Build mode's zoom, screen px per world px: Overview, the whole hull in
+/// 1280 × 720. The mouse wheel zooms between `zoom::MIN` and `zoom::MAX`
+/// about the cursor (`crate::zoom`).
+pub const OVERVIEW: f32 = zoom::MIN;
 /// Build-mode camera pan, screen px/s.
 const PAN_SPEED: f32 = 600.0;
 /// Height of the Pilot and the crew from head to feet, px. The art has
 /// different amounts of empty canvas, so this is measured on the visible
-/// pixels (`standing`), not the image size.
-const CHARACTER_H: f32 = 70.0;
+/// pixels (`standing`), not the image size. 56 px is 0.875 of a 64 px
+/// Revision 3 tile (TAKOAI-94: characters smaller than a tile); Art draws
+/// it at 112 px at 2× (design/READINESS.md § Carrier › Art spec).
+pub const CHARACTER_H: f32 = 56.0;
 /// Berth pad size the docked ships' lengths are given for
 /// (design/READINESS.md § Dock and berths: a 2 × 2-cell, 256 px pad).
 pub const BERTH_PAD: f32 = 2.0 * CELL;
@@ -59,7 +61,6 @@ pub const BERTH_PAD: f32 = 2.0 * CELL;
 const STRIDE: f32 = 12.0;
 /// Walk-cycle frames after the idle one, per drawn direction.
 const PILOT_WALK: [&str; 4] = ["walk_1", "walk_2", "walk_3", "walk_4"];
-const HULL_FLOOR: &str = "core.carrier.hull_floor";
 const BUILD_SLOT: &str = "core.carrier.build_slot";
 /// The builder UI kit (design/art/demo-v2/builder-ui, TAKOAI-65), with the
 /// 9-slice insets its README gives.
@@ -80,7 +81,6 @@ const GHOST_INVALID: &str = "core.ui.builder.ghost.invalid";
 const GRID_OVERLAY: &str = "core.ui.builder.grid_cell_overlay";
 /// Draw layers. Floors are flat; characters and docked ships are sorted by
 /// their feet (`depth`).
-const Z_HULL: f32 = -30.0;
 const Z_FLOOR: f32 = -20.0;
 const Z_DOOR: f32 = -19.0;
 const Z_GRID: f32 = -18.5;
@@ -774,23 +774,13 @@ pub struct CarrierScene {
     pub hotspots: Vec<(Hotspot, Vec2)>,
 }
 
-/// Camera state: the zoom level (index into [`ZOOMS`]) and, in Build mode,
-/// the panned view centre (world px) and the zoom to go back to.
-#[derive(Resource)]
+/// Camera state: the wheel zoom and, in Build mode, the panned view centre
+/// (world px) and the zoom to go back to.
+#[derive(Resource, Default)]
 pub struct CarrierView {
-    pub zoom: usize,
+    pub zoom: Zoom,
     pub pan: Vec2,
-    building: Option<usize>,
-}
-
-impl Default for CarrierView {
-    fn default() -> Self {
-        Self {
-            zoom: NORMAL,
-            pan: Vec2::ZERO,
-            building: None,
-        }
-    }
+    building: Option<f32>,
 }
 
 /// The hull cell under the mouse in Build mode (autoplay sets it directly).
@@ -1123,7 +1113,7 @@ pub fn image_ids() -> Vec<String> {
         ids.push(format!("core.carrier.corridor.{mask}"));
     }
     ids.extend(layout::Side::ALL.iter().map(|s| door_id(*s)));
-    ids.extend([HULL_FLOOR.into(), BUILD_SLOT.into()]);
+    ids.push(BUILD_SLOT.into());
     for facing in Facing::BY_ANGLE {
         ids.push(pilot_frame(facing, false, 0.0).0);
         for i in 0..PILOT_WALK.len() {
@@ -1332,7 +1322,7 @@ fn spawn_carrier(
     // Drawn from the save by `sync_layout`.
     scene.drawn = None;
     *view = CarrierView::default();
-    // Space behind the hull is the nebula sky (`crate::sky`).
+    // Space around the rooms is the nebula sky (`crate::sky`).
 
     // The Pilot (player character).
     let spawn = if arrival.from_mission {
@@ -1403,8 +1393,10 @@ fn spawn_carrier(
         });
 }
 
-/// Draws `layout`: hull floor, rooms, corridors, doors, room labels, crew
-/// and the docked battleships.
+/// Draws `layout`: rooms, corridors, doors, room labels, crew and the
+/// docked battleships. Nothing is drawn outside the rooms and corridors:
+/// space shows there (`crate::sky`), and the rooms' outer walls are the
+/// ship's edge (TAKOAI-94).
 fn spawn_layout(
     commands: &mut Commands,
     art: &mut ContentImages,
@@ -1412,15 +1404,6 @@ fn spawn_layout(
     layout: &CarrierLayout,
     hotspots: &[(Hotspot, Vec2)],
 ) {
-    for y in 0..HULL_H {
-        for x in 0..HULL_W {
-            let (centre, size) = piece_rect(x, y, (1, 1));
-            commands.spawn((
-                floor(art, images, HULL_FLOOR, centre, size, Z_HULL),
-                LayoutSprite,
-            ));
-        }
-    }
     for room in &layout.rooms {
         let (centre, size) = piece_rect(room.x, room.y, room.id.footprint());
         commands.spawn((
@@ -1770,7 +1753,7 @@ fn carrier_input(
         }
         Overlay::Build { tool, message } => {
             // The Pilot waits; WASD pans the view.
-            let zoom = ZOOMS[view.zoom];
+            let zoom = view.zoom.shown;
             view.pan += world(wasd(&keys)) * PAN_SPEED * dt / zoom;
             let game = save.game.clone().unwrap_or_default();
             let pick = match clicked {
@@ -2038,7 +2021,8 @@ fn draw_walk_marker(order: Res<WalkOrder>, mut gizmos: Gizmos) {
     }
 }
 
-/// Mouse wheel steps between the zoom levels.
+/// The mouse wheel zooms (scroll up: in), about the cursor
+/// (`carrier_camera`).
 fn zoom_wheel(
     scroll: Res<AccumulatedMouseScroll>,
     pause: Res<PauseMenu>,
@@ -2047,11 +2031,7 @@ fn zoom_wheel(
     if pause.open || scroll.delta.y == 0.0 {
         return;
     }
-    view.zoom = if scroll.delta.y > 0.0 {
-        (view.zoom + 1).min(ZOOMS.len() - 1)
-    } else {
-        view.zoom.saturating_sub(1)
-    };
+    view.zoom.scroll(zoom::notches(&scroll));
 }
 
 /// Entering Build mode switches to Overview and pans from where the Pilot
@@ -2064,14 +2044,14 @@ fn build_mode_camera(
     let building = matches!(*overlay, Overlay::Build { .. });
     match (building, view.building) {
         (true, None) => {
-            view.building = Some(view.zoom);
-            view.zoom = OVERVIEW;
+            view.building = Some(view.zoom.target);
+            view.zoom.set(OVERVIEW);
             if let Ok(tf) = pilot.single() {
                 view.pan = tf.translation.truncate();
             }
         }
         (false, Some(zoom)) => {
-            view.zoom = zoom;
+            view.zoom.set(zoom);
             view.building = None;
         }
         _ => {}
@@ -2097,7 +2077,11 @@ pub fn clamp_camera(target: Vec2, half_view: Vec2, below: f32) -> Vec2 {
     )
 }
 
+/// Follows the Pilot (Build mode: the pan), zoomed about the cursor; the
+/// offset that zooming about the cursor leaves keeps the Pilot on screen.
+/// Clamped to the hull (`clamp_camera`).
 fn carrier_camera(
+    time: Res<Time>,
     mut view: ResMut<CarrierView>,
     pilot: Query<&Transform, (With<Pilot>, Without<Camera2d>)>,
     windows: Query<&Window, With<PrimaryWindow>>,
@@ -2106,30 +2090,50 @@ fn carrier_camera(
     let (Ok(pilot), Ok((mut cam, mut projection))) = (pilot.single(), camera.single_mut()) else {
         return;
     };
-    let scale = 1.0 / ZOOMS[view.zoom];
-    if let Projection::Orthographic(ortho) = &mut *projection {
-        if ortho.scale != scale {
-            ortho.scale = scale;
-        }
-    }
-    let size = windows
-        .single()
-        .map(|w| Vec2::new(w.width(), w.height()))
-        .unwrap_or(Vec2::new(1280.0, 720.0));
-    let half = size / 2.0 * scale;
-    let target = if view.building.is_some() {
+    let window = windows.single().ok();
+    let size = window.map_or(Vec2::new(1280.0, 720.0), Window::size);
+    let cursor = window.and_then(Window::cursor_position);
+    let building = view.building.is_some();
+    // Build mode pans the view itself, so zooming moves the pan.
+    let target = if building {
         view.pan
     } else {
         pilot.translation.truncate()
     };
-    let below = if view.building.is_some() {
-        BUILD_UI_H * scale
+    // Zoom about the cursor from the view on screen now.
+    let mut zoom = view.zoom;
+    let from = cam.translation.truncate();
+    let zoomed = zoom.update(time.delta_secs(), 1.0, from, cursor, size);
+    let changed = zoomed != from;
+    let scale = 1.0 / zoom.shown;
+    let half = size / 2.0 * scale;
+    let below = if building { BUILD_UI_H * scale } else { 0.0 };
+    let centre = if building {
+        zoom.offset = Vec2::ZERO;
+        clamp_camera(if changed { zoomed } else { target }, half, below)
     } else {
-        0.0
+        if changed {
+            zoom.offset = zoomed - target;
+        }
+        zoom.keep_in_view(half);
+        let centre = clamp_camera(target + zoom.offset, half, below);
+        // Drop the part of the offset the hull clamp ate, so it doesn't
+        // build up off the map.
+        if changed {
+            zoom.offset = centre - target;
+        }
+        centre
     };
-    let centre = clamp_camera(target, half, below);
-    if view.building.is_some() && view.pan != centre {
+    if building && view.pan != centre {
         view.pan = centre;
+    }
+    if view.zoom != zoom {
+        view.zoom = zoom;
+    }
+    if let Projection::Orthographic(ortho) = &mut *projection {
+        if ortho.scale != scale {
+            ortho.scale = scale;
+        }
     }
     cam.translation.x = centre.x;
     cam.translation.y = centre.y;
@@ -3460,13 +3464,13 @@ mod tests {
         // Pilot at the north-west corner: the view stops one cell out.
         let c = clamp_camera(Vec2::new(0.0, 0.0), half, 0.0);
         assert_eq!(c, Vec2::new(-CELL + 640.0, CELL - 360.0));
-        // Overview (1 / 0.65 scale): the whole hull fits, so it's centred.
-        let c = clamp_camera(Vec2::ZERO, half / 0.65, 0.0);
+        // Overview: the whole hull fits, so it's centred.
+        let c = clamp_camera(Vec2::ZERO, half / OVERVIEW, 0.0);
         assert_eq!(c.x, HULL_W as f32 * CELL / 2.0);
         // Build mode: the view can go far enough south that the last hull
         // row sits above the panels covering the screen bottom.
-        let half = half / ZOOMS[OVERVIEW];
-        let below = BUILD_UI_H / ZOOMS[OVERVIEW];
+        let half = half / OVERVIEW;
+        let below = BUILD_UI_H / OVERVIEW;
         let c = clamp_camera(Vec2::new(0.0, -10_000.0), half, below);
         let screen_bottom = c.y - half.y;
         assert!(-(HULL_H as f32) * CELL - screen_bottom >= below, "{c}");
