@@ -359,22 +359,53 @@ impl TileMap {
             .fold(0, |m, (i, _)| m | 1 << i)
     }
 
+    /// The 8-bit exterior mask of a wall tile on the hull edge (n-e-s-w,
+    /// ne-se-sw-nw: 1, 2, 4, 8, 16, 32, 64, 128; TAKOAI-101): a bit for each
+    /// neighbour outside every room (space), with a diagonal cleared when
+    /// either cardinal beside it is set, since that side's strip already
+    /// covers the corner. 0 for an inner wall and for anything not a wall.
+    pub fn exterior_mask(&self, (x, y): Tile) -> u8 {
+        if self.kind((x, y)) != TileKind::Wall {
+            return 0;
+        }
+        let space = |(dx, dy): Tile| self.kind((x + dx, y + dy)) == TileKind::Hull;
+        let mut mask = 0;
+        for (i, d) in [(0, -1), (1, 0), (0, 1), (-1, 0)].into_iter().enumerate() {
+            if space(d) {
+                mask |= 1 << i;
+            }
+        }
+        // ne, se, sw, nw: each between cardinals i and i + 1.
+        for (i, d) in [(1, -1), (1, 1), (-1, 1), (-1, -1)].into_iter().enumerate() {
+            if mask & (1 << i | 1 << ((i + 1) % 4)) == 0 && space(d) {
+                mask |= 1 << (4 + i);
+            }
+        }
+        mask
+    }
+
+    /// A wall tile on the hull edge: drawn with its hull tile alone, which
+    /// includes the floor inside it.
+    pub fn is_hull_wall(&self, t: Tile) -> bool {
+        self.exterior_mask(t) != 0
+    }
+
     /// The content ID a tile is drawn with (§ Art spec › Tiles), `None` for
     /// hull (space shows through, TAKOAI-94). Walls use the n-e-s-w mask
     /// tile (`core.carrier.tile.wall.<nesw>`, bits in that order), so joined
-    /// walls draw as one wall; floors cycle the three variants by `x + y`;
-    /// a doorway tile shows the threshold across its passage.
+    /// walls draw as one wall; a wall on the hull edge uses the outer-wall
+    /// tile for its wall and exterior masks instead
+    /// (`core.carrier.tile.hull_wall_<nesw>_x<n e s w ne se sw nw>`,
+    /// TAKOAI-101), which replaces it; floors cycle the three variants by
+    /// `x + y`; a doorway tile shows the threshold across its passage.
     pub fn art(&self, (x, y): Tile) -> Option<String> {
         Some(match self.kind((x, y)) {
             TileKind::Hull => return None,
             TileKind::Floor => return self.floor_art((x, y)),
-            TileKind::Wall => {
-                let mask = self.wall_mask((x, y));
-                let bits: String = (0..4)
-                    .map(|i| if mask & 1 << i != 0 { '1' } else { '0' })
-                    .collect();
-                format!("core.carrier.tile.wall.{bits}")
-            }
+            TileKind::Wall => match self.exterior_mask((x, y)) {
+                0 => format!("core.carrier.tile.wall.{}", bits(self.wall_mask((x, y)), 4)),
+                ext => hull_wall_id(self.wall_mask((x, y)), ext),
+            },
             TileKind::Doorway => {
                 let vertical = self
                     .doorways
@@ -388,13 +419,88 @@ impl TileMap {
     }
 
     /// The floor drawn on (or under) a room tile: the floor variant for
-    /// `x + y`. The scene puts it under every wall and doorway tile too, so
-    /// wall art that leaves floor showing (TAKOAI-89) drops in unchanged.
-    /// `None` for hull.
+    /// `x + y`. The scene puts it under every inner wall and doorway tile
+    /// too, so wall art that leaves floor showing (TAKOAI-89) drops in
+    /// unchanged. `None` for hull, and for a hull-edge wall, whose tile
+    /// has its floor in it.
     pub fn floor_art(&self, (x, y): Tile) -> Option<String> {
-        (self.kind((x, y)) != TileKind::Hull)
+        (self.kind((x, y)) != TileKind::Hull && !self.is_hull_wall((x, y)))
             .then(|| format!("core.carrier.tile.floor.{}", (x + y).rem_euclid(3)))
     }
+}
+
+/// The outer-wall tile for a hull-edge wall's wall and exterior masks.
+pub fn hull_wall_id(joins: u8, exterior: u8) -> String {
+    format!(
+        "core.carrier.tile.hull_wall_{}_x{}",
+        bits(joins, 4),
+        bits(exterior, 8)
+    )
+}
+
+/// Every (wall mask, exterior mask) a hull-edge wall can have, from every
+/// set of Small and Large rooms around one wall tile that overlap only on
+/// walls (a superset of what valid layouts reach: a tile's masks depend
+/// only on the rooms that touch its 3 × 3 neighbourhood, doorways
+/// included, since a doorway's two rooms both touch it). Art's generator
+/// side, `crates/content/hull-wall/build-hull-wall-extra.py`, enumerates
+/// the same to draw the tiles.
+#[cfg(test)]
+pub fn reachable_hull_keys() -> BTreeSet<(u8, u8)> {
+    // Far enough from the hull edge that only the window's rooms matter.
+    let (cx, cy) = (18, 11);
+    let mut rooms = Vec::new();
+    for size in [RoomSize::Small, RoomSize::Large] {
+        let (w, d) = size.floor();
+        for x in cx - w - 2..=cx + 1 {
+            for y in cy - d - 2..=cy + 1 {
+                rooms.push(Room::new(size, x, y));
+            }
+        }
+    }
+    let fits = |a: &Room, b: &Room| {
+        a.tiles()
+            .filter(|&t| b.contains(t))
+            .all(|t| !a.is_floor(t) && !b.is_floor(t))
+    };
+    let fit: Vec<Vec<bool>> = rooms
+        .iter()
+        .map(|a| rooms.iter().map(|b| fits(a, b)).collect())
+        .collect();
+    fn grow(
+        rooms: &[Room],
+        fit: &[Vec<bool>],
+        chosen: &mut Vec<usize>,
+        at: Tile,
+        keys: &mut BTreeSet<(u8, u8)>,
+    ) {
+        if !chosen.is_empty() {
+            let set: Vec<Room> = chosen.iter().map(|&i| rooms[i].clone()).collect();
+            let map = TileMap::new(&set);
+            if map.is_hull_wall(at) {
+                keys.insert((map.wall_mask(at), map.exterior_mask(at)));
+            }
+        }
+        let from = chosen.last().map_or(0, |&i| i + 1);
+        for i in from..rooms.len() {
+            if chosen.iter().all(|&j| fit[i][j]) {
+                chosen.push(i);
+                grow(rooms, fit, chosen, at, keys);
+                chosen.pop();
+            }
+        }
+    }
+    let mut keys = BTreeSet::new();
+    grow(&rooms, &fit, &mut Vec::new(), (cx, cy), &mut keys);
+    keys
+}
+
+/// The low `n` bits of `mask` as '0' / '1', bit 0 first: the order the
+/// tile IDs write their masks in.
+pub fn bits(mask: u8, n: u32) -> String {
+    (0..n)
+        .map(|i| if mask & 1 << i != 0 { '1' } else { '0' })
+        .collect()
 }
 
 // ---------------------------------------------------------------- items
@@ -1992,7 +2098,9 @@ mod tests {
                 if map.kind((x, y)) == TileKind::Wall {
                     // n, e, s, w as '0' / '1', each set exactly when that
                     // neighbour is wall.
-                    let bits: Vec<char> = id.rsplit('.').next().unwrap().chars().collect();
+                    let key = id.rsplit('.').next().unwrap();
+                    let key = key.strip_prefix("hull_wall_").unwrap_or(key);
+                    let bits: Vec<char> = key.chars().take(4).collect();
                     for (bit, (dx, dy)) in bits.iter().zip([(0, -1), (1, 0), (0, 1), (-1, 0)]) {
                         let joined = map.kind((x + dx, y + dy)) == TileKind::Wall;
                         assert_eq!(*bit == '1', joined, "({x},{y}) {id}");
@@ -2015,6 +2123,155 @@ mod tests {
                 id.content_id()
             );
         }
+    }
+
+    fn manifest() -> content::ContentManifest {
+        content::ContentManifest::load(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../assets/manifest.json"
+        ))
+        .unwrap()
+    }
+
+    /// TAKOAI-101: the starting carrier's hull edge picks exactly the tiles
+    /// Art's catalogue lists for it (by both masks), and every other wall
+    /// keeps its inner tile.
+    #[test]
+    fn starting_hull_edge_matches_arts_placements() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../design/art/carrier-furniture/outer-wall-import-v1.json"
+        );
+        let art: serde_json::Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+        let expect: BTreeMap<Tile, String> = art["starter_placements"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| {
+                let t = &p["tile"];
+                let t = (t[0].as_i64().unwrap() as i32, t[1].as_i64().unwrap() as i32);
+                (t, p["id"].as_str().unwrap().to_string())
+            })
+            .collect();
+        assert_eq!(expect.len(), 72);
+        let map = Carrier::starting().tile_map();
+        let mut hull = BTreeMap::new();
+        for y in 0..HULL_H {
+            for x in 0..HULL_W {
+                if map.is_hull_wall((x, y)) {
+                    hull.insert((x, y), map.art((x, y)).unwrap());
+                } else if map.kind((x, y)) == TileKind::Wall {
+                    let id = map.art((x, y)).unwrap();
+                    assert!(id.starts_with("core.carrier.tile.wall."), "{id}");
+                }
+            }
+        }
+        assert_eq!(hull, expect);
+    }
+
+    /// Masks by hand: a straight north wall, a convex corner, the hull
+    /// tile replacing the wall and its floor, a concave step.
+    #[test]
+    fn exterior_mask_reads_space_round_a_wall() {
+        let map = Carrier::starting().tile_map();
+        // Bridge north wall: space north only.
+        assert_eq!(map.exterior_mask((3, 0)), 0b0001);
+        assert_eq!(
+            map.art((3, 0)).unwrap(),
+            "core.carrier.tile.hull_wall_0101_x10000000"
+        );
+        assert_eq!(map.floor_art((3, 0)), None);
+        // North-west corner: n and w; the nw diagonal is cleared.
+        assert_eq!(map.exterior_mask((0, 0)), 0b1001);
+        // Inner wall between Bridge and Quarters keeps its floor.
+        assert_eq!(map.exterior_mask((7, 2)), 0);
+        assert!(map.floor_art((7, 2)).is_some());
+        // The Workshop's south-west corner on the Hangar's east wall: a
+        // concave step, space only to the south-east.
+        assert_eq!(map.exterior_mask((14, 10)), 0b0010_0000);
+        assert_eq!(
+            map.art((14, 10)).unwrap(),
+            "core.carrier.tile.hull_wall_1110_x00000100"
+        );
+    }
+
+    /// TAKOAI-102: every hull case a layout can reach ships a tile, and
+    /// nothing else is shipped as one.
+    #[test]
+    fn every_reachable_hull_case_has_a_shipped_tile() {
+        let m = manifest();
+        let keys = reachable_hull_keys();
+        let wanted: BTreeSet<String> = keys.iter().map(|&(j, e)| hull_wall_id(j, e)).collect();
+        let shipped: BTreeSet<String> = m.packs[0]
+            .assets
+            .iter()
+            .map(|a| a.id.clone())
+            .filter(|id| id.starts_with("core.carrier.tile.hull_wall_"))
+            .collect();
+        assert_eq!(wanted, shipped);
+        assert_eq!(keys.len(), 38);
+    }
+
+    /// Tiny seeded xorshift for the layout fuzz; test only.
+    struct Xorshift(u64);
+
+    impl Xorshift {
+        fn below(&mut self, n: i32) -> i32 {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 7;
+            self.0 ^= self.0 << 17;
+            (self.0 % n as u64) as i32
+        }
+    }
+
+    /// TAKOAI-102: random valid layouts (Small and Large rooms built onto
+    /// the starting carrier wherever `can_place_room` allows, joined every
+    /// way that gives) draw every hull-edge wall with a shipped tile, each
+    /// one a case the enumeration covers.
+    #[test]
+    fn random_layouts_resolve_every_hull_wall_to_a_shipped_tile() {
+        let m = manifest();
+        let reachable = reachable_hull_keys();
+        let mut seen = BTreeSet::new();
+        let mut rng = Xorshift(0x5eed_0102);
+        for _ in 0..40 {
+            let mut c = Carrier::starting();
+            let mut built = 0;
+            for _ in 0..400 {
+                let size = if rng.below(3) == 0 {
+                    RoomSize::Large
+                } else {
+                    RoomSize::Small
+                };
+                let (x, y) = (rng.below(HULL_W), rng.below(HULL_H));
+                if c.can_place_room(size, x, y, RICH).is_ok() {
+                    c.place_room(size, x, y);
+                    // Half the time the site stays under construction.
+                    if rng.below(2) == 0 {
+                        c.tick(u32::MAX / 2);
+                    }
+                    built += 1;
+                }
+            }
+            assert!(built > 0);
+            assert_eq!(c.validate(), Ok(()));
+            let map = c.tile_map();
+            for y in 0..HULL_H {
+                for x in 0..HULL_W {
+                    if !map.is_hull_wall((x, y)) {
+                        continue;
+                    }
+                    let key = (map.wall_mask((x, y)), map.exterior_mask((x, y)));
+                    let id = map.art((x, y)).unwrap();
+                    assert!(reachable.contains(&key), "({x},{y}) {id}");
+                    assert!(m.asset(&id).is_ok(), "({x},{y}) {id}");
+                    assert_eq!(map.floor_art((x, y)), None);
+                    seen.insert(key);
+                }
+            }
+        }
+        // The fuzz reaches well past the starter's 15 cases.
+        assert!(seen.len() > 20, "{} hull cases", seen.len());
     }
 
     #[test]
