@@ -8,8 +8,7 @@
 //! this module draws the save's `layout::Carrier`, walks the Pilot over it,
 //! runs the Upgrade Bench panel and Build mode, and advances construction
 //! timers while the scene is open. Every image is shipped art loaded by
-//! stable content ID (`crate::art`); an item without art yet (furniture
-//! until Art's batch B) draws as a placeholder box.
+//! stable content ID (`crate::art`).
 
 use bevy::input::mouse::AccumulatedMouseScroll;
 use bevy::prelude::*;
@@ -1229,9 +1228,7 @@ fn portrait(
     )
 }
 
-/// Every manifest image the Carrier always draws, besides dialogue
-/// portraits and the furniture and decor of Art's batch B, which draw as
-/// placeholders until it ships.
+/// Every manifest image the Carrier draws, besides dialogue portraits.
 #[cfg(test)]
 pub fn image_ids() -> Vec<String> {
     let mut ids: Vec<String> = (0..3)
@@ -1245,12 +1242,7 @@ pub fn image_ids() -> Vec<String> {
     }
     ids.extend(["ns", "ew"].map(|a| format!("core.carrier.tile.doorway.{a}")));
     ids.extend([SCAFFOLD, FRONT_MARKER].map(String::from));
-    ids.extend(
-        CATALOGUE
-            .iter()
-            .filter(|d| d.station())
-            .map(|d| d.id.content_id()),
-    );
+    ids.extend(CATALOGUE.iter().map(|d| d.id.content_id()));
     for facing in Facing::BY_ANGLE {
         ids.push(pilot_frame(facing, false, 0.0).0);
         for i in 0..PILOT_WALK.len() {
@@ -1496,59 +1488,23 @@ fn item_z(layer: Layer, feet_y: f32) -> f32 {
     }
 }
 
-/// How far a placeholder box rises above its footprint, px.
-const PLACEHOLDER_RISE: f32 = 24.0;
-
-/// The colour of an item's placeholder box, by layer.
-fn placeholder_color(id: ItemId) -> Color {
-    match id.def().map(|d| d.layer) {
-        Some(Layer::Wall) => Color::srgb(0.42, 0.62, 0.72),
-        Some(Layer::Floor) => Color::srgb(0.58, 0.36, 0.46),
-        _ => Color::srgb(0.62, 0.5, 0.36),
-    }
-}
-
-/// An item's sprite, pinned at its feet: the shipped art at 1 world px per
-/// 2 art px (Art authors at 2×), or, until it has art, a placeholder box
-/// over its footprint (4 px in from its edges, rising `PLACEHOLDER_RISE`
-/// for objects; a wall-mounted piece's is a plaque on the wall face). Also
-/// says whether it is the placeholder.
+/// An item's sprite, pinned at its feet: its art at 1 world px per 2 art
+/// px (Art authors at 2×). Every catalogue entry ships one
+/// (`tests::catalogue_art_fits_its_footprint`).
 fn item_sprite(
     art: &mut ContentImages,
     images: &mut Assets<Image>,
     id: ItemId,
     tint: Color,
-) -> (Sprite, bool) {
-    if let Some(image) = art.get(images, &id.content_id()) {
-        let size = ContentImages::size(images, &image) / 2.0;
-        let sprite = Sprite {
-            image,
-            custom_size: Some(size),
-            color: tint,
-            ..default()
-        };
-        return (sprite, false);
-    }
-    let (w, d) = item_size(id);
-    let size = match id.def().map(|d| d.layer) {
-        Some(Layer::Wall) => Vec2::new(w as f32 * TILE - 8.0, 40.0),
-        Some(Layer::Floor) => Vec2::new(w as f32, d as f32) * TILE - 8.0,
-        _ => Vec2::new(
-            w as f32 * TILE - 8.0,
-            d as f32 * TILE - 8.0 + PLACEHOLDER_RISE,
-        ),
-    };
-    let color = if tint == Color::WHITE {
-        placeholder_color(id)
-    } else {
-        tint
-    };
-    let sprite = Sprite {
-        color,
+) -> Option<Sprite> {
+    let image = art.get(images, &id.content_id())?;
+    let size = ContentImages::size(images, &image) / 2.0;
+    Some(Sprite {
+        image,
         custom_size: Some(size),
+        color: tint,
         ..default()
-    };
-    (sprite, true)
+    })
 }
 
 /// A berth's battleship: `SHIPS[ship]` on the pad centred at grid px
@@ -1755,34 +1711,14 @@ fn spawn_layout(
         };
         let item = &carrier.items[i];
         let (w, depth_tiles) = item_size(item.id);
-        let (sprite, placeholder) = item_sprite(art, images, item.id, d.tint);
-        let at = if placeholder {
-            d.at - Vec2::Y * 4.0
-        } else {
-            d.at
-        };
-        commands.spawn((
-            ScreenEntity,
-            LayoutSprite,
-            ItemSprite(i),
-            sprite,
-            Anchor::BOTTOM_CENTER,
-            Transform::from_translation(world(at).extend(d.z)),
-        ));
-        if placeholder {
-            let rise = match item.layer() {
-                Layer::Wall => 20.0,
-                _ => depth_tiles as f32 * TILE / 2.0,
-            };
+        if let Some(sprite) = item_sprite(art, images, item.id, d.tint) {
             commands.spawn((
-                label(
-                    item.id.name(),
-                    10.0,
-                    Color::srgb(0.95, 0.92, 0.85),
-                    (world(at) + Vec2::Y * rise).extend(d.z + 0.000_1),
-                ),
+                ScreenEntity,
                 LayoutSprite,
                 ItemSprite(i),
+                sprite,
+                Anchor::BOTTOM_CENTER,
+                Transform::from_translation(world(d.at).extend(d.z)),
             ));
         }
         if let (ItemId::Berth, Some(ship)) = (item.id, item.ship.as_deref()) {
@@ -2818,7 +2754,7 @@ fn build_grid(
 
 /// Build mode's ghost at the cursor: a room as its walls and floor tinted
 /// with the kit's valid / invalid swatch and the doorways it would open
-/// marked; an item as its real art (or placeholder) tinted the same, its
+/// marked; an item as its art tinted the same, its
 /// footprint outlined and its front strip chevroned; and one line over it,
 /// the cost or the reason. Items in the way of a refused room flash.
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
@@ -2920,20 +2856,16 @@ fn build_preview(
             for &t in &g.front {
                 tile(t, marker.clone(), tint, TILE, Z_GHOST + 0.6);
             }
-            let (sprite, placeholder) = item_sprite(&mut art, &mut images, id, tint);
             let feet = item_feet(&Item::new(id, g.at.0, g.at.1));
-            let feet = if placeholder {
-                feet - Vec2::Y * 4.0
-            } else {
-                feet
-            };
-            commands.spawn((
-                ScreenEntity,
-                BuildUi,
-                sprite,
-                Anchor::BOTTOM_CENTER,
-                Transform::from_translation(world(feet).extend(Z_GHOST + 0.4)),
-            ));
+            if let Some(sprite) = item_sprite(&mut art, &mut images, id, tint) {
+                commands.spawn((
+                    ScreenEntity,
+                    BuildUi,
+                    sprite,
+                    Anchor::BOTTOM_CENTER,
+                    Transform::from_translation(world(feet).extend(Z_GHOST + 0.4)),
+                ));
+            }
         }
     }
     for item in g.flash.iter().filter_map(|&i| game.carrier.items.get(i)) {
@@ -3571,10 +3503,8 @@ fn spawn_build_ui(
         .as_ref()
         .and_then(|d| d.icon_id.as_deref())
         .and_then(|id| art.get(images, id));
-    // An entry's icon: its sprite, a room's outline at scale, or its
-    // placeholder colour.
+    // An entry's icon: its sprite or a room's outline at scale.
     let entry_icon = |p: &mut ChildSpawnerCommands,
-                      entry: Entry,
                       card: &EntryCard,
                       icon: Option<Handle<Image>>,
                       dim: Color| {
@@ -3597,14 +3527,8 @@ fn spawn_build_ui(
             flex_shrink: 0.0,
             ..default()
         };
-        match (icon, entry) {
-            (Some(icon), _) => {
-                p.spawn((ImageNode::new(icon).with_color(dim), node));
-            }
-            (None, Entry::Item(id)) => {
-                p.spawn((BackgroundColor(placeholder_color(id)), node));
-            }
-            (None, Entry::Room(_)) => {}
+        if let Some(icon) = icon {
+            p.spawn((ImageNode::new(icon).with_color(dim), node));
         }
     };
 
@@ -3748,7 +3672,7 @@ fn spawn_build_ui(
                                     ..clip(28.0)
                                 })
                                 .with_children(|r| {
-                                    entry_icon(r, e, &card, icon, dim);
+                                    entry_icon(r, &card, icon, dim);
                                     r.spawn((
                                         Text::new(format!("{} s", card.seconds)),
                                         font(8.0, text),
@@ -3802,14 +3726,14 @@ fn spawn_build_ui(
                 .with_children(|p| {
                     let info = Color::srgb(0.8, 0.9, 0.92);
                     match (picked, &detail) {
-                        (Some(e), Some(card)) => {
+                        (Some(_), Some(card)) => {
                             p.spawn(Node {
                                 column_gap: px(6),
                                 align_items: AlignItems::Center,
                                 ..default()
                             })
                             .with_children(|r| {
-                                entry_icon(r, e, card, detail_icon.clone(), Color::WHITE);
+                                entry_icon(r, card, detail_icon.clone(), Color::WHITE);
                                 r.spawn((Text::new(card.name), font(17.0, BUILD_GOLD)));
                             });
                             p.spawn((Text::new(card.effect.clone()), font(12.0, Color::WHITE)));
@@ -3907,6 +3831,34 @@ fn hover_buttons(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every catalogue entry ships `core.carrier.item.<id>`, drawn at 2× on
+    /// a canvas its footprint fits (§ Carrier › Art spec): one tile (128
+    /// art px) wide per footprint column; a wall-mounted piece 96 px tall,
+    /// anything else its footprint depth plus headroom in steps of 32 px.
+    /// `item_sprite` pins the canvas's bottom centre at the item's feet.
+    #[test]
+    fn catalogue_art_fits_its_footprint() {
+        const ART_TILE: u32 = 2 * TILE as u32;
+        let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets");
+        let manifest = content::ContentManifest::load(format!("{root}/manifest.json")).unwrap();
+        for d in &CATALOGUE {
+            let id = d.id.content_id();
+            let path = manifest
+                .processed_path(root, &id)
+                .unwrap_or_else(|e| panic!("{id}: {e:?}"));
+            let (w, h) = image::image_dimensions(&path).unwrap_or_else(|e| panic!("{id}: {e}"));
+            let (fw, fd) = (d.size.0 as u32, d.size.1 as u32);
+            assert_eq!(w, fw * ART_TILE, "{id}: width for {fw}x{fd}");
+            match d.layer {
+                Layer::Wall => assert_eq!(h, 96, "{id}: wall piece height"),
+                _ => assert!(
+                    h >= fd * ART_TILE && (h - fd * ART_TILE).is_multiple_of(32),
+                    "{id}: height {h} for depth {fd}"
+                ),
+            }
+        }
+    }
 
     #[test]
     fn pilot_walk_cycle_steps_with_distance_and_idles_when_still() {
@@ -4500,7 +4452,7 @@ mod tests {
 
         let mut world = World::new();
         world.init_resource::<Assets<Image>>();
-        world.init_resource::<ContentImages>();
+        world.insert_resource(ContentImages::repo());
         world.init_resource::<CarrierScene>();
         world.init_resource::<PauseMenu>();
         world.init_resource::<Time>();

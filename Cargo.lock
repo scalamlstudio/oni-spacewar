@@ -4998,6 +4998,7 @@ dependencies = [
  "bevy_ggrs",
  "bincode 2.0.1",
  "ggrs",
+ "image",
  "matchbox_socket",
  "oni-content",
  "oni-sim",
