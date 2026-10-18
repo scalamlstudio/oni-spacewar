@@ -1,0 +1,810 @@
+{
+  "schema_version": 1,
+  "tile_world_px": 64,
+  "art_scale": 2,
+  "rules": {
+    "connections": "NESW bits indicate adjacent WALL cells, exactly as v3. Doorways are not wall connections.",
+    "exterior": "8 bits N E S W NE SE SW NW: 1 means neighbor is SPACE, outside union of finished floor/wall/doorway cells. Include diagonals. Clear each diagonal bit if either adjoining cardinal bit is 1.",
+    "selection": "Compute both masks; select exact catalogue key. No exterior bits: retain v3 inner wall. Derive from the union of rooms, never individual room borders.",
+    "rendering": "Opaque replacement tile with its interior floor included. Replace the centered wall on hull cells. Shell touches every exposed edge; no floor outside. Space cells receive no floor or hull tile. Do not rotate sprites: lighting is baked from top left.",
+    "coverage": "Starter keys plus four straight runs, four inward T joins, four convex and four concave corners. For additional layouts run render(connections, canonical(exterior)) and catalogue the new key; do not silently substitute a different mask.",
+    "opening": "Skipped: all six two-cell starter doorways join rooms, not space. Berths are interior objects; there is no exterior hangar opening."
+  },
+  "tiles": [
+    {
+      "id": "core.carrier.tile.hull_wall_0011_x11000000",
+      "file": "hull-wall-0011-x11000000-v1.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_bbox": [
+        0,
+        0,
+        128,
+        128
+      ],
+      "connections_nesw": "0011",
+      "exterior_nesw_ne_se_sw_nw": "11000000",
+      "source": "carrier/tile/hull_wall/0011_x11000000.png"
+    },
+    {
+      "id": "core.carrier.tile.hull_wall_0101_x00100000",
+      "file": "hull-wall-0101-x00100000-v1.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_bbox": [
+        0,
+        0,
+        128,
+        128
+      ],
+      "connections_nesw": "0101",
+      "exterior_nesw_ne_se_sw_nw": "00100000",
+      "source": "carrier/tile/hull_wall/0101_x00100000.png"
+    },
+    {
+      "id": "core.carrier.tile.hull_wall_0101_x10000000",
+      "file": "hull-wall-0101-x10000000-v1.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_bbox": [
+        0,
+        0,
+        128,
+        128
+      ],
+      "connections_nesw": "0101",
+      "exterior_nesw_ne_se_sw_nw": "10000000",
+      "source": "carrier/tile/hull_wall/0101_x10000000.png"
+    },
+    {
+      "id": "core.carrier.tile.hull_wall_0110_x10010000",
+      "file": "hull-wall-0110-x10010000-v1.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_bbox": [
+        0,
+        0,
+        128,
+        128
+      ],
+      "connections_nesw": "0110",
+      "exterior_nesw_ne_se_sw_nw": "10010000",
+      "source": "carrier/tile/hull_wall/0110_x10010000.png"
+    },
+    {
+      "id": "core.carrier.tile.hull_wall_0111_x10000000",
+      "file": "hull-wall-0111-x10000000-v1.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_bbox": [
+        0,
+        0,
+        128,
+        128
+      ],
+      "connections_nesw": "0111",
+      "exterior_nesw_ne_se_sw_nw": "10000000",
+      "source": "carrier/tile/hull_wall/0111_x10000000.png"
+    },
+    {
+      "id": "core.carrier.tile.hull_wall_1001_x01100000",
+      "file": "hull-wall-1001-x01100000-v1.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_bbox": [
+        0,
+        0,
+        128,
+        128
+      ],
+      "connections_nesw": "1001",
+      "exterior_nesw_ne_se_sw_nw": "01100000",
+      "source": "carrier/tile/hull_wall/1001_x01100000.png"
+    },
+    {
+      "id": "core.carrier.tile.hull_wall_1010_x00010000",
+      "file": "hull-wall-1010-x00010000-v1.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_bbox": [
+        0,
+        0,
+        128,
+        128
+      ],
+      "connections_nesw": "1010",
+      "exterior_nesw_ne_se_sw_nw": "00010000",
+      "source": "carrier/tile/hull_wall/1010_x00010000.png"
+    },
+    {
+      "id": "core.carrier.tile.hull_wall_1010_x01000000",
+      "file": "hull-wall-1010-x01000000-v1.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_bbox": [
+        0,
+        0,
+        128,
+        128
+      ],
+      "connections_nesw": "1010",
+      "exterior_nesw_ne_se_sw_nw": "01000000",
+      "source": "carrier/tile/hull_wall/1010_x01000000.png"
+    },
+    {
+      "id": "core.carrier.tile.hull_wall_1011_x01000000",
+      "file": "hull-wall-1011-x01000000-v1.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_bbox": [
+        0,
+        0,
+        128,
+        128
+      ],
+      "connections_nesw": "1011",
+      "exterior_nesw_ne_se_sw_nw": "01000000",
+      "source": "carrier/tile/hull_wall/1011_x01000000.png"
+    },
+    {
+      "id": "core.carrier.tile.hull_wall_1100_x00110000",
+      "file": "hull-wall-1100-x00110000-v1.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_bbox": [
+        0,
+        0,
+        128,
+        128
+      ],
+      "connections_nesw": "1100",
+      "exterior_nesw_ne_se_sw_nw": "00110000",
+      "source": "carrier/tile/hull_wall/1100_x00110000.png"
+    },
+    {
+      "id": "core.carrier.tile.hull_wall_1101_x00100000",
+      "file": "hull-wall-1101-x00100000-v1.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_bbox": [
+        0,
+        0,
+        128,
+        128
+      ],
+      "connections_nesw": "1101",
+      "exterior_nesw_ne_se_sw_nw": "00100000",
+      "source": "carrier/tile/hull_wall/1101_x00100000.png"
+    },
+    {
+      "id": "core.carrier.tile.hull_wall_1110_x00000100",
+      "file": "hull-wall-1110-x00000100-v1.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_bbox": [
+        0,
+        0,
+        128,
+        128
+      ],
+      "connections_nesw": "1110",
+      "exterior_nesw_ne_se_sw_nw": "00000100",
+      "source": "carrier/tile/hull_wall/1110_x00000100.png"
+    },
+    {
+      "id": "core.carrier.tile.hull_wall_1110_x00010000",
+      "file": "hull-wall-1110-x00010000-v1.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_bbox": [
+        0,
+        0,
+        128,
+        128
+      ],
+      "connections_nesw": "1110",
+      "exterior_nesw_ne_se_sw_nw": "00010000",
+      "source": "carrier/tile/hull_wall/1110_x00010000.png"
+    },
+    {
+      "id": "core.carrier.tile.hull_wall_1111_x00000001",
+      "file": "hull-wall-1111-x00000001-v1.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_bbox": [
+        0,
+        0,
+        128,
+        128
+      ],
+      "connections_nesw": "1111",
+      "exterior_nesw_ne_se_sw_nw": "00000001",
+      "source": "carrier/tile/hull_wall/1111_x00000001.png"
+    },
+    {
+      "id": "core.carrier.tile.hull_wall_1111_x00000010",
+      "file": "hull-wall-1111-x00000010-v1.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_bbox": [
+        0,
+        0,
+        128,
+        128
+      ],
+      "connections_nesw": "1111",
+      "exterior_nesw_ne_se_sw_nw": "00000010",
+      "source": "carrier/tile/hull_wall/1111_x00000010.png"
+    },
+    {
+      "id": "core.carrier.tile.hull_wall_1111_x00000100",
+      "file": "hull-wall-1111-x00000100-v1.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_bbox": [
+        0,
+        0,
+        128,
+        128
+      ],
+      "connections_nesw": "1111",
+      "exterior_nesw_ne_se_sw_nw": "00000100",
+      "source": "carrier/tile/hull_wall/1111_x00000100.png"
+    },
+    {
+      "id": "core.carrier.tile.hull_wall_1111_x00001000",
+      "file": "hull-wall-1111-x00001000-v1.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_bbox": [
+        0,
+        0,
+        128,
+        128
+      ],
+      "connections_nesw": "1111",
+      "exterior_nesw_ne_se_sw_nw": "00001000",
+      "source": "carrier/tile/hull_wall/1111_x00001000.png"
+    }
+  ],
+  "starter_placements": [
+    {
+      "tile": [
+        0,
+        0
+      ],
+      "id": "core.carrier.tile.hull_wall_0110_x10010000"
+    },
+    {
+      "tile": [
+        0,
+        1
+      ],
+      "id": "core.carrier.tile.hull_wall_1010_x00010000"
+    },
+    {
+      "tile": [
+        0,
+        2
+      ],
+      "id": "core.carrier.tile.hull_wall_1010_x00010000"
+    },
+    {
+      "tile": [
+        0,
+        3
+      ],
+      "id": "core.carrier.tile.hull_wall_1010_x00010000"
+    },
+    {
+      "tile": [
+        0,
+        4
+      ],
+      "id": "core.carrier.tile.hull_wall_1010_x00010000"
+    },
+    {
+      "tile": [
+        0,
+        5
+      ],
+      "id": "core.carrier.tile.hull_wall_1110_x00010000"
+    },
+    {
+      "tile": [
+        0,
+        6
+      ],
+      "id": "core.carrier.tile.hull_wall_1010_x00010000"
+    },
+    {
+      "tile": [
+        0,
+        7
+      ],
+      "id": "core.carrier.tile.hull_wall_1010_x00010000"
+    },
+    {
+      "tile": [
+        0,
+        8
+      ],
+      "id": "core.carrier.tile.hull_wall_1010_x00010000"
+    },
+    {
+      "tile": [
+        0,
+        9
+      ],
+      "id": "core.carrier.tile.hull_wall_1010_x00010000"
+    },
+    {
+      "tile": [
+        0,
+        10
+      ],
+      "id": "core.carrier.tile.hull_wall_1010_x00010000"
+    },
+    {
+      "tile": [
+        0,
+        11
+      ],
+      "id": "core.carrier.tile.hull_wall_1010_x00010000"
+    },
+    {
+      "tile": [
+        0,
+        12
+      ],
+      "id": "core.carrier.tile.hull_wall_1010_x00010000"
+    },
+    {
+      "tile": [
+        0,
+        13
+      ],
+      "id": "core.carrier.tile.hull_wall_1010_x00010000"
+    },
+    {
+      "tile": [
+        0,
+        14
+      ],
+      "id": "core.carrier.tile.hull_wall_1010_x00010000"
+    },
+    {
+      "tile": [
+        0,
+        15
+      ],
+      "id": "core.carrier.tile.hull_wall_1100_x00110000"
+    },
+    {
+      "tile": [
+        1,
+        0
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x10000000"
+    },
+    {
+      "tile": [
+        1,
+        15
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x00100000"
+    },
+    {
+      "tile": [
+        2,
+        0
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x10000000"
+    },
+    {
+      "tile": [
+        2,
+        15
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x00100000"
+    },
+    {
+      "tile": [
+        3,
+        0
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x10000000"
+    },
+    {
+      "tile": [
+        3,
+        15
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x00100000"
+    },
+    {
+      "tile": [
+        4,
+        0
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x10000000"
+    },
+    {
+      "tile": [
+        4,
+        15
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x00100000"
+    },
+    {
+      "tile": [
+        5,
+        0
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x10000000"
+    },
+    {
+      "tile": [
+        5,
+        15
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x00100000"
+    },
+    {
+      "tile": [
+        6,
+        0
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x10000000"
+    },
+    {
+      "tile": [
+        6,
+        15
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x00100000"
+    },
+    {
+      "tile": [
+        7,
+        0
+      ],
+      "id": "core.carrier.tile.hull_wall_0111_x10000000"
+    },
+    {
+      "tile": [
+        7,
+        15
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x00100000"
+    },
+    {
+      "tile": [
+        8,
+        0
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x10000000"
+    },
+    {
+      "tile": [
+        8,
+        15
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x00100000"
+    },
+    {
+      "tile": [
+        9,
+        0
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x10000000"
+    },
+    {
+      "tile": [
+        9,
+        15
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x00100000"
+    },
+    {
+      "tile": [
+        10,
+        0
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x10000000"
+    },
+    {
+      "tile": [
+        10,
+        15
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x00100000"
+    },
+    {
+      "tile": [
+        11,
+        0
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x10000000"
+    },
+    {
+      "tile": [
+        11,
+        15
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x00100000"
+    },
+    {
+      "tile": [
+        12,
+        0
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x10000000"
+    },
+    {
+      "tile": [
+        12,
+        15
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x00100000"
+    },
+    {
+      "tile": [
+        13,
+        0
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x10000000"
+    },
+    {
+      "tile": [
+        13,
+        15
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x00100000"
+    },
+    {
+      "tile": [
+        14,
+        0
+      ],
+      "id": "core.carrier.tile.hull_wall_0111_x10000000"
+    },
+    {
+      "tile": [
+        14,
+        10
+      ],
+      "id": "core.carrier.tile.hull_wall_1110_x00000100"
+    },
+    {
+      "tile": [
+        14,
+        11
+      ],
+      "id": "core.carrier.tile.hull_wall_1010_x01000000"
+    },
+    {
+      "tile": [
+        14,
+        12
+      ],
+      "id": "core.carrier.tile.hull_wall_1010_x01000000"
+    },
+    {
+      "tile": [
+        14,
+        13
+      ],
+      "id": "core.carrier.tile.hull_wall_1010_x01000000"
+    },
+    {
+      "tile": [
+        14,
+        14
+      ],
+      "id": "core.carrier.tile.hull_wall_1010_x01000000"
+    },
+    {
+      "tile": [
+        14,
+        15
+      ],
+      "id": "core.carrier.tile.hull_wall_1001_x01100000"
+    },
+    {
+      "tile": [
+        15,
+        0
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x10000000"
+    },
+    {
+      "tile": [
+        15,
+        10
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x00100000"
+    },
+    {
+      "tile": [
+        16,
+        0
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x10000000"
+    },
+    {
+      "tile": [
+        16,
+        10
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x00100000"
+    },
+    {
+      "tile": [
+        17,
+        0
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x10000000"
+    },
+    {
+      "tile": [
+        17,
+        10
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x00100000"
+    },
+    {
+      "tile": [
+        18,
+        0
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x10000000"
+    },
+    {
+      "tile": [
+        18,
+        10
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x00100000"
+    },
+    {
+      "tile": [
+        19,
+        0
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x10000000"
+    },
+    {
+      "tile": [
+        19,
+        10
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x00100000"
+    },
+    {
+      "tile": [
+        20,
+        0
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x10000000"
+    },
+    {
+      "tile": [
+        20,
+        10
+      ],
+      "id": "core.carrier.tile.hull_wall_0101_x00100000"
+    },
+    {
+      "tile": [
+        21,
+        0
+      ],
+      "id": "core.carrier.tile.hull_wall_0011_x11000000"
+    },
+    {
+      "tile": [
+        21,
+        1
+      ],
+      "id": "core.carrier.tile.hull_wall_1010_x01000000"
+    },
+    {
+      "tile": [
+        21,
+        2
+      ],
+      "id": "core.carrier.tile.hull_wall_1010_x01000000"
+    },
+    {
+      "tile": [
+        21,
+        3
+      ],
+      "id": "core.carrier.tile.hull_wall_1010_x01000000"
+    },
+    {
+      "tile": [
+        21,
+        4
+      ],
+      "id": "core.carrier.tile.hull_wall_1010_x01000000"
+    },
+    {
+      "tile": [
+        21,
+        5
+      ],
+      "id": "core.carrier.tile.hull_wall_1011_x01000000"
+    },
+    {
+      "tile": [
+        21,
+        6
+      ],
+      "id": "core.carrier.tile.hull_wall_1010_x01000000"
+    },
+    {
+      "tile": [
+        21,
+        7
+      ],
+      "id": "core.carrier.tile.hull_wall_1010_x01000000"
+    },
+    {
+      "tile": [
+        21,
+        8
+      ],
+      "id": "core.carrier.tile.hull_wall_1010_x01000000"
+    },
+    {
+      "tile": [
+        21,
+        9
+      ],
+      "id": "core.carrier.tile.hull_wall_1010_x01000000"
+    },
+    {
+      "tile": [
+        21,
+        10
+      ],
+      "id": "core.carrier.tile.hull_wall_1001_x01100000"
+    }
+  ]
+}
