@@ -19,6 +19,7 @@ use crate::layout::{ItemId, RoomSize};
 use crate::mission::{self, MissionOutcome, MissionRequest, MissionResult};
 use crate::rollback::SimWorld;
 use crate::save::{self, SaveError, SaveGame};
+use crate::settings::{self, SettingsScreen};
 
 #[derive(States, Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub enum GameScreen {
@@ -58,6 +59,7 @@ impl Plugin for FlowPlugin {
         app.init_state::<GameScreen>()
             .insert_resource(SaveSlot::load())
             .init_resource::<PauseMenu>()
+            .init_resource::<SettingsScreen>()
             .init_resource::<LastMissionResult>()
             .init_resource::<KillTarget>()
             .add_message::<MissionRequest>()
@@ -244,6 +246,15 @@ pub(crate) struct PauseMenu {
     dirty: bool,
 }
 
+impl PauseMenu {
+    /// Opens or closes the pause, redrawing the menu (hidden while the
+    /// Settings screen holds the pause).
+    pub(crate) fn hold(&mut self, open: bool) {
+        self.open = open;
+        self.dirty = true;
+    }
+}
+
 #[derive(Resource, Default)]
 pub(crate) struct LastMissionResult(Option<MissionResult>);
 
@@ -262,6 +273,8 @@ enum DemoButton {
     ReturnCarrier,
     Resume,
     QuitToTitle,
+    /// The Carrier pause menu's Settings (S).
+    Settings,
 }
 
 fn text_style(size: f32, color: Color) -> (TextFont, TextColor) {
@@ -475,6 +488,25 @@ fn enter_title(
         274.0,
         true,
     );
+    commands.spawn((
+        ScreenEntity,
+        settings::gear_button(&mut images, gear_node()),
+    ));
+}
+
+/// Where the Title's gear (Settings) button sits: the window's
+/// bottom-right corner, clear of the logo.
+fn gear_node() -> Node {
+    Node {
+        position_type: PositionType::Absolute,
+        right: px(16),
+        bottom: px(16),
+        width: px(36),
+        height: px(36),
+        padding: UiRect::all(px(4)),
+        border: UiRect::all(px(1)),
+        ..default()
+    }
 }
 
 /// Books the returning mission into the save. The deck itself is spawned by
@@ -713,12 +745,20 @@ fn button_actions(
     mut next: ResMut<NextState<GameScreen>>,
     mut pause: ResMut<PauseMenu>,
     mut exit: MessageWriter<AppExit>,
+    mut settings: ResMut<SettingsScreen>,
 ) {
+    if settings.open {
+        return;
+    }
     for (interaction, action) in &mut interactions {
         if *interaction != Interaction::Pressed {
             continue;
         }
         match action {
+            DemoButton::Settings => {
+                settings.open(&mut pause, true);
+                continue;
+            }
             DemoButton::NewGame => {
                 save.game = Some(SaveGame::default());
                 save.store();
@@ -756,7 +796,11 @@ fn keyboard_actions(
     mut next: ResMut<NextState<GameScreen>>,
     mut pause: ResMut<PauseMenu>,
     mut exit: MessageWriter<AppExit>,
+    settings: Res<SettingsScreen>,
 ) {
+    if settings.open {
+        return;
+    }
     let action = match state.get() {
         GameScreen::Title if keys.just_pressed(KeyCode::KeyN) => Some(DemoButton::NewGame),
         GameScreen::Title if keys.just_pressed(KeyCode::KeyC) => Some(DemoButton::Continue),
@@ -824,7 +868,7 @@ fn handle_action(
             pause.dirty = true;
             next.set(transition(*state, FlowEvent::QuitToTitle, has_save));
         }
-        DemoButton::Continue => {}
+        DemoButton::Continue | DemoButton::Settings => {}
     }
 }
 
@@ -858,11 +902,14 @@ fn apply_pause_actions(
     mut pending_result: ResMut<LastMissionResult>,
     mut next: ResMut<NextState<GameScreen>>,
     mut exit: MessageWriter<AppExit>,
+    mut settings: ResMut<SettingsScreen>,
 ) {
-    if !pause.open {
+    if !pause.open || settings.open {
         return;
     }
-    if keys.just_pressed(KeyCode::KeyM) && *state.get() == GameScreen::Battle {
+    if keys.just_pressed(KeyCode::KeyS) && *state.get() == GameScreen::Carrier {
+        settings.open(&mut pause, true);
+    } else if keys.just_pressed(KeyCode::KeyM) && *state.get() == GameScreen::Battle {
         handle_action(
             DemoButton::QuitMission,
             state.get(),
@@ -895,6 +942,7 @@ fn sync_pause_menu(
     mut commands: Commands,
     state: Res<State<GameScreen>>,
     mut pause: ResMut<PauseMenu>,
+    settings: Res<SettingsScreen>,
     entities: Query<Entity, With<PauseEntity>>,
 ) {
     if !pause.dirty {
@@ -904,7 +952,8 @@ fn sync_pause_menu(
     for entity in &entities {
         commands.entity(entity).despawn();
     }
-    if !pause.open {
+    // The Settings screen holds the pause without showing the menu.
+    if !pause.open || settings.open {
         return;
     }
     let in_battle = *state.get() == GameScreen::Battle;
@@ -913,7 +962,7 @@ fn sync_pause_menu(
         Text::new(if in_battle {
             "Paused\n\nR Resume    M Quit Mission (counts as Failed)\nT Title    Q Quit"
         } else {
-            "Paused\n\nR Resume    T Title    Q Quit"
+            "Paused\n\nR Resume    S Settings    T Title    Q Quit"
         }),
         text_style(26.0, Color::WHITE),
         Node {
@@ -940,6 +989,8 @@ fn sync_pause_menu(
             "Quit Mission",
             396.0,
         );
+    } else {
+        pause_button(&mut commands, DemoButton::Settings, "Settings", 396.0);
     }
 }
 
@@ -1092,7 +1143,7 @@ fn autopilot(world: &SimState) -> NetInput {
 
 /// Scripted scene steps for `--autoplay`. Each step fires once, when the
 /// scene has been up for its time in seconds.
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn autoplay_flow(
     mut commands: Commands,
     state: Res<State<GameScreen>>,
@@ -1101,11 +1152,13 @@ fn autoplay_flow(
     mut save: ResMut<SaveSlot>,
     mut next: ResMut<NextState<GameScreen>>,
     mut overlay: ResMut<Overlay>,
-    (mut view, mut cursor, mut walk, scene): (
+    (mut view, mut cursor, mut walk, scene, mut settings_screen, mut pause): (
         ResMut<CarrierView>,
         ResMut<BuildCursor>,
         ResMut<WalkOrder>,
         Res<CarrierScene>,
+        ResMut<SettingsScreen>,
+        ResMut<PauseMenu>,
     ),
     mut drag: ResMut<PilotDrag>,
     pilot: Query<(&Transform, &Pilot)>,
@@ -1135,6 +1188,18 @@ fn autoplay_flow(
             };
             if at(1.0) {
                 autoplay.shoot(&mut commands, name);
+            }
+            // The Settings screen over the first Title.
+            if !autoplay.reloaded && !autoplay.resume {
+                if at(1.8) {
+                    settings_screen.open(&mut pause, false);
+                }
+                if at(2.4) {
+                    autoplay.shoot(&mut commands, "02-title-settings");
+                }
+                if at(2.8) {
+                    settings_screen.close(&mut pause);
+                }
             }
             // The same view later, to show the nebula sky drifting.
             if at(3.5) {
@@ -1213,7 +1278,23 @@ fn autoplay_flow(
                 view.zoom.set(1.0);
             }
             if n >= autoplay.missions {
-                if at(2.5) {
+                // Last visit: the Settings screen over the carrier, from
+                // the pause menu, before quitting.
+                if autoplay.reloaded {
+                    if at(2.3) {
+                        pause.hold(true);
+                        settings_screen.open(&mut pause, true);
+                    }
+                    if at(2.9) {
+                        autoplay.shoot(&mut commands, "91-carrier-settings");
+                    }
+                    if at(3.2) {
+                        settings_screen.close(&mut pause);
+                        pause.hold(false);
+                    }
+                }
+                let quit_at = if autoplay.reloaded { 3.5 } else { 2.5 };
+                if at(quit_at) {
                     save.store();
                     if autoplay.reloaded {
                         println!("autoplay: quit");

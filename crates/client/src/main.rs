@@ -21,6 +21,7 @@ mod pacing;
 mod render;
 mod rollback;
 mod save;
+mod settings;
 mod sky;
 mod stats;
 mod workshop;
@@ -279,7 +280,12 @@ fn main() {
         app.insert_resource(NetStatus("demo flow".into()))
             .insert_resource(ContentStatus(content_status))
             .init_resource::<Stats>()
-            .add_plugins((flow::FlowPlugin, carrier::CarrierPlugin, hints::HintsPlugin))
+            .add_plugins((
+                flow::FlowPlugin,
+                carrier::CarrierPlugin,
+                hints::HintsPlugin,
+                settings::SettingsPlugin,
+            ))
             .insert_resource(flow::KillTarget(args.kill_target()));
         if args.autoplay {
             if let Some(dir) = &args.shots {

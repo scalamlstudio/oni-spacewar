@@ -50,6 +50,7 @@ crates/
     src/workshop.rs     Workshop rules: upgrade costs / levels / buy(), and Build mode's wallet side: build_room / build_item (pay up front) / remove_room / remove_item (full refund)
     src/hints.rs        one-time tutorial hints: triggers, display queue, seen IDs in the save
     src/save.rs         versioned JSON save data in the OS data directory (override: ONI_SAVE_DIR) + migration
+    src/settings.rs     player settings (settings.json beside the save, not in it), the Settings screen and gear button, carrier floor / wall colour presets + contrast check, CarrierPalette (recoloured tile images)
     src/mission.rs      typed client mission config/result handoff into `sim::SimState`; reward rules (survives_failure)
     src/rollback.rs     SimWorld resource, rollback/checksum registration, GgrsSchedule
     src/input.rs        mouse + keyboard / bot → NetInput (ReadInputs)
@@ -556,12 +557,39 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   it on arrival; return to the Carrier after the last
   one, quit to the Title, reload the save from disk and Continue (a restart
   inside the same process), then quit (saving). `--abandon` quits the last mission from the pause menu 20 s in;
-  `--shots` saves a screenshot of every scene. Use a scratch `ONI_SAVE_DIR`.
+  `--shots` saves a screenshot of every scene (including the Settings
+  screen over the first Title and over the last Carrier visit). Use a scratch `ONI_SAVE_DIR`.
   The acceptance loop is `--missions 2` followed by `--continue --missions 0`.
   On macOS, wrap it in `caffeinate -d`: if the display sleeps the window stops
   presenting and screenshots come out black. For the same reason (a fully
   covered window presents nothing), autoplay opens its window always-on-top
   and activates it once winit has created it (`bring_window_to_front`).
+- **Settings** (`settings.rs`, TAKOAI-96) are per player and per machine:
+  `settings.json` (own `version`, now 1; missing fields take defaults,
+  newer versions are refused and the defaults used) next to the save, so
+  `ONI_SAVE_DIR` moves both. Not part of `SaveGame` and never read by
+  `sim`, so they cannot affect a battle or sync. Stored on every change.
+  The Settings screen (`SettingsScreen`) opens from the gear button
+  (top right on the Title, beside Build in the Carrier HUD), Esc on the
+  Title, and the Carrier pause menu's Settings (S); Esc or Close shuts it
+  (Esc is used up there, `settings_keys` runs before
+  `flow::toggle_pause_menu`). On the Carrier it holds `PauseMenu::open`
+  with the menu hidden, so the scene stays paused and every carrier system
+  that checks the pause leaves it alone; closing returns to the pause
+  menu if it came from there. The panel is rebuilt from sections on each
+  change; the first is Display › Carrier colours: floor and wall rows of
+  6 presets plus Reset to default, the chosen pair's WCAG contrast, and a
+  warning (never a block) below `MIN_CONTRAST` (3:1). Defaults: Slate
+  floor `#3A4350`, Steel walls `#A3B1C0`; the presets include Art's v3
+  Office floor and Navy wall. **Recolour:** the floor, wall and doorway
+  tiles (`settings::recolourable`, `core.carrier.tile.*`) are drawn from
+  `CarrierPalette`'s copies of the shipped images: `recolour_pixel` keeps
+  Art's cyan light line, and moves every other pixel by its per-channel
+  offset from Art's floor (`FLOOR_REF`, seams) or wall (`WALL_REF`, trim)
+  colour, whichever is nearer in luma, onto the chosen colour (Art's own
+  pair reproduces the shipped pixels). A change rewrites those images in
+  place (`apply_palette`), so the deck updates live without a redraw.
+  Stations, scaffold, marker and characters keep their art.
 - Save data is client-only JSON with an explicit schema version (now 5). It
   stores credits, resources, purchased upgrades, selected battleship, tutorial
   hints seen, missions played and won, the last result and the carrier

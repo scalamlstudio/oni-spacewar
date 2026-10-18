@@ -33,6 +33,7 @@ use crate::layout::{
 };
 use crate::mission::MissionRequest;
 use crate::save::{LastResult, SaveGame};
+use crate::settings::{self, CarrierPalette};
 use crate::workshop::{self, BuyError, Cost, Upgrade, UPGRADES};
 use crate::zoom::{self, Zoom};
 
@@ -1680,7 +1681,8 @@ fn spawn_carrier(
         label("", 16.0, Color::WHITE, Vec3::new(0.0, 0.0, Z_LABEL + 1.0)),
         Prompt,
     ));
-    // Wallet and the Build button, top right, on a backing panel.
+    // Wallet, the Build button and the gear (Settings), top right, on a
+    // backing panel.
     let credits = art.get(&mut images, art::ids::ICON_CREDITS);
     let crystal = art.get(&mut images, art::ids::ICON_VOID_CRYSTAL);
     let hud_font = || {
@@ -1722,7 +1724,24 @@ fn spawn_carrier(
                     row.spawn((field, Text::new(""), hud_font()));
                 }
             });
-            sized_button(p, Click::Build, "[B] Build", 15.0);
+            p.spawn(Node {
+                align_items: AlignItems::Center,
+                column_gap: px(8),
+                ..default()
+            })
+            .with_children(|row| {
+                sized_button(row, Click::Build, "[B] Build", 15.0);
+                row.spawn(settings::gear_button(
+                    &mut images,
+                    Node {
+                        width: px(28),
+                        height: px(28),
+                        padding: UiRect::all(px(3)),
+                        border: UiRect::all(px(1)),
+                        ..default()
+                    },
+                ));
+            });
         });
 }
 
@@ -1732,12 +1751,14 @@ fn spawn_layout(
     commands: &mut Commands,
     art: &mut ContentImages,
     images: &mut Assets<Image>,
+    palette: &mut CarrierPalette,
     carrier: &Carrier,
     hotspots: &[(Hotspot, Vec2)],
 ) {
     for d in deck(carrier) {
         let Some(i) = d.item else {
-            let Some(image) = art.get(images, &d.id) else {
+            // Floor, wall and doorway tiles in the player's colours.
+            let Some(image) = palette.image(art, images, &d.id) else {
                 continue;
             };
             commands.spawn((
@@ -1865,6 +1886,7 @@ fn sync_layout(
     mut scene: ResMut<CarrierScene>,
     mut art: ResMut<ContentImages>,
     mut images: ResMut<Assets<Image>>,
+    mut palette: ResMut<CarrierPalette>,
     existing: Query<Entity, With<LayoutSprite>>,
 ) {
     let carrier = save
@@ -1880,7 +1902,14 @@ fn sync_layout(
         commands.entity(entity).despawn();
     }
     let hotspots = hotspots(&carrier);
-    spawn_layout(&mut commands, &mut art, &mut images, &carrier, &hotspots);
+    spawn_layout(
+        &mut commands,
+        &mut art,
+        &mut images,
+        &mut palette,
+        &carrier,
+        &hotspots,
+    );
     scene.walkable = carrier.walkable();
     scene.hotspots = hotspots;
     scene.drawn = Some(shape);
@@ -4503,6 +4532,7 @@ mod tests {
         world.init_resource::<ContentImages>();
         world.init_resource::<CarrierScene>();
         world.init_resource::<PauseMenu>();
+        world.init_resource::<CarrierPalette>();
         world.init_resource::<Time>();
         let mut game = rich(60, 1);
         workshop::build_room(&mut game, RoomSize::Small, 14, 10).unwrap();
