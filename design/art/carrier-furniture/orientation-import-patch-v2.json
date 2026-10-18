@@ -1,0 +1,172 @@
+[
+  {
+    "id": "core.carrier.item.command_console",
+    "file": "command-console-v2.png",
+    "source": "carrier/item/command_console.png",
+    "size": [
+      256,
+      288
+    ],
+    "alpha_bbox": [
+      4,
+      114,
+      252,
+      284
+    ]
+  },
+  {
+    "id": "core.carrier.item.salvage_sorter",
+    "file": "salvage-sorter-v2.png",
+    "source": "carrier/item/salvage_sorter.png",
+    "size": [
+      256,
+      448
+    ],
+    "alpha_bbox": [
+      4,
+      135,
+      252,
+      444
+    ]
+  },
+  {
+    "alpha_bbox": [
+      21,
+      72,
+      106,
+      316
+    ],
+    "anchor": [
+      64,
+      320
+    ],
+    "description": "tall narrow teal metal locker, cat-ear vent glyph, amber handle, height 180 relative to tile width 128",
+    "file": "locker-v2.png",
+    "footprint": [
+      1,
+      1
+    ],
+    "headroom": 192,
+    "id": "core.carrier.item.locker",
+    "layer": "object",
+    "placement": "against a wall",
+    "reference_height": 180,
+    "size": [
+      128,
+      320
+    ],
+    "source": "carrier/item/locker.png"
+  },
+  {
+    "alpha_bbox": [
+      29,
+      111,
+      227,
+      220
+    ],
+    "anchor": [
+      128,
+      224
+    ],
+    "description": "wide cozy two-seat orange upholstered sofa on teal spacecraft frame, cat-ear cushions, width two tiles",
+    "file": "sofa-v2.png",
+    "footprint": [
+      2,
+      1
+    ],
+    "headroom": 96,
+    "id": "core.carrier.item.sofa",
+    "layer": "object",
+    "placement": "against a wall",
+    "reference_height": 72,
+    "size": [
+      256,
+      224
+    ],
+    "source": "carrier/item/sofa.png"
+  },
+  {
+    "alpha_bbox": [
+      4,
+      114,
+      124,
+      220
+    ],
+    "anchor": [
+      64,
+      224
+    ],
+    "description": "compact stack of three teal cargo crates with amber latches, no markings",
+    "file": "crate-stack-v2.png",
+    "footprint": [
+      1,
+      1
+    ],
+    "headroom": 96,
+    "id": "core.carrier.item.crate_stack",
+    "layer": "object",
+    "placement": "free",
+    "reference_height": 90,
+    "size": [
+      128,
+      224
+    ],
+    "source": "carrier/item/crate_stack.png"
+  },
+  {
+    "alpha_bbox": [
+      16,
+      80,
+      112,
+      284
+    ],
+    "anchor": [
+      64,
+      288
+    ],
+    "description": "narrow upright teal snack vending machine with small transparent window showing snacks and orange dispensing hatch, no text",
+    "file": "snack-dispenser-v2.png",
+    "footprint": [
+      1,
+      1
+    ],
+    "headroom": 160,
+    "id": "core.carrier.item.snack_dispenser",
+    "layer": "object",
+    "placement": "against a wall",
+    "reference_height": 140,
+    "size": [
+      128,
+      288
+    ],
+    "source": "carrier/item/snack_dispenser.png"
+  },
+  {
+    "alpha_bbox": [
+      4,
+      119,
+      252,
+      252
+    ],
+    "anchor": [
+      128,
+      256
+    ],
+    "description": "wide rectangular aquarium on a low teal cabinet, amber trim, water and tiny fish and aquatic plants, width two tiles",
+    "file": "aquarium-v2.png",
+    "footprint": [
+      2,
+      1
+    ],
+    "headroom": 128,
+    "id": "core.carrier.item.aquarium",
+    "layer": "object",
+    "placement": "against a wall",
+    "reference_height": 100,
+    "size": [
+      256,
+      256
+    ],
+    "source": "carrier/item/aquarium.png"
+  }
+]
