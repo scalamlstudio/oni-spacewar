@@ -24,7 +24,6 @@ use sim::{Loadout, ShipKind, ShipSheet, Upgrades};
 
 use crate::art::{self, icon_node, ContentImages};
 use crate::flow::{self, GameScreen, PauseMenu, SaveSlot, ScreenEntity};
-use crate::hints::{Hint, Hints};
 use crate::input::{self, MovePress};
 use crate::layout::{
     self, Carrier, Category, Count, Item, ItemId, Layer, Reason, Rect, Room, RoomSize, Tile,
@@ -1305,7 +1304,6 @@ impl Plugin for CarrierPlugin {
                         update_prompt,
                         update_hud,
                         show_selected_ship,
-                        carrier_hints,
                         sync_overlay,
                         hover_buttons,
                     )
@@ -2992,43 +2990,6 @@ fn show_selected_ship(
         if text.0 != value {
             text.0 = value;
         }
-    }
-}
-
-/// Carrier tutorial hint triggers (`hints`, design/READINESS.md § Tutorial
-/// hints): the refit notice once after a Revision 1 save was refunded,
-/// standing at something usable, near a berth, the Workshop and Build mode.
-fn carrier_hints(
-    overlay: Res<Overlay>,
-    scene: Res<CarrierScene>,
-    pilot: Query<&Transform, With<Pilot>>,
-    mut hints: ResMut<Hints>,
-    mut save: ResMut<SaveSlot>,
-) {
-    if let Some(game) = save.game.as_mut().filter(|g| g.carrier_refit) {
-        game.carrier_refit = false;
-        if !hints.trigger(&mut save, Hint::CarrierRefit) {
-            save.store();
-        }
-    }
-    let Ok(pilot) = pilot.single() else {
-        return;
-    };
-    let near = nearest_hotspot(&scene.hotspots, grid(pilot.translation.truncate()));
-    if near.is_some() {
-        hints.trigger(&mut save, Hint::CarrierInteract);
-    }
-    if matches!(near, Some((Hotspot::Berth(_), _))) {
-        hints.trigger(&mut save, Hint::Dock);
-    }
-    match *overlay {
-        Overlay::Workshop { .. } => {
-            hints.trigger(&mut save, Hint::Workshop);
-        }
-        Overlay::Build { .. } => {
-            hints.trigger(&mut save, Hint::CarrierBuild);
-        }
-        _ => {}
     }
 }
 
