@@ -13,3 +13,9 @@ Carrier). Art batches A and B go here once drawn.
 - `mockup-starter-carrier.png` is a rough diagram, not art. Render it with
   headless Chrome like `design/art/demo-v2/render-svg.sh` (window
   1470 × 720).
+
+Batch A's continuous-wall revision is documented in `batch-a-qa-v2.md`.
+Run `build-batch-a-v2.py` with Python 3 and Pillow to reproduce its wall
+tiles, paired doorway thresholds, assembled mock and Pilot scale sheet.
+`batch-a-import-v2.json` is the source/ID catalogue; runtime import remains
+outstanding under the Art agent's design-only write boundary.

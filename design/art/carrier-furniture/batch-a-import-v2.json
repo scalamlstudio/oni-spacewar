@@ -1,0 +1,437 @@
+[
+  {
+    "id": "core.carrier.tile.floor.0",
+    "file": "floor-0-v1.png",
+    "source": "carrier/tile/floor/0.png",
+    "size": [
+      128,
+      128
+    ],
+    "alpha_bbox": [
+      0,
+      0,
+      128,
+      128
+    ]
+  },
+  {
+    "id": "core.carrier.tile.floor.1",
+    "file": "floor-1-v1.png",
+    "source": "carrier/tile/floor/1.png",
+    "size": [
+      128,
+      128
+    ],
+    "alpha_bbox": [
+      0,
+      0,
+      128,
+      128
+    ]
+  },
+  {
+    "id": "core.carrier.tile.floor.2",
+    "file": "floor-2-v1.png",
+    "source": "carrier/tile/floor/2.png",
+    "size": [
+      128,
+      128
+    ],
+    "alpha_bbox": [
+      0,
+      0,
+      128,
+      128
+    ]
+  },
+  {
+    "id": "core.carrier.tile.wall.0000",
+    "file": "wall-0000-v2.png",
+    "source": "carrier/tile/wall/0000.png",
+    "size": [
+      128,
+      128
+    ],
+    "alpha_bbox": [
+      0,
+      0,
+      128,
+      128
+    ]
+  },
+  {
+    "id": "core.carrier.tile.wall.0001",
+    "file": "wall-0001-v2.png",
+    "source": "carrier/tile/wall/0001.png",
+    "size": [
+      128,
+      128
+    ],
+    "alpha_bbox": [
+      0,
+      0,
+      128,
+      128
+    ]
+  },
+  {
+    "id": "core.carrier.tile.wall.0010",
+    "file": "wall-0010-v2.png",
+    "source": "carrier/tile/wall/0010.png",
+    "size": [
+      128,
+      128
+    ],
+    "alpha_bbox": [
+      0,
+      0,
+      128,
+      128
+    ]
+  },
+  {
+    "id": "core.carrier.tile.wall.0011",
+    "file": "wall-0011-v2.png",
+    "source": "carrier/tile/wall/0011.png",
+    "size": [
+      128,
+      128
+    ],
+    "alpha_bbox": [
+      0,
+      0,
+      128,
+      128
+    ]
+  },
+  {
+    "id": "core.carrier.tile.wall.0100",
+    "file": "wall-0100-v2.png",
+    "source": "carrier/tile/wall/0100.png",
+    "size": [
+      128,
+      128
+    ],
+    "alpha_bbox": [
+      0,
+      0,
+      128,
+      128
+    ]
+  },
+  {
+    "id": "core.carrier.tile.wall.0101",
+    "file": "wall-0101-v2.png",
+    "source": "carrier/tile/wall/0101.png",
+    "size": [
+      128,
+      128
+    ],
+    "alpha_bbox": [
+      0,
+      0,
+      128,
+      128
+    ]
+  },
+  {
+    "id": "core.carrier.tile.wall.0110",
+    "file": "wall-0110-v2.png",
+    "source": "carrier/tile/wall/0110.png",
+    "size": [
+      128,
+      128
+    ],
+    "alpha_bbox": [
+      0,
+      0,
+      128,
+      128
+    ]
+  },
+  {
+    "id": "core.carrier.tile.wall.0111",
+    "file": "wall-0111-v2.png",
+    "source": "carrier/tile/wall/0111.png",
+    "size": [
+      128,
+      128
+    ],
+    "alpha_bbox": [
+      0,
+      0,
+      128,
+      128
+    ]
+  },
+  {
+    "id": "core.carrier.tile.wall.1000",
+    "file": "wall-1000-v2.png",
+    "source": "carrier/tile/wall/1000.png",
+    "size": [
+      128,
+      128
+    ],
+    "alpha_bbox": [
+      0,
+      0,
+      128,
+      128
+    ]
+  },
+  {
+    "id": "core.carrier.tile.wall.1001",
+    "file": "wall-1001-v2.png",
+    "source": "carrier/tile/wall/1001.png",
+    "size": [
+      128,
+      128
+    ],
+    "alpha_bbox": [
+      0,
+      0,
+      128,
+      128
+    ]
+  },
+  {
+    "id": "core.carrier.tile.wall.1010",
+    "file": "wall-1010-v2.png",
+    "source": "carrier/tile/wall/1010.png",
+    "size": [
+      128,
+      128
+    ],
+    "alpha_bbox": [
+      0,
+      0,
+      128,
+      128
+    ]
+  },
+  {
+    "id": "core.carrier.tile.wall.1011",
+    "file": "wall-1011-v2.png",
+    "source": "carrier/tile/wall/1011.png",
+    "size": [
+      128,
+      128
+    ],
+    "alpha_bbox": [
+      0,
+      0,
+      128,
+      128
+    ]
+  },
+  {
+    "id": "core.carrier.tile.wall.1100",
+    "file": "wall-1100-v2.png",
+    "source": "carrier/tile/wall/1100.png",
+    "size": [
+      128,
+      128
+    ],
+    "alpha_bbox": [
+      0,
+      0,
+      128,
+      128
+    ]
+  },
+  {
+    "id": "core.carrier.tile.wall.1101",
+    "file": "wall-1101-v2.png",
+    "source": "carrier/tile/wall/1101.png",
+    "size": [
+      128,
+      128
+    ],
+    "alpha_bbox": [
+      0,
+      0,
+      128,
+      128
+    ]
+  },
+  {
+    "id": "core.carrier.tile.wall.1110",
+    "file": "wall-1110-v2.png",
+    "source": "carrier/tile/wall/1110.png",
+    "size": [
+      128,
+      128
+    ],
+    "alpha_bbox": [
+      0,
+      0,
+      128,
+      128
+    ]
+  },
+  {
+    "id": "core.carrier.tile.wall.1111",
+    "file": "wall-1111-v2.png",
+    "source": "carrier/tile/wall/1111.png",
+    "size": [
+      128,
+      128
+    ],
+    "alpha_bbox": [
+      0,
+      0,
+      128,
+      128
+    ]
+  },
+  {
+    "id": "core.carrier.tile.doorway.ns",
+    "file": "doorway-ns-v3.png",
+    "source": "carrier/tile/doorway/ns.png",
+    "size": [
+      128,
+      128
+    ],
+    "alpha_bbox": [
+      0,
+      0,
+      128,
+      128
+    ]
+  },
+  {
+    "id": "core.carrier.tile.doorway.ew",
+    "file": "doorway-ew-v3.png",
+    "source": "carrier/tile/doorway/ew.png",
+    "size": [
+      128,
+      128
+    ],
+    "alpha_bbox": [
+      0,
+      0,
+      128,
+      128
+    ]
+  },
+  {
+    "id": "core.carrier.item.command_console",
+    "file": "command-console-v1.png",
+    "source": "carrier/item/command_console.png",
+    "size": [
+      256,
+      288
+    ],
+    "alpha_bbox": [
+      4,
+      59,
+      252,
+      284
+    ]
+  },
+  {
+    "id": "core.carrier.item.upgrade_bench",
+    "file": "upgrade-bench-v1.png",
+    "source": "carrier/item/upgrade_bench.png",
+    "size": [
+      256,
+      224
+    ],
+    "alpha_bbox": [
+      4,
+      61,
+      252,
+      220
+    ]
+  },
+  {
+    "id": "core.carrier.item.sample_analyzer",
+    "file": "sample-analyzer-v1.png",
+    "source": "carrier/item/sample_analyzer.png",
+    "size": [
+      256,
+      288
+    ],
+    "alpha_bbox": [
+      4,
+      140,
+      252,
+      284
+    ]
+  },
+  {
+    "id": "core.carrier.item.salvage_sorter",
+    "file": "salvage-sorter-v1.png",
+    "source": "carrier/item/salvage_sorter.png",
+    "size": [
+      256,
+      448
+    ],
+    "alpha_bbox": [
+      4,
+      129,
+      252,
+      444
+    ]
+  },
+  {
+    "id": "core.carrier.item.combat_simulator",
+    "file": "combat-simulator-v1.png",
+    "source": "carrier/item/combat_simulator.png",
+    "size": [
+      256,
+      416
+    ],
+    "alpha_bbox": [
+      4,
+      126,
+      252,
+      412
+    ]
+  },
+  {
+    "id": "core.carrier.item.berth",
+    "file": "berth-v1.png",
+    "source": "carrier/item/berth.png",
+    "size": [
+      512,
+      544
+    ],
+    "alpha_bbox": [
+      4,
+      80,
+      508,
+      540
+    ]
+  },
+  {
+    "id": "core.carrier.scaffold",
+    "file": "scaffold-v1.png",
+    "source": "carrier/scaffold.png",
+    "size": [
+      128,
+      128
+    ],
+    "alpha_bbox": [
+      0,
+      4,
+      125,
+      128
+    ]
+  },
+  {
+    "id": "core.carrier.front_marker",
+    "file": "front-marker-v1.png",
+    "source": "carrier/front_marker.png",
+    "size": [
+      128,
+      128
+    ],
+    "alpha_bbox": [
+      42,
+      51,
+      86,
+      81
+    ]
+  }
+]
