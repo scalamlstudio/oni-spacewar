@@ -6,7 +6,7 @@
       "id": "core",
       "version": "0.2.0",
       "gameplay_affecting": false,
-      "content_hash": "6a853b770ec5670020d840f47728026ac8cecfcb23d97028779c946ea326db1c",
+      "content_hash": "8fc1dce39eec37f85c11079deddf782d017e37c9188d57896d9beb2bfc535fa8",
       "assets": [
         {
           "id": "core.battle.enemy.void_spitter",
@@ -77,7 +77,7 @@
           "source": "source/core/carrier/item/aquarium.png",
           "processed": "packs/core/processed/carrier/item/aquarium.png",
           "compressed": "packs/core/bundles/carrier/item/aquarium.png.zst",
-          "hash": "bac9969d6d3af0af7b652b687008c391faada83c38ea2e77f4db6e9736c494b2",
+          "hash": "153cedbb222c7df8086cc961d777275fa07e91cb520f29ee2d7e37ec4d459120",
           "gameplay_affecting": false
         },
         {
@@ -86,7 +86,7 @@
           "source": "source/core/carrier/item/berth.png",
           "processed": "packs/core/processed/carrier/item/berth.png",
           "compressed": "packs/core/bundles/carrier/item/berth.png.zst",
-          "hash": "2e21b25a864ad378a7376d0354d89cf1af63970449411605d5e6b02e5c59d39d",
+          "hash": "72b2c8f59d97bce3321a86d7f9bd870b9ef264d898cb725509d36a5f55c1fa80",
           "gameplay_affecting": false
         },
         {
@@ -95,7 +95,7 @@
           "source": "source/core/carrier/item/bunk_bed.png",
           "processed": "packs/core/processed/carrier/item/bunk_bed.png",
           "compressed": "packs/core/bundles/carrier/item/bunk_bed.png.zst",
-          "hash": "fafe02ba39105818cb53667a45a9ac702d4f410aa79b0dee26bb5c3a0c9a2f1a",
+          "hash": "1f301953a51a1a4991f69bd4310202cd09458e4a95319dca4f517d76a7ffe524",
           "gameplay_affecting": false
         },
         {
@@ -104,7 +104,7 @@
           "source": "source/core/carrier/item/cat_bed.png",
           "processed": "packs/core/processed/carrier/item/cat_bed.png",
           "compressed": "packs/core/bundles/carrier/item/cat_bed.png.zst",
-          "hash": "a7bb610ba00e2cd63b5b18c3c2e98ec6481113678c5fda44afaa78e4d13809f1",
+          "hash": "217f6ce970dcc66438e875ed400b88c9a88d9bf705543d940241efebf2d0e464",
           "gameplay_affecting": false
         },
         {
@@ -113,7 +113,7 @@
           "source": "source/core/carrier/item/cat_tree.png",
           "processed": "packs/core/processed/carrier/item/cat_tree.png",
           "compressed": "packs/core/bundles/carrier/item/cat_tree.png.zst",
-          "hash": "d023145545f05e9cfbc86c026ed7ea3975ed45f24044bf17fb3d291f33ccf4f7",
+          "hash": "c461961a710254298d6ffdda3899e7a4a5660f0df7081eef8f85c072fb99194f",
           "gameplay_affecting": false
         },
         {
@@ -122,7 +122,7 @@
           "source": "source/core/carrier/item/combat_simulator.png",
           "processed": "packs/core/processed/carrier/item/combat_simulator.png",
           "compressed": "packs/core/bundles/carrier/item/combat_simulator.png.zst",
-          "hash": "3a34b53ee813c88a2e75750cef41293de4d4e4e79f51eeb543c28dfe6ad9631c",
+          "hash": "7137ccc4c36ef567ac96bfb08c1c8c45b058736e44202c94c20a3df8bf1f40e5",
           "gameplay_affecting": false
         },
         {
@@ -131,7 +131,7 @@
           "source": "source/core/carrier/item/command_console.png",
           "processed": "packs/core/processed/carrier/item/command_console.png",
           "compressed": "packs/core/bundles/carrier/item/command_console.png.zst",
-          "hash": "641afd032347d87e6799015ea5372e8327e2b3f79d8c78cdcaf8d1497c10bd23",
+          "hash": "643c56b8a5ab70a0d9f087469c317790b2d28205273706a7586691222979f70d",
           "gameplay_affecting": false
         },
         {
@@ -140,7 +140,7 @@
           "source": "source/core/carrier/item/crate_stack.png",
           "processed": "packs/core/processed/carrier/item/crate_stack.png",
           "compressed": "packs/core/bundles/carrier/item/crate_stack.png.zst",
-          "hash": "d9de675933330c196b1fa0a71f871b151593a1be9376fdb4af66f1def8a320cd",
+          "hash": "4e5aa466b8948eaa6c610a117c392bdaa14202ed1c14b3ce904a050e9c56e0bc",
           "gameplay_affecting": false
         },
         {
@@ -149,7 +149,7 @@
           "source": "source/core/carrier/item/floor_lamp.png",
           "processed": "packs/core/processed/carrier/item/floor_lamp.png",
           "compressed": "packs/core/bundles/carrier/item/floor_lamp.png.zst",
-          "hash": "3e20f8196b85f5f1b233dd8aa61136859314f20431c28a4c2970e32e9d4556f5",
+          "hash": "362d94a072a6fc7349cb849ee17c04260d469c5ddaf569a6ca8498c2083b40c0",
           "gameplay_affecting": false
         },
         {
@@ -158,7 +158,7 @@
           "source": "source/core/carrier/item/food_bowls.png",
           "processed": "packs/core/processed/carrier/item/food_bowls.png",
           "compressed": "packs/core/bundles/carrier/item/food_bowls.png.zst",
-          "hash": "bca12cd337b0f5d5bde1ae42d02a942e44e9c8e9362711038ce1f2bb2c71e66d",
+          "hash": "d1b77fa878b4cecabe6ffa6508d53e5a3c5d476e7bf77116b9443640402259e5",
           "gameplay_affecting": false
         },
         {
@@ -167,7 +167,7 @@
           "source": "source/core/carrier/item/hydro_planter.png",
           "processed": "packs/core/processed/carrier/item/hydro_planter.png",
           "compressed": "packs/core/bundles/carrier/item/hydro_planter.png.zst",
-          "hash": "84f49305fb97748e80c7365df84c2d0cb8160fb5cc6206d3a668a42d281afb9d",
+          "hash": "d67953af9f1aa67884830e602539be00f33f1770715cf62a8f8efc41b4f70a39",
           "gameplay_affecting": false
         },
         {
@@ -176,7 +176,7 @@
           "source": "source/core/carrier/item/locker.png",
           "processed": "packs/core/processed/carrier/item/locker.png",
           "compressed": "packs/core/bundles/carrier/item/locker.png.zst",
-          "hash": "d677432544393de6040a64ac974cfa255f0c928094eb1dd5bc8be1e0bf11390a",
+          "hash": "b78deed8ddd270ab4967ed8d7720b62709ef0176afb09be022507cd388d0b5f5",
           "gameplay_affecting": false
         },
         {
@@ -185,7 +185,7 @@
           "source": "source/core/carrier/item/potted_plant.png",
           "processed": "packs/core/processed/carrier/item/potted_plant.png",
           "compressed": "packs/core/bundles/carrier/item/potted_plant.png.zst",
-          "hash": "e80004a7b36bc5ceb47387774d35d255d8299f7ad48f13345150f0f03b8f8d10",
+          "hash": "20e06cf59b142e180fa9eba7b2b10bf21af2c6da878b02be09a5fa8c45e5e163",
           "gameplay_affecting": false
         },
         {
@@ -194,7 +194,7 @@
           "source": "source/core/carrier/item/rug.png",
           "processed": "packs/core/processed/carrier/item/rug.png",
           "compressed": "packs/core/bundles/carrier/item/rug.png.zst",
-          "hash": "5ce4842dbbce8db836ea04bf3cf88ad3f8e3bd6133f6c2dfb7bd147ec0b8e09f",
+          "hash": "3dd9c52163294b4da2451ad072f86425f15996f215384ab783832406622eab5c",
           "gameplay_affecting": false
         },
         {
@@ -203,7 +203,7 @@
           "source": "source/core/carrier/item/salvage_sorter.png",
           "processed": "packs/core/processed/carrier/item/salvage_sorter.png",
           "compressed": "packs/core/bundles/carrier/item/salvage_sorter.png.zst",
-          "hash": "1c3bb00b643d250c41855f6f1c96d3c81fdb11665fb752a7b1985b5056f6b0c6",
+          "hash": "05be8300c78ef50b6984f6713e429662e49bb8609ccc3c935d681518ad1c2f1a",
           "gameplay_affecting": false
         },
         {
@@ -212,7 +212,7 @@
           "source": "source/core/carrier/item/sample_analyzer.png",
           "processed": "packs/core/processed/carrier/item/sample_analyzer.png",
           "compressed": "packs/core/bundles/carrier/item/sample_analyzer.png.zst",
-          "hash": "3d849a3f97a9ac206b1b98cfcbb3c69e3b1662b2f4423a4c699e4a9354b87738",
+          "hash": "03857180130b0390f87a72c99dd90d9dc162519b658506c2029e34e55c739d3f",
           "gameplay_affecting": false
         },
         {
@@ -221,7 +221,7 @@
           "source": "source/core/carrier/item/scratch_post.png",
           "processed": "packs/core/processed/carrier/item/scratch_post.png",
           "compressed": "packs/core/bundles/carrier/item/scratch_post.png.zst",
-          "hash": "01c430691794ddfc95191014875a2142b06714c321c5ea47be60801ca67e5f8e",
+          "hash": "d5833ab1c83a851b0704069ea28ee6dfc7ae2a8011c197d5f780b612be6389b4",
           "gameplay_affecting": false
         },
         {
@@ -230,7 +230,7 @@
           "source": "source/core/carrier/item/snack_dispenser.png",
           "processed": "packs/core/processed/carrier/item/snack_dispenser.png",
           "compressed": "packs/core/bundles/carrier/item/snack_dispenser.png.zst",
-          "hash": "e725bf915edbdf1814ed201f65978886a61731a68cbc7414219b0c3faf74d673",
+          "hash": "df9ba8d4bf306574d82add4876bcdb2a70c73fa2c5efd0a2a88c0de42eaa294c",
           "gameplay_affecting": false
         },
         {
@@ -239,7 +239,7 @@
           "source": "source/core/carrier/item/sofa.png",
           "processed": "packs/core/processed/carrier/item/sofa.png",
           "compressed": "packs/core/bundles/carrier/item/sofa.png.zst",
-          "hash": "2f9124fb78254ed2652aa0761c67fd2486d31199fce20872d9a445a63c21fd64",
+          "hash": "c2678f1d0373258c1ada5f08affa73a1ac897d4c3b02f767636d84d60d749f2a",
           "gameplay_affecting": false
         },
         {
@@ -248,7 +248,7 @@
           "source": "source/core/carrier/item/stool.png",
           "processed": "packs/core/processed/carrier/item/stool.png",
           "compressed": "packs/core/bundles/carrier/item/stool.png.zst",
-          "hash": "72bdaf3d1cbe4031451ea1ded229577108603d9cf5e1dfff43dce1fe74dc6f30",
+          "hash": "3f256d98e75b097ceda8a7421044685d8528a662072ca6bb818c55294253fb67",
           "gameplay_affecting": false
         },
         {
@@ -257,7 +257,7 @@
           "source": "source/core/carrier/item/table.png",
           "processed": "packs/core/processed/carrier/item/table.png",
           "compressed": "packs/core/bundles/carrier/item/table.png.zst",
-          "hash": "44c9112b23cf00f86fe0dc258b5ea642cb7054ce5f778f7e6386fde604326fa3",
+          "hash": "52518fece520797c79c04036b24c9f09ce95a9103a5ae4d2aaff443c8c8871a6",
           "gameplay_affecting": false
         },
         {
@@ -266,7 +266,7 @@
           "source": "source/core/carrier/item/tool_rack.png",
           "processed": "packs/core/processed/carrier/item/tool_rack.png",
           "compressed": "packs/core/bundles/carrier/item/tool_rack.png.zst",
-          "hash": "c7eb439a5847951b8ab19418dc3fd23ee4ff5908663586ec14565e1f6a3bb724",
+          "hash": "c1aa50ec101bb09ba893b46e6dd3a2ccb6af0773c45a263768eb46b0092f3164",
           "gameplay_affecting": false
         },
         {
@@ -275,7 +275,7 @@
           "source": "source/core/carrier/item/upgrade_bench.png",
           "processed": "packs/core/processed/carrier/item/upgrade_bench.png",
           "compressed": "packs/core/bundles/carrier/item/upgrade_bench.png.zst",
-          "hash": "dfe9667379dae5ce1d7b00ba55f658e97164a018f59caa2c32d6f69f15b729e4",
+          "hash": "757aa86964d4c61458815d5330407382be97a4ca07a033d23dade66b9383ad67",
           "gameplay_affecting": false
         },
         {
@@ -284,7 +284,7 @@
           "source": "source/core/carrier/item/wall_light.png",
           "processed": "packs/core/processed/carrier/item/wall_light.png",
           "compressed": "packs/core/bundles/carrier/item/wall_light.png.zst",
-          "hash": "700a99d5fff86e8d508bc7b30e29893f4da29d78ca47d909763eeda290729c8c",
+          "hash": "2c9f2818a28ad48a7bd11a27cb291b5757abf97b7850e4a6db8d929c81ed912c",
           "gameplay_affecting": false
         },
         {
@@ -293,7 +293,7 @@
           "source": "source/core/carrier/item/wall_screen.png",
           "processed": "packs/core/processed/carrier/item/wall_screen.png",
           "compressed": "packs/core/bundles/carrier/item/wall_screen.png.zst",
-          "hash": "f93327707bdc0cb2822d815653ee0cd97c48da31e9d689e1771a8664914679f6",
+          "hash": "027700c9e00dbc14756ea502e55ec255d98a3aa93e14add9c700253aa5842048",
           "gameplay_affecting": false
         },
         {
