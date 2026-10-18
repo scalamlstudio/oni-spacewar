@@ -51,6 +51,7 @@ crates/
     src/workshop.rs     Workshop rules: upgrade costs / levels / buy(), and Build mode's wallet side: build_room / build_item (pay up front) / remove_room / remove_item (full refund)
     src/save.rs         versioned JSON save data in the OS data directory (override: ONI_SAVE_DIR) + migration
     src/settings.rs     player settings (settings.json beside the save, not in it), the Settings screen and gear button, carrier floor / wall colour presets + contrast check, CarrierPalette (recoloured tile images)
+    src/codex.rs        the Codex (from Settings): content browser built from `core.codex` (assets/source/core/codex.json) — category tabs, scrolling thumbnail grid, detail panel; stats read from the catalogue / sim tuning; `discovered` hook
     src/mission.rs      typed client mission config/result handoff into `sim::SimState`; reward rules (survives_failure)
     src/rollback.rs     SimWorld resource, rollback/checksum registration, GgrsSchedule
     src/input.rs        mouse + keyboard / bot → NetInput (ReadInputs)
@@ -165,8 +166,9 @@ The target shipped formats are:
   `assets/source/core/` (stable ID from its path, e.g.
   `battle/ship/kite.png` -> `core.battle.ship.kite`), every TTF font the
   same way (`fonts/russo_one.ttf` -> `core.fonts.russo_one`, kind
-  `font/ttf`, licence text next to it) plus the HUD text, and writes the
-  zstd bundles and manifest. Images ship as PNG for now.
+  `font/ttf`, licence text next to it), every JSON data file the same way
+  (`codex.json` -> `core.codex`, kind `application/json`) plus the HUD
+  text, and writes the zstd bundles and manifest. Images ship as PNG for now.
 
 Run the current pipeline after editing pack source files:
 
@@ -631,6 +633,26 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   (`hull_tiles_recolour_their_floor_and_shell_apart`). A change rewrites those images in
   place (`apply_palette`), so the deck updates live without a redraw.
   Stations, scaffold, marker and characters keep their art.
+- **Codex** (`codex.rs`, TAKOAI-100): Settings › Open Codex opens a
+  full-screen view on top (`CodexScreen`, `GlobalZIndex` above the panel,
+  `FocusPolicy::Block`); Esc / Back returns to Settings (`codex_keys` runs
+  before `settings_keys` and uses the Esc up), and closing Settings closes
+  it. Its content is data, not UI code: the shipped `core.codex` JSON
+  (`assets/source/core/codex.json`) declares the tabs (`categories`, in
+  order) and the entries (`id`, `category`, `image` content ID, `name`,
+  `description`, `placeholder`). `CodexData::sections` groups entries into
+  tabs, adds a tab for any undeclared category after the declared ones and
+  drops empty ones, so new content appears by adding its image and an
+  entry. A missing image draws a "No art yet" box. Stats beside an entry
+  are only those already in the data (`codex::stats`): footprint /
+  placement / cost / effect from `layout::CATALOGUE`, HP and speed from
+  `sim::tuning`, hull / speed / basic attack from `sim::ShipSheet`, a crew
+  member's post. `codex::discovered` is the single unlock hook (all true
+  for now). Tests require an entry, with name, description and shipped
+  art, for every enemy / ship / carrier item image in the manifest, every
+  catalogue item (same name) and every crew member. Wheel scrolls the
+  grid (`ScrollPosition`; the held pause stops the carrier zoom), arrows
+  move the selection and keep it in view, Tab / Shift+Tab switch tabs.
 - Save data is client-only JSON with an explicit schema version (now 5). It
   stores credits, resources, purchased upgrades, selected battleship,
   missions played and won, the last result and the carrier

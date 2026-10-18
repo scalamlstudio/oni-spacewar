@@ -7,8 +7,9 @@
 //!
 //! The Settings screen opens from its gear button (Title, Carrier HUD),
 //! from Esc on the Title and from the Carrier's Esc (pause) menu, and
-//! closes with Esc or Close. It is built from sections (`spawn_panel`);
-//! the first is Display › Carrier colours.
+//! closes with Esc or Close. It is built from sections (`spawn_panel`):
+//! Display › Carrier colours, and Codex, which opens the full-screen
+//! Codex (`crate::codex`) on top.
 //!
 //! **Recolouring.** Art's carrier tiles (`core.carrier.tile.*`) are flat
 //! scripted shapes in a handful of colours: the floor (`FLOOR_REF`, with
@@ -26,6 +27,7 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::art::ContentImages;
+use crate::codex::CodexScreen;
 use crate::flow::{GameScreen, PauseMenu};
 
 /// Version of `settings.json`.
@@ -440,6 +442,7 @@ enum SettingsClick {
     Wall(usize),
     ResetFloor,
     ResetWall,
+    OpenCodex,
 }
 
 pub struct SettingsPlugin;
@@ -473,7 +476,7 @@ fn close_on_screen_change(mut screen: ResMut<SettingsScreen>) {
 
 /// Esc closes the screen (and is used up, so it doesn't also pause or
 /// unpause); on the Title it also opens it.
-fn settings_keys(
+pub(crate) fn settings_keys(
     mut keys: ResMut<ButtonInput<KeyCode>>,
     state: Res<State<GameScreen>>,
     mut screen: ResMut<SettingsScreen>,
@@ -498,7 +501,11 @@ fn settings_clicks(
     mut screen: ResMut<SettingsScreen>,
     mut pause: ResMut<PauseMenu>,
     mut file: ResMut<SettingsFile>,
+    mut codex: ResMut<CodexScreen>,
 ) {
+    if codex.open {
+        return;
+    }
     if gears.iter().any(|i| *i == Interaction::Pressed) && !screen.open && !pause.open {
         screen.open(&mut pause, false);
     }
@@ -507,6 +514,10 @@ fn settings_clicks(
         match *click {
             SettingsClick::Close => {
                 screen.close(&mut pause);
+                continue;
+            }
+            SettingsClick::OpenCodex => {
+                codex.open();
                 continue;
             }
             SettingsClick::Floor(i) => display.carrier_floor = FLOOR_PRESETS[i].rgb,
@@ -548,14 +559,14 @@ fn sync_settings_screen(
     }
 }
 
-const PANEL_BG: Color = Color::srgb(0.02, 0.04, 0.06);
-const PANEL_BORDER: Color = Color::srgb(0.35, 0.52, 0.58);
-const BUTTON_BG: Color = Color::srgb(0.08, 0.16, 0.2);
-const TEXT: Color = Color::srgb(0.85, 0.93, 0.96);
-const MUTED: Color = Color::srgb(0.55, 0.66, 0.72);
+pub(crate) const PANEL_BG: Color = Color::srgb(0.02, 0.04, 0.06);
+pub(crate) const PANEL_BORDER: Color = Color::srgb(0.35, 0.52, 0.58);
+pub(crate) const BUTTON_BG: Color = Color::srgb(0.08, 0.16, 0.2);
+pub(crate) const TEXT: Color = Color::srgb(0.85, 0.93, 0.96);
+pub(crate) const MUTED: Color = Color::srgb(0.55, 0.66, 0.72);
 const WARN: Color = Color::srgb(1.0, 0.75, 0.35);
 
-fn text(s: impl Into<String>, size: f32, color: Color) -> impl Bundle {
+pub(crate) fn text(s: impl Into<String>, size: f32, color: Color) -> impl Bundle {
     (
         Text::new(s),
         TextFont {
@@ -628,6 +639,16 @@ fn spawn_panel(commands: &mut Commands, settings: &Settings) {
                     WARN,
                 ));
             }
+            p.spawn(text("Codex", 18.0, TEXT));
+            p.spawn(Node {
+                column_gap: px(10),
+                align_items: AlignItems::Center,
+                ..default()
+            })
+            .with_children(|row| {
+                text_button(row, SettingsClick::OpenCodex, "Open Codex");
+                row.spawn(text("Enemies, stations, furniture, crew and ships", 14.0, MUTED));
+            });
         });
 }
 
