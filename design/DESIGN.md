@@ -317,6 +317,13 @@ what makes it a bunk room or a lab is what the player puts in it.
     nearest battleship and fires slow projectiles that can be dodged. Drops
     more Credits, and Void Crystal more often.
 
+## Battle Direction
+
+Proposed, awaiting Wei's review (TAKOAI-109): what it takes to make battle
+feel like Diablo / Path of Exile — a gap analysis, a ranked change list,
+enemy roles, elite affixes and ship modules — is in design/BATTLE.md. The
+sections above still describe the battle as built.
+
 ## World / Levels
 
 - **Carrier interior:** the player's persistent base — rooms, stations,
