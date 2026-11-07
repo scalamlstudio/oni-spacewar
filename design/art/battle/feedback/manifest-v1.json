@@ -1,0 +1,130 @@
+{
+  "version": 1,
+  "status": "exploratory options; not locked art direction",
+  "style": "TAKOAI-111 explicit flat battle override of current painted guide",
+  "layout": "uniform 256px authored cells, one row, transparent, no sheet slicing",
+  "assets": [
+    {
+      "name": "hit-enemy-v1",
+      "frame_width": 256,
+      "frame_height": 256,
+      "frames": 4,
+      "frame_ms": 35,
+      "pivot": [
+        128,
+        128
+      ],
+      "suggested_world_size": 48,
+      "notes": "One-shot, left to right; teal/warm player damage versus pink/violet incoming."
+    },
+    {
+      "name": "hit-ship-v1",
+      "frame_width": 256,
+      "frame_height": 256,
+      "frames": 4,
+      "frame_ms": 35,
+      "pivot": [
+        128,
+        128
+      ],
+      "suggested_world_size": 48,
+      "notes": "One-shot, left to right; teal/warm player damage versus pink/violet incoming."
+    },
+    {
+      "name": "death-swarmer-v1",
+      "frame_width": 256,
+      "frame_height": 256,
+      "frames": 6,
+      "frame_ms": 45,
+      "pivot": [
+        128,
+        128
+      ],
+      "suggested_world_size": 80,
+      "notes": "Violet shell fragments; distinct rotation/spread. No new enemy body designs; fade final frame in engine."
+    },
+    {
+      "name": "death-spitter-v1",
+      "frame_width": 256,
+      "frame_height": 256,
+      "frames": 6,
+      "frame_ms": 45,
+      "pivot": [
+        128,
+        128
+      ],
+      "suggested_world_size": 112,
+      "notes": "Violet shell fragments; distinct rotation/spread. No new enemy body designs; fade final frame in engine."
+    },
+    {
+      "name": "shockwave-impact-v1",
+      "frame_width": 256,
+      "frame_height": 256,
+      "frames": 4,
+      "frame_ms": 45,
+      "pivot": [
+        128,
+        128
+      ],
+      "suggested_world_size": 160,
+      "notes": "Centered radial hit flash; final alpha fade in engine."
+    },
+    {
+      "name": "scatter-impact-v1",
+      "frame_width": 256,
+      "frame_height": 256,
+      "frames": 4,
+      "frame_ms": 35,
+      "pivot": [
+        128,
+        128
+      ],
+      "suggested_world_size": 64,
+      "notes": "Compact pellet-hit accent; no ship or enemy silhouettes."
+    },
+    {
+      "name": "spitter-windup-v1",
+      "frame_width": 256,
+      "frame_height": 256,
+      "frames": 4,
+      "frame_ms": 100,
+      "pivot": [
+        128,
+        128
+      ],
+      "suggested_world_size": 96,
+      "notes": "Overlay centered on Spitter; four 100 ms steps = 0.4 s. Additive or alpha, cosmetic timing only."
+    },
+    {
+      "name": "spitter-aim-line-v1",
+      "frame_width": 256,
+      "frame_height": 256,
+      "frames": 1,
+      "frame_ms": 0,
+      "pivot": [
+        128,
+        128
+      ],
+      "suggested_world_size": [
+        224,
+        12
+      ],
+      "notes": "Stretch only UV inner rectangle x=16,y=120,w=224,h=16; draw length along +X. Straight edges tile without arrowheads; pivot at start of cropped region."
+    }
+  ],
+  "damage_numbers": {
+    "font": "russo_one.ttf",
+    "license": "OFL.txt",
+    "normal": "#FFF3CC",
+    "crit_or_big": "#FFD15C",
+    "ship_damage": "#FF789E",
+    "outline": "#241032",
+    "outline_px": 2,
+    "size_world_px": {
+      "normal": 18,
+      "crit_or_big": 25,
+      "ship_damage": 20
+    },
+    "note": "Runtime text only. Crit additionally larger; ship damage additionally prefixed with minus sign."
+  }
+}
