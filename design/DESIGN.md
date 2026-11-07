@@ -37,6 +37,8 @@ segment (see § Missions, § Ship Modules).
   unit selection step (there's only ever the one battleship to control). The
   battleship moves **slowly** and leans on abilities rather than fast
   dogfighting, the same feel as controlling the Mothership unit in StarCraft II.
+  Every battleship has one mobility or defensive skill, and enemy shots are
+  tuned so the slowest ship can dodge them (design/BATTLE.md § Decisions, B2).
 - Combat / interaction: the main character's Combat Operation skills are
   manually triggered by the player (hotkeys, LoL-ability-style) while the
   battleship moves (see § Crew Skill Trees) — unlike companions, whose combat
@@ -189,6 +191,9 @@ The first mission type, and the only one in the First Playable Demo.
 
 Numbers (wave plan, kill target, drop rates): design/READINESS.md § Demo Spec.
 
+Planned (design/BATTLE.md § Decisions, B5): once the kill count is reached,
+a Fissure Guardian comes out and the mission succeeds when it dies.
+
 ## Ship Modules
 
 - The carrier is a **modularized carrier ship**. Ship progression has two
@@ -319,10 +324,14 @@ what makes it a bunk room or a lab is what the player puts in it.
 
 ## Battle Direction
 
-Proposed, awaiting Wei's review (TAKOAI-109): what it takes to make battle
-feel like Diablo / Path of Exile — a gap analysis, a ranked change list,
-enemy roles, elite affixes and ship modules — is in design/BATTLE.md. The
-sections above still describe the battle as built.
+Accepted direction (TAKOAI-109, decided provisionally 2026-11-07 in
+TAKOAI-110): battle moves toward a Diablo / Path of Exile feel on top of the
+bullet-hell dodging — one-hit chaff with the danger in readable telegraphs,
+elites and a Fissure Guardian, ship modules that change skills, module
+drops with salvage, and Threat levels. The gap analysis, ranked change
+list, decisions (B1–B7) and build order are in design/BATTLE.md. The
+sections above still describe the battle as built; each is updated as its
+step lands.
 
 ## World / Levels
 

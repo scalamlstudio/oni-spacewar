@@ -288,3 +288,18 @@ _Running log of what's decided and what's built. Newest entries on top._
   ARPG balance, ship mobility, build depth, where modules come from,
   mission rhythm, sound in the demo, difficulty), each with options and a
   recommendation. DESIGN.md points to BATTLE.md.
+
+## 2026-11-07
+
+- **Battle direction accepted** (TAKOAI-110). Wei asked to turn the battle
+  plan into tasks and start building; design/BATTLE.md is now the accepted
+  direction, with a § Build order (batch 1 feel, batch 2 monsters, batch 3
+  building and loot).
+- B1–B7 decided **provisionally** on the recommendations; Wei can override
+  any after playtests (BATTLE.md § Decisions): hybrid bullet-hell / ARPG
+  with one-hit chaff; ships stay slow with one mobility or defensive skill
+  each; modules first for build depth; modules from drops plus salvage;
+  Elimination ends with a Fissure Guardian; a placeholder CC0 sound pack
+  in the demo; Threat levels picked at the Berth. Removed from
+  OPEN_QUESTIONS.md § Battle direction; DESIGN.md § Player, § Elimination,
+  § Battle Direction and READINESS.md § First Playable Scope updated.

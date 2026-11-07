@@ -1,11 +1,11 @@
 # Battle Direction
 
-_Proposed (TAKOAI-109, 2026-11-02), **awaiting Wei's review**. Nothing here
-is decided yet. It covers how to make the battle fun: a gap analysis
-against a Diablo / Path of Exile feel, a ranked change list, and a proposed
-first batch. The choices it needs from Wei are in design/OPEN_QUESTIONS.md
-§ Battle direction. Today's battle is specified in design/DESIGN.md
-§ Missions and design/READINESS.md § Demo Spec._
+_**Accepted direction** (TAKOAI-109 proposed 2026-11-02; accepted
+2026-11-07, TAKOAI-110). It covers how to make the battle fun: a gap
+analysis against a Diablo / Path of Exile feel, a ranked change list, the
+decisions it raised (§ Decisions, provisional) and the build order
+(§ Build order). Today's battle, until each step lands, is specified in
+design/DESIGN.md § Missions and design/READINESS.md § Demo Spec._
 
 ## Target feel
 
@@ -71,7 +71,7 @@ Ranked by fun per effort. Size: **S** ≈ a few days, **M** ≈ a week or two,
 | 1 | **Hit and kill feedback.** The sim reports hits, kills and damage taken as events with stable entity IDs. The client adds hit flash, a small knock-back on hit, death bursts, damage numbers (with a setting to turn them off), screen shake on taking damage and big skills, and a short render-only freeze on elite or boss kills. | 1 | M | Eng + Art (bursts, sparks) |
 | 2 | **Packs and one-hit chaff.** Fissures pulse out packs (e.g. 6–10 Swarmers at once) instead of a trickle; Swarmer HP is tuned so every ship kills one in a single basic hit; more enemies on screen, each weaker. | 1, 5 | S | Eng + Design (tuning) |
 | 3 | **Telegraphs.** The Spitter glows and shows its aim line for ~0.4 s before it fires; every new attack in the roster ships with a wind-up the player can read. | 2 | S | Eng + Art |
-| 4 | **Placeholder sound.** ~12 sounds (basic fire, hit, enemy death, taking damage, Q/W per ship, credit pickup, crystal pickup, rare drop, elite spawn, success, failure) and one battle loop, from a licensed or CC0 pack. Needs Wei's call on audio scope. | 1, 4 | S–M | Eng + Art |
+| 4 | **Placeholder sound.** ~12 sounds (basic fire, hit, enemy death, taking damage, Q/W per ship, credit pickup, crystal pickup, rare drop, elite spawn, success, failure) and one battle loop, from a CC0 (or licensed) placeholder pack (B6). | 1, 4 | S–M | Eng + Art |
 | 5 | **Four new enemy roles** (§ Enemy roles): Lancer (charger), Bloater (death-bomber), Brood (summoner), Warden (shields allies). Fed into TAKOAI-5 rather than designed twice. | 2 | M | Design + Eng + Art |
 | 6 | **Elite packs with affixes.** A pack leader that's bigger, tinted, named, has ~4× HP and 1–2 affixes (§ Elite affixes), and drops better loot. | 2, 4, 5 | M | Eng + Design |
 | 7 | **Fissure Guardian.** A mini-boss with 2 phases (§ Enemy roles) that ends the mission, so a run goes chaff → elites → boss. | 2, 5 | M | Design + Eng + Art |
@@ -95,16 +95,73 @@ Ranked by fun per effort. Size: **S** ≈ a few days, **M** ≈ a week or two,
   second batch.
 - **Ship modules that modify skills — confirmed as the core of building,
   ranked after enemies.** Builds only matter once there are enemies worth
-  solving, and the design depends on Wei's calls on build depth and loot
-  (OPEN_QUESTIONS.md § Battle direction).
+  solving, and the design depends on the build-depth and loot calls (§ Decisions,
+  B3 and B4).
 
 **Proposed first batch:** #1 Hit and kill feedback, #2 Packs and one-hit
-chaff, #3 Telegraphs, and #4 Placeholder sound if Wei agrees to audio. All
-are S–M, they don't depend on the open decisions, and together they change
-how every second of the current battle feels.
+chaff, #3 Telegraphs, and #4 Placeholder sound (B6). All are S–M, and
+together they change how every second of the current battle feels.
 
 **Second batch:** #5–#7 (enemies and the Guardian). **Third:** #8–#11
-(building and loot), once the build and loot decisions are made.
+(building and loot). The order is fixed in § Build order.
+
+## Decisions
+
+_Decided 2026-11-07 (TAKOAI-110), **provisional**: Wei took the
+recommendations to start building and can override any of them after
+playtests. The options that were weighed are in the PR #58 history of
+design/OPEN_QUESTIONS.md._
+
+- **B1. Bullet-hell vs. ARPG balance → hybrid.** Chaff dies in one hit and
+  is there to be mowed down; the danger comes from readable shots and
+  telegraphs on ranged enemies, elites and bosses. (Not: bullet-hell first
+  with fewer, tougher enemies; not: an ARPG horde where the danger is being
+  swarmed.)
+- **B2. Battleship mobility → stay slow, one answer per ship.** Base speed
+  stays slow (DESIGN.md § Player), but every battleship has one mobility or
+  defensive skill (Kite: Afterburn; Bulwark: Bastion), and enemy shots are
+  tuned so the slowest ship can dodge them.
+- **B3. Build depth → modules first.** Module sockets that change Q, W and
+  the basic attack (§ Ship modules), built so random-affix hull / weapon /
+  thruster parts, E/R picks and the Pilot's Combat Operation tree can be
+  added later. Random-affix parts only once module drops prove fun.
+- **B4. Where modules come from → drops plus salvage.** Modules drop in
+  missions by rarity; unwanted ones salvage into materials that craft or
+  upgrade modules, so no drop is useless. Later the Manufacturing Module
+  becomes the crafting bench.
+- **B5. Mission rhythm → kill N, then the Fissure Guardian.** Elimination
+  becomes: reach the kill count, the Fissure Guardian comes out, and the
+  mission succeeds when it dies. "Close the fissures" is the next mission
+  type (§ Prioritised change list #12).
+- **B6. Sound in the demo → placeholder CC0 pack.** A placeholder pack
+  (CC0, or licensed if CC0 has gaps) goes in now and is replaced once audio
+  direction is done (OPEN_QUESTIONS.md § Not yet started).
+- **B7. Difficulty → Threat levels at the Berth.** The player picks Threat
+  1–5 before launching: more enemy HP and damage, more elites and affixes,
+  better loot.
+
+## Build order
+
+_From TAKOAI-109. Each step is one or more Engineer / Art issues under it;
+numbers refer to § Prioritised change list._
+
+0. **Record the decisions** (this doc, TAKOAI-110).
+1. **Batch 1: feel.** #1 Hit and kill feedback (sim events with stable
+   entity IDs first, then client flash, knock-back, death bursts, damage
+   numbers, shake), #2 Packs and one-hit chaff, #3 Telegraphs on the
+   Spitter, #4 Placeholder sound. Art: the battle feedback pack (hit sparks,
+   death bursts, Spitter telegraph, damage-number style).
+2. **Batch 2: monsters.** #5 Lancer, Bloater, Brood and Warden (via
+   TAKOAI-5's roster), #6 elite packs with affixes, #7 Fissure Guardian
+   ending Elimination (B5).
+3. **Batch 3: building and loot.** #8 Ship modules (B3), #9 loot rarity,
+   module drops and salvage (B4), #10 Threat levels at the Berth (B7),
+   #11 E and R skills.
+4. **Later:** #12 more objectives (close the fissures first), #13 Pilot
+   Combat Operation tree, #14 enemy families and story bosses.
+
+Each batch is played before the next starts; a playtest can reorder the
+later batches or reopen a provisional decision.
 
 ## Enemy roles
 
@@ -143,7 +200,7 @@ that only make the player wait.
 
 ## Ship modules
 
-_Examples to make option B3 in OPEN_QUESTIONS.md concrete. Not a catalogue._
+_Examples to make B3 (§ Decisions) concrete. Not a catalogue._
 
 | Slot | Module | Effect |
 |---|---|---|

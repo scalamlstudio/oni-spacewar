@@ -21,63 +21,6 @@ demo answered the questions that used to block it (carrier control, enemies,
 level design), and the rest left scope with manufacturing and the research loop
 (resources, machines, research action). Each is re-tagged below.
 
-Next up: § Battle direction (TAKOAI-109), B1 first, plus picking the first
-batch from design/BATTLE.md § Prioritised change list.
-
-## Battle direction (design/BATTLE.md)
-
-_Raised by the Diablo / Path of Exile gap analysis (TAKOAI-109). Each entry
-lists options and Mika's recommendation; the call is Wei's. None of these
-blocks the proposed first batch (BATTLE.md § Prioritised change list, #1–#4)
-except B6, which decides #4._
-
-- **B1. Bullet-hell vs. ARPG balance:** where does the danger come from?
-  (a) Bullet-hell first: fewer, tougher enemies, danger from shot patterns.
-  (b) ARPG horde: big crowds, danger from being swarmed. (c) Hybrid: chaff
-  dies in one hit and is there to be mowed down; the danger comes from
-  readable shots and telegraphs on ranged enemies, elites and bosses.
-  _Recommended: (c)._ _(BATTLE.md § Gap analysis)_
-  `Deferred` · TAKOAI-109
-- **B2. Battleship mobility:** the ship is slow on purpose (DESIGN.md
-  § Player). (a) Keep it slow; only the Kite has a dash. (b) Raise base
-  speed ~30%. (c) Keep it slow, but every ship gets one mobility or
-  defensive answer and enemy shots are tuned to the slowest ship.
-  _Recommended: (c)._ _(DESIGN.md § Player)_
-  `Deferred` · TAKOAI-109
-- **B3. How deep battleship building goes:** (a) Module sockets that change
-  skills and the basic attack (Diablo 3 runes / PoE support gems).
-  (b) (a) plus hull, weapon and thruster parts with random affixes (PoE
-  gear). (c) (b) plus E/R skill picks and the Pilot's Combat Operation tree
-  as the passive tree. _Recommended: (a) first, built so (b) and (c) can be
-  added; random-affix parts only once module drops prove fun._
-  _(BATTLE.md § Ship modules)_
-  `Deferred` · TAKOAI-109
-- **B4. Where modules come from:** (a) random mission drops only;
-  (b) crafted on the carrier from blueprints and Void Crystal; (c) random
-  drops, and unwanted ones salvaged into materials that craft or upgrade
-  modules (so no drop is useless; later the Manufacturing Module becomes
-  the crafting bench). _Recommended: (c)._ _(BATTLE.md § Prioritised change
-  list #9)_
-  `Deferred` · TAKOAI-109
-- **B5. Mission rhythm:** (a) keep Elimination as kill N; (b) kill N, then a
-  Fissure Guardian comes out and the mission ends when it dies;
-  (c) a new "close the fissures" objective, each fissure guarded.
-  _Recommended: (b) for Elimination now, (c) as the next mission type._
-  _(DESIGN.md § Elimination, BATTLE.md § Enemy roles)_
-  `Deferred` · TAKOAI-109
-- **B6. Sound in the demo:** the demo scope says no audio, and audio
-  direction is not started (§ Not yet started). (a) Stay silent until audio
-  direction is done. (b) A placeholder pack (licensed or CC0) now, replaced
-  later. (c) Commission bespoke sound now. _Recommended: (b): hits and kills
-  without sound lose much of their feel._ _(READINESS.md § First Playable
-  Scope)_
-  `Deferred` · TAKOAI-109 / TAKOAI-7
-- **B7. Difficulty:** (a) one fixed tuning; (b) the player picks a Threat
-  level at the Berth: more elites and affixes, better loot; (c) the game
-  scales to the ship's power by itself. _Recommended: (b)._
-  _(BATTLE.md § Prioritised change list #10)_
-  `Deferred` · TAKOAI-109
-
 ## Mechanics (design/DESIGN.md)
 
 - **Companion combat skill trigger conditions:** each skill has its own trigger
@@ -144,7 +87,7 @@ except B6, which decides #4._
   decided (Void Swarmer, Void Spitter). Still open: the wider enemy roster, and
   whether there is also Oni opposition (rival Oni groups). TAKOAI-109
   proposes four roles, elite affixes and a Fissure Guardian for this
-  (design/BATTLE.md § Enemy roles). _(§ Enemies / Opposition)_
+  (design/BATTLE.md § Enemy roles; the Guardian itself is decided, B5). _(§ Enemies / Opposition)_
   `Deferred` · TAKOAI-5
 - **Level design within missions:** the demo has one hand-built arena and one
   objective type, Elimination (§ Missions). Still open: procedural vs.
@@ -184,5 +127,6 @@ except B6, which decides #4._
   design/DESIGN.md § Ship Modules) — ship exterior, characters, UI, etc. still
   undefined.
   `Deferred` · TAKOAI-7
-- Audio direction.
+- Audio direction. The demo uses a placeholder CC0 sound pack in the
+  meantime (design/BATTLE.md § Decisions, B6).
   `Deferred` · TAKOAI-7
