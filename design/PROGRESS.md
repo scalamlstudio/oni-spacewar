@@ -270,3 +270,21 @@ _Running log of what's decided and what's built. Newest entries on top._
   DESIGN.md § Carrier and § Player, READINESS.md § Demo Spec › Carrier,
   OPEN_QUESTIONS.md and the mock and checker in
   `design/art/carrier-furniture/`.
+
+## 2026-11-02
+
+- **Battle direction, proposed** (TAKOAI-109, awaiting Wei's review). Wei:
+  battle is the main reason the game isn't fun yet; the target is a
+  Diablo / Path of Exile feel on top of the bullet-hell dodging. New
+  `design/BATTLE.md`: a gap analysis against six pillars (game feel and
+  build crafting missing; monsters, loot and pacing weak; story in combat
+  missing), a list of 14 changes ranked by fun per effort, proposed enemy
+  roles (Lancer, Bloater, Brood, Warden, Fissure Guardian) for TAKOAI-5,
+  elite affixes and example ship modules.
+- Proposed first batch: hit and kill feedback, packs of one-hit chaff,
+  telegraphs on enemy attacks, and placeholder sound. Nothing is built
+  until Wei picks.
+- design/OPEN_QUESTIONS.md gains § Battle direction (B1–B7: bullet-hell vs.
+  ARPG balance, ship mobility, build depth, where modules come from,
+  mission rhythm, sound in the demo, difficulty), each with options and a
+  recommendation. DESIGN.md points to BATTLE.md.
