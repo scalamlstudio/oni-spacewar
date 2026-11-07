@@ -62,7 +62,8 @@ Carrier, result, menus and save live in `client`.
 - **Tutorial hints** the first time the player does something.
 - **Art:** the demo art set, shipped through the content pipeline
   (`assets/source/<pack>/…`, stable IDs, manifest) and following
-  `design/ART_GUIDELINES.md`. No audio.
+  `design/ART_GUIDELINES.md`. No audio at first; a placeholder CC0 sound
+  pack is now in scope (design/BATTLE.md § Decisions, B6).
 
 **Out of scope / deferred** (not rejected)
 
