@@ -229,17 +229,21 @@ pub enum EnemyKind {
     Brood,
     /// Buffer: allies near it take half damage.
     Warden,
+    /// Boss: the Fissure Guardian, after the kill target (TAKOAI-118).
+    /// Never comes out of a pack; its state is `Enemy::boss`.
+    Guardian,
 }
 
 impl EnemyKind {
     /// Every kind, in declaration order.
-    pub const ALL: [EnemyKind; 6] = [
+    pub const ALL: [EnemyKind; 7] = [
         Self::Swarmer,
         Self::Spitter,
         Self::Lancer,
         Self::Bloater,
         Self::Brood,
         Self::Warden,
+        Self::Guardian,
     ];
 
     pub const fn hp(self) -> i32 {
@@ -250,6 +254,7 @@ impl EnemyKind {
             Self::Bloater => BLOATER_HP,
             Self::Brood => BROOD_HP,
             Self::Warden => WARDEN_HP,
+            Self::Guardian => GUARDIAN_HP,
         }
     }
 
@@ -262,6 +267,7 @@ impl EnemyKind {
             Self::Bloater => BLOATER_RADIUS,
             Self::Brood => BROOD_RADIUS,
             Self::Warden => WARDEN_RADIUS,
+            Self::Guardian => GUARDIAN_RADIUS,
         }
     }
 
@@ -274,6 +280,7 @@ impl EnemyKind {
             Self::Bloater => BLOATER_SPEED,
             Self::Brood => BROOD_SPEED,
             Self::Warden => WARDEN_SPEED,
+            Self::Guardian => GUARDIAN_SPEED,
         }
     }
 
@@ -283,6 +290,7 @@ impl EnemyKind {
     }
 
     /// Credits dropped on death, and the Void Crystal chance (percent).
+    /// The Guardian drops its own loot burst instead (`GUARDIAN_LOOT_*`).
     pub const fn loot(self) -> (u32, i32) {
         match self {
             Self::Swarmer => (SWARMER_CREDITS, SWARMER_CRYSTAL_PCT),
@@ -291,6 +299,7 @@ impl EnemyKind {
             Self::Bloater => (BLOATER_CREDITS, BLOATER_CRYSTAL_PCT),
             Self::Brood => (BROOD_CREDITS, BROOD_CRYSTAL_PCT),
             Self::Warden => (WARDEN_CREDITS, WARDEN_CRYSTAL_PCT),
+            Self::Guardian => (0, 0),
         }
     }
 }
@@ -327,6 +336,8 @@ pub struct Enemy {
     pub ward: u32,
     /// Set on a pack's elite leader (design/BATTLE.md § Elite affixes).
     pub elite: Option<Elite>,
+    /// Set on the Fissure Guardian.
+    pub boss: Option<Boss>,
 }
 
 impl Enemy {
@@ -350,7 +361,24 @@ impl Enemy {
             home: pos,
             ward: 0,
             elite: None,
+            boss: None,
         }
+    }
+
+    /// The Fissure Guardian for a mission of `ships` ships, at `pos`.
+    pub fn guardian(pos: FxVec2, ships: usize) -> Self {
+        let mut e = Self::new(EnemyKind::Guardian, pos);
+        e.hp = GUARDIAN_HP * (100 + GUARDIAN_HP_PER_SHIP_PCT * (ships as i32 - 1).max(0)) / 100;
+        e.cooldown = GUARDIAN_FIRST_ATTACK;
+        e.boss = Some(Boss {
+            max_hp: e.hp,
+            phase: 1,
+            step: 0,
+            attack: BossAttack::Ring,
+            gap: 0,
+            phase_frame: 0,
+        });
+        e
     }
 
     /// Promote to an elite leader: `ELITE_HP_MULT`× HP, bigger, with
@@ -377,9 +405,12 @@ impl Enemy {
         self.elite.is_some_and(|e| e.affixes & affix.bit() != 0)
     }
 
-    /// HP it spawned with (elites: `ELITE_HP_MULT`× the kind's), for bars.
+    /// HP it spawned with (elites: `ELITE_HP_MULT`× the kind's; the
+    /// Guardian: scaled to the ship count), for bars.
     pub fn max_hp(&self) -> i32 {
-        if self.is_elite() {
+        if let Some(b) = self.boss {
+            b.max_hp
+        } else if self.is_elite() {
             self.kind.hp() * ELITE_HP_MULT
         } else {
             self.kind.hp()
@@ -402,6 +433,75 @@ impl Enemy {
         } else {
             self.kind.speed()
         }
+    }
+}
+
+/// What the Fissure Guardian is winding up (or last did).
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
+pub enum BossAttack {
+    /// A ring of shots with two gaps.
+    Ring,
+    /// Swarmers (phase 1) or Bloaters (phase 2) appear round it.
+    Summon,
+    /// Phase 2: a Lancer-style charge along `Enemy::aim`.
+    Charge,
+}
+
+/// The Guardian's attack cycle per phase: phase 1 Ring, Ring, Summon;
+/// phase 2 Ring, Charge, Ring, Summon.
+pub const BOSS_CYCLE_P1: [BossAttack; 3] = [BossAttack::Ring, BossAttack::Ring, BossAttack::Summon];
+pub const BOSS_CYCLE_P2: [BossAttack; 4] = [
+    BossAttack::Ring,
+    BossAttack::Charge,
+    BossAttack::Ring,
+    BossAttack::Summon,
+];
+
+/// The Fissure Guardian's state. Timers live on the `Enemy`: `cooldown`
+/// until the next wind-up, `windup` ticks left of it, `aim` / `dash` /
+/// `struck` for the charge.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
+pub struct Boss {
+    pub max_hp: i32,
+    /// 1, then 2 once it falls to half HP.
+    pub phase: u8,
+    /// Next index in the phase's cycle.
+    pub step: u8,
+    /// The attack being wound up while `Enemy::windup > 0`.
+    pub attack: BossAttack,
+    /// Ring: angle (`trig::ANGLE_STEPS`) of the first gap's centre, locked
+    /// when the wind-up starts; the second gap is opposite.
+    pub gap: i32,
+    /// Frame it entered phase 2 (0 while in phase 1), for the client's banner.
+    pub phase_frame: u32,
+}
+
+impl Boss {
+    /// Ring shot count and speed (px/s) and wind-up for the current phase.
+    pub const fn ring(&self) -> (i32, i32, u32) {
+        if self.phase >= 2 {
+            (
+                GUARDIAN_RING_SHOTS_P2,
+                GUARDIAN_RING_SPEED_P2,
+                GUARDIAN_RING_WINDUP_P2,
+            )
+        } else {
+            (
+                GUARDIAN_RING_SHOTS_P1,
+                GUARDIAN_RING_SPEED_P1,
+                GUARDIAN_RING_WINDUP_P1,
+            )
+        }
+    }
+
+    /// Does ring slot `k` of `n` fall in a gap? Slots are `ANGLE_STEPS / n`
+    /// apart, starting at `gap`; each gap is `GUARDIAN_RING_GAP` slots
+    /// centred on `gap` and on its opposite.
+    pub const fn in_gap(k: i32, n: i32) -> bool {
+        let half = GUARDIAN_RING_GAP / 2;
+        let a = k % n;
+        let b = (k + n / 2) % n;
+        a <= half || a >= n - half || b <= half || b >= n - half
     }
 }
 

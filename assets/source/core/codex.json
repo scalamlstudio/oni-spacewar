@@ -19,6 +19,8 @@
       "description": "Hangs back by its fissure and spits out fresh Swarmers whenever its sac swells. Dive it first or the swarm never ends." },
     { "id": "enemy.void_warden", "category": "enemies", "image": "core.battle.enemy.void_warden", "name": "Void Warden", "placeholder": true,
       "description": "Tethers itself to nearby monsters and soaks half of every hit they take. Kill it first, or drag the pack away from it." },
+    { "id": "enemy.fissure_guardian", "category": "enemies", "image": "core.battle.enemy.fissure_guardian", "name": "Fissure Guardian", "placeholder": true,
+      "description": "Wakes when a fissure has lost enough of its brood. Its core flashes before every ring of void it fires: look for the gaps and slip through. Wounded, it cracks open, fires faster and charges down a glowing line." },
 
     { "id": "station.command_console", "category": "stations", "image": "core.carrier.item.command_console", "name": "Command Console", "placeholder": true,
       "description": "The Gunner's post: tactical readouts, threat tracking and too many blinking lights. Every carrier has exactly one." },

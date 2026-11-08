@@ -345,6 +345,72 @@ pub const SCORCH_TICK: u32 = ticks(1, 2);
 pub const CHILL_DURATION: u32 = ticks(3, 2);
 pub const CHILL_SPEED_PCT: i32 = 60;
 
+/// Fissure Guardian (TAKOAI-118, design/BATTLE.md #7 and § Enemy roles,
+/// decision B5): once the kill target is reached the fissures go quiet
+/// and the Guardian comes out of the fissure nearest the ships; the
+/// mission is won when it dies. Phase 1 fires rings of slow shots with two
+/// gaps and summons Swarmer packs; below half HP (phase 2) the rings are
+/// faster and denser, it charges like a Lancer and summons Bloaters. Every
+/// attack has a wind-up the client draws. Engine defaults to tune.
+///
+/// HP for one ship; each extra ship adds `GUARDIAN_HP_PER_SHIP_PCT`%.
+pub const GUARDIAN_HP: i32 = 400;
+pub const GUARDIAN_HP_PER_SHIP_PCT: i32 = 60;
+/// Art's suggested 140 px display size over `ROLE_SCALE` (1.6).
+pub const GUARDIAN_RADIUS: i32 = 44;
+/// It closes in at `GUARDIAN_SPEED`, faster (`GUARDIAN_RUSH_SPEED`) while
+/// farther than `GUARDIAN_ATTACK_RANGE`, and stops at `GUARDIAN_HOLD`.
+pub const GUARDIAN_SPEED: i32 = 50;
+pub const GUARDIAN_RUSH_SPEED: i32 = 130;
+pub const GUARDIAN_HOLD: i32 = 240;
+/// It only starts an attack with a ship this close.
+pub const GUARDIAN_ATTACK_RANGE: i32 = 600;
+/// Delay after it comes out before its first attack.
+pub const GUARDIAN_FIRST_ATTACK: u32 = ticks(2, 1);
+/// Pause after each attack before the next wind-up (phase 1 / 2).
+pub const GUARDIAN_REST_P1: u32 = ticks(8, 5);
+pub const GUARDIAN_REST_P2: u32 = ticks(1, 1);
+/// The phase change: it roars for this long (no attack, still hittable).
+pub const GUARDIAN_ROAR: u32 = ticks(3, 2);
+/// Shot rings: the ring flashes for the wind-up, then `GUARDIAN_RING_SHOTS`
+/// shots leave evenly round it, minus two opposite gaps of
+/// `GUARDIAN_RING_GAP` slots each (the gap angle is locked when the flash
+/// starts, so the flash can show it).
+pub const GUARDIAN_RING_WINDUP_P1: u32 = ticks(4, 5);
+pub const GUARDIAN_RING_WINDUP_P2: u32 = ticks(3, 5);
+pub const GUARDIAN_RING_SHOTS_P1: i32 = 24;
+pub const GUARDIAN_RING_SHOTS_P2: i32 = 32;
+pub const GUARDIAN_RING_GAP: i32 = 3;
+pub const GUARDIAN_RING_SPEED_P1: i32 = 130;
+pub const GUARDIAN_RING_SPEED_P2: i32 = 190;
+pub const GUARDIAN_SHOT_DAMAGE: i32 = 8;
+pub const GUARDIAN_SHOT_RADIUS: i32 = 8;
+pub const GUARDIAN_SHOT_LIFETIME: u32 = ticks(4, 1);
+/// Summons: the core glows for the wind-up, then `GUARDIAN_SWARMERS`
+/// Swarmers (phase 1) or `GUARDIAN_BLOATERS` Bloaters (phase 2) appear
+/// round it.
+pub const GUARDIAN_SUMMON_WINDUP: u32 = ticks(4, 5);
+pub const GUARDIAN_SWARMERS: i32 = 5;
+pub const GUARDIAN_BLOATERS: i32 = 2;
+pub const GUARDIAN_SUMMON_RING: i32 = 80;
+/// Phase 2 charge: the charge line shows for the wind-up, then it dashes
+/// `GUARDIAN_CHARGE_DISTANCE` px along it, hitting each ship once.
+pub const GUARDIAN_CHARGE_WINDUP: u32 = ticks(4, 5);
+pub const GUARDIAN_CHARGE_DISTANCE: i32 = 460;
+pub const GUARDIAN_CHARGE_TICKS: u32 = ticks(1, 2);
+pub const GUARDIAN_CHARGE_DAMAGE: i32 = 18;
+/// Loot burst: `GUARDIAN_LOOT_PILES` credit piles of
+/// `GUARDIAN_LOOT_CREDITS` and `GUARDIAN_LOOT_CRYSTALS` single Void
+/// Crystals, flung round where it died (all under the elite light beam).
+pub const GUARDIAN_LOOT_PILES: u32 = 10;
+pub const GUARDIAN_LOOT_CREDITS: u32 = 10;
+pub const GUARDIAN_LOOT_CRYSTALS: u32 = 5;
+/// After the kill the battle runs this long before the mission succeeds,
+/// pulling every pickup to the nearest ship (the big kill moment).
+pub const GUARDIAN_OUTRO: u32 = ticks(5, 2);
+/// Outro pickup pull speed.
+pub const GUARDIAN_OUTRO_PULL: i32 = 520;
+
 /// `start` moved toward `end` by the fraction of the ramp elapsed at tick `t`.
 const fn ramp(start: i64, end: i64, t: u32) -> i64 {
     let t = if t < SPAWN_RAMP { t } else { SPAWN_RAMP } as i64;

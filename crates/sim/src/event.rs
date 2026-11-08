@@ -87,6 +87,16 @@ pub enum SimEvent {
     BlinkMarked { enemy: u32, pos: FxVec2 },
     /// A Blinking elite landed on its mark.
     Blinked { enemy: u32, pos: FxVec2 },
+    /// The kill target was reached: the fissures went quiet and the Fissure
+    /// Guardian came out at `pos`.
+    GuardianEmerged { enemy: u32, pos: FxVec2 },
+    /// An enemy still out when the Guardian came was drawn back into the
+    /// fissures (no kill, no loot).
+    Recalled { enemy: u32, pos: FxVec2 },
+    /// The Guardian fell to half HP and entered phase 2.
+    GuardianEnraged { enemy: u32, pos: FxVec2 },
+    /// The Guardian fired a shot ring from `pos`.
+    GuardianRing { enemy: u32, pos: FxVec2 },
     /// The mission ended this tick.
     MissionEnded { success: bool },
 }
@@ -114,6 +124,10 @@ impl SimEvent {
             Self::Warded { enemy, .. } => (9, enemy, 0),
             Self::BlinkMarked { enemy, .. } => (10, enemy, 0),
             Self::Blinked { enemy, .. } => (11, enemy, 0),
+            Self::GuardianEmerged { enemy, .. } => (12, enemy, 0),
+            Self::GuardianEnraged { enemy, .. } => (13, enemy, 0),
+            Self::GuardianRing { enemy, .. } => (14, enemy, 0),
+            Self::Recalled { enemy, .. } => (15, enemy, 0),
         }
     }
 }

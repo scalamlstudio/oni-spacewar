@@ -5,16 +5,18 @@
 //! (`cutouts::extract_row_items`), never by equal widths, and centred on
 //! the suggested padded canvas. Run `content-pipeline` afterwards.
 //!
-//! The Step 3 roles (Lancer, Bloater, Brood, Warden) and the Step 4 elite
-//! sheets (affix icons, aura, burning patch, teleport mark) are imported;
-//! the Fissure Guardian comes with its own step. Each enemy's resting body
+//! The Step 3 roles (Lancer, Bloater, Brood, Warden), the Step 4 elite
+//! sheets (affix icons, aura, burning patch, teleport mark) and the Step 5
+//! Fissure Guardian (TAKOAI-118) are imported. Each enemy's resting body
 //! goes to `battle/enemy/` (one codex entry each); its other poses to
 //! `battle/pose/`; elite pieces to `battle/elite/`.
 
 use std::fs;
 use std::path::PathBuf;
 
-use content::cutouts::{centre_on_canvas, extract_row_items, make_contact_sheet};
+use content::cutouts::{
+    centre_on_canvas, extract_row_items, extract_row_items_at, make_contact_sheet,
+};
 
 /// Enclosed background patches at least this big are keyed out (ring
 /// interiors); smaller ones are white highlights and stay.
@@ -25,6 +27,7 @@ const MARGIN: u32 = 6;
 
 /// Canvas sizes from the README's suggestions.
 const BODY: (u32, u32) = (256, 256);
+const BOSS: (u32, u32) = (512, 512);
 const LINE: (u32, u32) = (512, 64);
 const TETHER: (u32, u32) = (256, 32);
 const ICON: (u32, u32) = (64, 64);
@@ -33,7 +36,7 @@ type Item = (&'static str, (u32, u32));
 
 /// Sheet stem under `design/art/enemies/`, then each item left to right:
 /// pack-relative output (or "" to skip) and canvas size.
-const SHEETS: [(&str, &[Item]); 6] = [
+const SHEETS: [(&str, &[Item]); 7] = [
     (
         "lancer-source-v1",
         &[
@@ -74,6 +77,16 @@ const SHEETS: [(&str, &[Item]); 6] = [
         ],
     ),
     (
+        "fissure-guardian-source-v1",
+        &[
+            ("battle/enemy/fissure_guardian", BOSS),
+            ("battle/pose/fissure_guardian_phase2", BOSS),
+            ("battle/fx/guardian_ring_flash", BODY),
+            ("battle/fx/guardian_charge_line", LINE),
+            ("battle/fx/death_guardian", BOSS),
+        ],
+    ),
+    (
         "elite-affixes-source-v1",
         &[
             ("battle/elite/affix_swift", ICON),
@@ -99,6 +112,13 @@ const SHEETS: [(&str, &[Item]); 6] = [
     ),
 ];
 
+/// Sheets the empty-column split gets wrong, with their source columns
+/// to split at instead (`extract_row_items_at`). The Guardian's shot-ring
+/// flash is hollow, with gaps between its arcs, and its left spike reaches
+/// under phase 2's paw (columns 976-980), so the widest empty columns fall
+/// inside the ring.
+const SPLIT_AT: [(&str, &[u32]); 1] = [("fissure-guardian-source-v1", &[455, 990, 1310, 1704])];
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let root = PathBuf::from(std::env::args().nth(1).unwrap_or_else(|| ".".into()));
     let mut contact = Vec::new();
@@ -107,8 +127,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let sheet = image::open(&path)
             .map_err(|e| format!("{}: {e}", path.display()))?
             .into_rgba8();
-        let cut = extract_row_items(&sheet, items.len(), HOLE_MIN_AREA)
-            .map_err(|e| format!("{stem}: {e}"))?;
+        let cut = match SPLIT_AT.iter().find(|(s, _)| *s == stem) {
+            Some((_, cuts)) => extract_row_items_at(&sheet, cuts, HOLE_MIN_AREA),
+            None => extract_row_items(&sheet, items.len(), HOLE_MIN_AREA),
+        }
+        .map_err(|e| format!("{stem}: {e}"))?;
         for (image, (out, (w, h))) in cut.into_iter().zip(items) {
             if out.is_empty() {
                 continue;

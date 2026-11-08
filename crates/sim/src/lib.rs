@@ -30,12 +30,12 @@ pub mod trig;
 pub mod tuning;
 
 pub use entity::{
-    elite_name, Affix, Blast, Elite, Enemy, EnemyKind, Fissure, Loadout, Loot, LootKind, Patch,
-    Pickup, Projectile, Ship, ShipKind, ShipSheet, ShipStats, Upgrades,
+    elite_name, Affix, Blast, Boss, BossAttack, Elite, Enemy, EnemyKind, Fissure, Loadout, Loot,
+    LootKind, Patch, Pickup, Projectile, Ship, ShipKind, ShipSheet, ShipStats, Upgrades,
 };
 pub use event::{Attack, SimEvent, Skill};
 pub use fixed::{FxVec2, SUB};
 pub use input::NetInput;
-pub use mission::{Mission, MissionOutcome, MissionStatus};
+pub use mission::{Mission, MissionOutcome, MissionStage, MissionStatus};
 pub use rng::SimRng;
 pub use state::{SimParams, SimState, MAX_PLAYERS};

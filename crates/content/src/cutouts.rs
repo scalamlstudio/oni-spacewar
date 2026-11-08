@@ -200,35 +200,8 @@ pub fn extract_row_items(
     if count == 0 {
         return Err("item count must be at least 1".into());
     }
-    let key = AlphaKey {
-        bg: sample_background(sheet),
-        zero_alpha_distance: 10,
-        full_alpha_distance: 44,
-    };
-    let mut keyed = key_background(sheet, key);
+    let (keyed, mask) = key_row_sheet(sheet, hole_min_area);
     let (width, height) = (sheet.width(), sheet.height());
-    // Enclosed background: background-like pixels the border key left opaque.
-    let enclosed: Vec<bool> = keyed
-        .pixels()
-        .zip(sheet.pixels())
-        .map(|(k, s)| k.0[3] == 255 && color_distance(s.0, key.bg) < key.full_alpha_distance)
-        .collect();
-    for hole in connected_regions(&enclosed, width, height) {
-        if hole.pixels.len() < hole_min_area {
-            continue;
-        }
-        for (x, y) in hole.pixels {
-            let d = color_distance(sheet.get_pixel(x, y).0, key.bg);
-            let alpha = if d <= key.zero_alpha_distance {
-                0
-            } else {
-                ((d - key.zero_alpha_distance) * 255
-                    / (key.full_alpha_distance - key.zero_alpha_distance)) as u8
-            };
-            keyed.get_pixel_mut(x, y).0[3] = alpha;
-        }
-    }
-    let mask = foreground_mask(&keyed);
     let used: Vec<bool> = (0..width)
         .map(|x| (0..height).any(|y| mask[idx(x, y, width)]))
         .collect();
@@ -264,6 +237,70 @@ pub fn extract_row_items(
         let item = cuts.partition_point(|&c| c <= region.bbox.min_x);
         items[item].push(region);
     }
+    split_overlapping(&mut items, count)?;
+    Ok(render_groups(&keyed, &items))
+}
+
+/// [`extract_row_items`] for a sheet whose items can't be told apart by
+/// empty columns (a hollow ring whose spikes reach under its neighbour):
+/// the items are split at the given source columns instead, and each piece
+/// goes to the item its bounding box's centre falls in.
+pub fn extract_row_items_at(
+    sheet: &RgbaImage,
+    cuts: &[u32],
+    hole_min_area: usize,
+) -> Result<Vec<RgbaImage>, String> {
+    let (keyed, mask) = key_row_sheet(sheet, hole_min_area);
+    let mut items: Vec<Vec<Region>> = vec![Vec::new(); cuts.len() + 1];
+    for region in connected_regions(&mask, sheet.width(), sheet.height()) {
+        if region.pixels.len() < 12 {
+            continue;
+        }
+        let centre = (region.bbox.min_x + region.bbox.max_x) / 2;
+        items[cuts.partition_point(|&c| c <= centre)].push(region);
+    }
+    if let Some(i) = items.iter().position(Vec::is_empty) {
+        return Err(format!("item {i} is empty"));
+    }
+    Ok(render_groups(&keyed, &items))
+}
+
+/// The row sheet with its border background keyed out, and every enclosed
+/// background patch of at least `hole_min_area` px; plus its foreground mask.
+fn key_row_sheet(sheet: &RgbaImage, hole_min_area: usize) -> (RgbaImage, Vec<bool>) {
+    let key = AlphaKey {
+        bg: sample_background(sheet),
+        zero_alpha_distance: 10,
+        full_alpha_distance: 44,
+    };
+    let mut keyed = key_background(sheet, key);
+    let (width, height) = (sheet.width(), sheet.height());
+    // Enclosed background: background-like pixels the border key left opaque.
+    let enclosed: Vec<bool> = keyed
+        .pixels()
+        .zip(sheet.pixels())
+        .map(|(k, s)| k.0[3] == 255 && color_distance(s.0, key.bg) < key.full_alpha_distance)
+        .collect();
+    for hole in connected_regions(&enclosed, width, height) {
+        if hole.pixels.len() < hole_min_area {
+            continue;
+        }
+        for (x, y) in hole.pixels {
+            let d = color_distance(sheet.get_pixel(x, y).0, key.bg);
+            let alpha = if d <= key.zero_alpha_distance {
+                0
+            } else {
+                ((d - key.zero_alpha_distance) * 255
+                    / (key.full_alpha_distance - key.zero_alpha_distance)) as u8
+            };
+            keyed.get_pixel_mut(x, y).0[3] = alpha;
+        }
+    }
+    let mask = foreground_mask(&keyed);
+    (keyed, mask)
+}
+
+fn split_overlapping(items: &mut Vec<Vec<Region>>, count: usize) -> Result<(), String> {
     // Items that overlap in columns (a dash smear running into a charge
     // line): split the widest group around its two largest pieces until
     // there are enough.
@@ -291,7 +328,12 @@ pub fn extract_row_items(
         items.insert(i, b);
         items.insert(i, a);
     }
-    Ok(items
+    Ok(())
+}
+
+/// Each group of pieces cropped to its own pixels.
+fn render_groups(keyed: &RgbaImage, items: &[Vec<Region>]) -> Vec<RgbaImage> {
+    items
         .iter()
         .map(|group| {
             let bbox = group_bbox(group);
@@ -299,7 +341,7 @@ pub fn extract_row_items(
             for region in group {
                 blit_region(
                     &mut out,
-                    &keyed,
+                    keyed,
                     region,
                     -(bbox.min_x as i32),
                     -(bbox.min_y as i32),
@@ -307,7 +349,7 @@ pub fn extract_row_items(
             }
             out
         })
-        .collect())
+        .collect()
 }
 
 fn group_bbox(group: &[Region]) -> BBox {

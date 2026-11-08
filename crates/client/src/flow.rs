@@ -160,21 +160,30 @@ pub struct Autoplay {
     /// Already quit to the Title and Continued from the reloaded save.
     pub reloaded: bool,
     /// Role telegraphs already shot this run (bit per `role_shot` index).
-    pub role_shots: u8,
+    pub role_shots: u16,
 }
 
 /// The first time each new role's warning is on screen, the autoplay shoots
 /// it (`15d-battle-<name>`): a Lancer halfway through its wind-up, an armed
 /// Bloater or a pending burst, a Warden shielding an ally, a Brood about to
 /// release; then the elites (TAKOAI-117, `15e-battle-<name>`): an elite on
-/// the field, a Blinking elite's mark halfway, elite loot's light beam.
+/// the field, a Blinking elite's mark halfway, elite loot's light beam;
+/// then the Fissure Guardian (TAKOAI-118, `15f-battle-guardian-<name>`):
+/// 1 s after it came out, a ring flash halfway, its phase change, a charge
+/// line halfway, and its loot burst from 0.5 s after the kill.
 /// Index = bit in `Autoplay::role_shots`.
-fn role_shot(world: &SimState, done: u8) -> Option<(usize, &'static str)> {
+fn role_shot(world: &SimState, done: u16) -> Option<(usize, &'static str)> {
     use sim::tuning::{
-        BLINK_MARK, BLOATER_FUSE, BROOD_WINDUP, LANCER_WINDUP, PICKUP_LIFETIME, TICKS_PER_SEC,
+        BLINK_MARK, BLOATER_FUSE, BROOD_WINDUP, GUARDIAN_CHARGE_WINDUP, GUARDIAN_OUTRO,
+        LANCER_WINDUP, PICKUP_LIFETIME, TICKS_PER_SEC,
     };
-    use sim::EnemyKind;
+    use sim::{BossAttack, EnemyKind, MissionStage};
     let enemies = &world.enemies;
+    let sec = TICKS_PER_SEC as u32;
+    let boss = world.guardian().and_then(|g| g.boss.map(|b| (g, b)));
+    let winding = |attack: BossAttack, at: u32| {
+        boss.is_some_and(|(g, b)| b.attack == attack && g.windup == at)
+    };
     let checks = [
         enemies
             .iter()
@@ -205,6 +214,13 @@ fn role_shot(world: &SimState, done: u8) -> Option<(usize, &'static str)> {
             .pickups
             .iter()
             .any(|p| p.elite && p.ttl == PICKUP_LIFETIME - TICKS_PER_SEC as u32 / 5),
+        world.mission.stage == MissionStage::Guardian
+            && world.frame == world.mission.guardian_frame + sec,
+        boss.is_some_and(|(_, b)| winding(BossAttack::Ring, b.ring().2 / 2)),
+        boss.is_some_and(|(_, b)| b.phase_frame > 0 && world.frame == b.phase_frame + sec / 5),
+        winding(BossAttack::Charge, GUARDIAN_CHARGE_WINDUP / 2),
+        world.mission.stage == MissionStage::Outro
+            && world.mission.outro <= GUARDIAN_OUTRO - sec / 2,
     ];
     let names = [
         "lancer",
@@ -214,6 +230,11 @@ fn role_shot(world: &SimState, done: u8) -> Option<(usize, &'static str)> {
         "e-elite",
         "e-elite-blink",
         "e-elite-loot",
+        "g-guardian",
+        "g-guardian-ring",
+        "g-guardian-enraged",
+        "g-guardian-charge",
+        "g-guardian-kill",
     ];
     (0..names.len())
         .find(|&i| checks[i] && done & (1 << i) == 0)
@@ -1214,12 +1235,16 @@ fn step_demo_battle(
 
 /// Scripted pilot for `--autoplay`: circles the nearest enemy at range,
 /// uses W when one gets close (Q too on Bulwark), and picks up loot when
-/// the coast is clear. Input-only, like a player.
+/// the coast is clear; against the Guardian, see `guardian_pilot`.
+/// Input-only, like a player.
 fn autopilot(world: &SimState) -> NetInput {
     let mut input = NetInput::default();
     let Some(ship) = world.ships.first() else {
         return input;
     };
+    if let Some(input) = guardian_pilot(world, ship) {
+        return input;
+    }
     let me = ship.pos;
     let mut aim_at = |p: FxVec2, buttons: u8| {
         input.buttons |= buttons;
@@ -1256,6 +1281,64 @@ fn autopilot(world: &SimState) -> NetInput {
         aim_at(e, INPUT_MOVE);
     }
     input
+}
+
+/// The autopilot against the Fissure Guardian, reading its telegraphs the
+/// way a player would: through a ring's wind-up it flies to the nearer gap
+/// (just outside its basic range of the Guardian's centre), off a charge
+/// line it steps sideways, and otherwise it circles the Guardian inside
+/// its range, using W when chaff gets close.
+fn guardian_pilot(world: &SimState, ship: &sim::Ship) -> Option<NetInput> {
+    use sim::trig::{cos_q16, sin_q16, ANGLE_STEPS};
+    use sim::BossAttack;
+    let g = world.guardian()?;
+    let b = g.boss?;
+    let me = ship.pos;
+    let away = me - g.pos;
+    let range = (ship.stats.basic_range - 30) * SUB;
+    let unit = |a: i32| FxVec2::new(cos_q16(a), sin_q16(a));
+    // A ring takes about a second to reach it after it fires: keep to the
+    // gap until it has passed.
+    let rest = if b.phase >= 2 {
+        sim::tuning::GUARDIAN_REST_P2
+    } else {
+        sim::tuning::GUARDIAN_REST_P1
+    };
+    let ring_out = b.attack == BossAttack::Ring && g.cooldown + 70 > rest;
+    let goal = match b.attack {
+        BossAttack::Ring if g.windup > 0 || ring_out => {
+            let gaps = [b.gap, (b.gap + ANGLE_STEPS / 2) % ANGLE_STEPS];
+            let dir = gaps
+                .into_iter()
+                .map(unit)
+                .min_by_key(|d| (g.pos + d.scale_to(range) - me).length_squared())?;
+            g.pos + dir.scale_to(range)
+        }
+        _ if g.dash > 0 || g.windup == 0 => {
+            // Circle: a quarter-turn step round it at range.
+            let side = FxVec2::new(-away.y, away.x).scale_to(80 * SUB);
+            g.pos + (away.scale_to(range) + side).scale_to(range)
+        }
+        BossAttack::Ring => g.pos + away.scale_to(range),
+        BossAttack::Charge => me + FxVec2::new(-g.aim.y, g.aim.x).scale_to(160 * SUB),
+        BossAttack::Summon => g.pos + away.scale_to(range),
+    };
+    // Chaff close by: W at it (on a frame it isn't steering).
+    let chaff = world
+        .enemies
+        .iter()
+        .filter(|e| e.boss.is_none())
+        .map(|e| e.pos)
+        .find(|p| (*p - me).length() < 120 * SUB as i64);
+    let (buttons, at) = match chaff {
+        Some(p) if world.frame % 10 == 5 => (INPUT_SKILL_W, p),
+        _ => (INPUT_MOVE, goal),
+    };
+    Some(NetInput {
+        buttons,
+        target_x: at.x / SUB,
+        target_y: at.y / SUB,
+    })
 }
 
 /// A smaller window than `DEFAULT_WINDOW`, for the pause-menu shots.
@@ -1866,9 +1949,12 @@ fn autoplay_flow(
             let done = autoplay.role_shots;
             if let Some((i, name)) = world.as_deref().and_then(|w| role_shot(w, done)) {
                 autoplay.role_shots |= 1 << i;
-                let name = match name.strip_prefix("e-") {
-                    Some(elite) => format!("15e-battle-{elite}"),
-                    None => format!("15d-battle-{name}"),
+                let name = if let Some(elite) = name.strip_prefix("e-") {
+                    format!("15e-battle-{elite}")
+                } else if let Some(boss) = name.strip_prefix("g-") {
+                    format!("15f-battle-{boss}")
+                } else {
+                    format!("15d-battle-{name}")
                 };
                 autoplay.shoot(&mut commands, &name);
             }

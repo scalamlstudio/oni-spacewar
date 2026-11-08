@@ -6,7 +6,7 @@
       "id": "core",
       "version": "0.2.0",
       "gameplay_affecting": false,
-      "content_hash": "d9ed182910c0eea71307953263c277b683cfb75eecc952a1e0fcccad8f8621b2",
+      "content_hash": "b4535d6ba9877eee7908965056fb3d929acb11b9e24e0ddcf798108e2ac0d654",
       "assets": [
         {
           "id": "core.audio.music.battle",
@@ -225,6 +225,15 @@
           "gameplay_affecting": false
         },
         {
+          "id": "core.battle.enemy.fissure_guardian",
+          "kind": "image/png",
+          "source": "source/core/battle/enemy/fissure_guardian.png",
+          "processed": "packs/core/processed/battle/enemy/fissure_guardian.png",
+          "compressed": "packs/core/bundles/battle/enemy/fissure_guardian.png.zst",
+          "hash": "939829810566b7f6bd872e92bcbe9531c125b86529121bafc53661f9e9bb9d0c",
+          "gameplay_affecting": false
+        },
+        {
           "id": "core.battle.enemy.void_bloater",
           "kind": "image/png",
           "source": "source/core/battle/enemy/void_bloater.png",
@@ -324,6 +333,15 @@
           "gameplay_affecting": false
         },
         {
+          "id": "core.battle.fx.death_guardian",
+          "kind": "image/png",
+          "source": "source/core/battle/fx/death_guardian.png",
+          "processed": "packs/core/processed/battle/fx/death_guardian.png",
+          "compressed": "packs/core/bundles/battle/fx/death_guardian.png.zst",
+          "hash": "2b933853d3f60614bc60333efaf34a12f86b5036b1b61f42c9713fff08f5578f",
+          "gameplay_affecting": false
+        },
+        {
           "id": "core.battle.fx.death_lancer",
           "kind": "image/png",
           "source": "source/core/battle/fx/death_lancer.png",
@@ -357,6 +375,24 @@
           "processed": "packs/core/processed/battle/fx/death_warden.png",
           "compressed": "packs/core/bundles/battle/fx/death_warden.png.zst",
           "hash": "4d406d83ecc733d5ac68a79590c51423bd328ad352f67696e4abf866926c0ab2",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.fx.guardian_charge_line",
+          "kind": "image/png",
+          "source": "source/core/battle/fx/guardian_charge_line.png",
+          "processed": "packs/core/processed/battle/fx/guardian_charge_line.png",
+          "compressed": "packs/core/bundles/battle/fx/guardian_charge_line.png.zst",
+          "hash": "b8f7aa1e306b75d94a2bbe630547863799cb159035bb479d61c9b445652a3b49",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.fx.guardian_ring_flash",
+          "kind": "image/png",
+          "source": "source/core/battle/fx/guardian_ring_flash.png",
+          "processed": "packs/core/processed/battle/fx/guardian_ring_flash.png",
+          "compressed": "packs/core/bundles/battle/fx/guardian_ring_flash.png.zst",
+          "hash": "b7e1149352f172be7cb622b7eeb8d7b5736344b2745aac561f82a6fa05a33d24",
           "gameplay_affecting": false
         },
         {
@@ -447,6 +483,15 @@
           "processed": "packs/core/processed/battle/fx/warden_tether.png",
           "compressed": "packs/core/bundles/battle/fx/warden_tether.png.zst",
           "hash": "5b241fe8514acd92e49cbdc91548a82844995ad57345840d9defbad189098e9f",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.pose.fissure_guardian_phase2",
+          "kind": "image/png",
+          "source": "source/core/battle/pose/fissure_guardian_phase2.png",
+          "processed": "packs/core/processed/battle/pose/fissure_guardian_phase2.png",
+          "compressed": "packs/core/bundles/battle/pose/fissure_guardian_phase2.png.zst",
+          "hash": "eae966a5cdcd18e004391aef1028121ce55dce6d221cbba2b1eb9de474ec44c6",
           "gameplay_affecting": false
         },
         {
@@ -1598,7 +1643,7 @@
           "source": "source/core/codex.json",
           "processed": "packs/core/processed/codex.json",
           "compressed": "packs/core/bundles/codex.json.zst",
-          "hash": "ce6e36999a1e809e1c3aa3948f8c650f76dfe6326824f9a744c84e4b3b960b46",
+          "hash": "1b72bb1e6eb2b2dd6a4d05575844389ce466ee59f4623259f70bb3f7cd01d1bb",
           "gameplay_affecting": false
         },
         {

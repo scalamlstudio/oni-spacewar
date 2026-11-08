@@ -11,6 +11,13 @@
 //! Art's aura, with their name, affix label and icon above them; their
 //! affixes' telegraphs (Warding shimmer, Blinking mark, Scorching patches,
 //! a chilled ship's tint) and the light beam on elite loot all read sim state.
+//!
+//! The Fissure Guardian (TAKOAI-118) is drawn from Art's phase 1 / phase 2
+//! poses; its warnings (the ring flash with the coming shots' slots and
+//! gaps, the charge line, the core throbbing before a summon) read its
+//! wind-up. A boss bar with its name sits bottom centre while it is out, the
+//! banner announces it, its phase change and its death, and the fissures
+//! dim once they have gone quiet.
 
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::input::mouse::AccumulatedMouseScroll;
@@ -19,12 +26,13 @@ use bevy::window::PrimaryWindow;
 use bevy_ggrs::{LocalPlayers, Session};
 use sim::state::warden_of;
 use sim::tuning::{
-    BLOATER_BLAST_RADIUS, BLOATER_FUSE, BROOD_WINDUP, FISSURE_RADIUS, LANCER_DASH_DISTANCE,
+    BLOATER_BLAST_RADIUS, BLOATER_FUSE, BROOD_WINDUP, FISSURE_RADIUS, GUARDIAN_CHARGE_DISTANCE,
+    GUARDIAN_CHARGE_WINDUP, GUARDIAN_SHOT_RADIUS, GUARDIAN_SUMMON_WINDUP, LANCER_DASH_DISTANCE,
     LANCER_WINDUP, SHOCKWAVE_RADIUS, SPITTER_FIRE_RANGE, SPITTER_WINDUP, TICKS_PER_SEC,
 };
 use sim::{
-    elite_name, Affix, Enemy, EnemyKind, FxVec2, LootKind, MissionStatus, Ship, ShipKind, SimState,
-    SUB,
+    elite_name, Affix, Boss, BossAttack, Enemy, EnemyKind, FxVec2, LootKind, MissionStage,
+    MissionStatus, Ship, ShipKind, SimState, SUB,
 };
 
 use crate::art::ContentImages;
@@ -55,6 +63,7 @@ impl Plugin for RenderPlugin {
                     follow_camera,
                     update_hud,
                     update_banner,
+                    update_boss_bar,
                     elite_labels,
                 ),
             );
@@ -66,6 +75,14 @@ struct Hud;
 
 #[derive(Component)]
 struct Banner;
+
+/// The Guardian's boss bar (bottom centre), its name and its fill.
+#[derive(Component)]
+struct BossBar;
+#[derive(Component)]
+struct BossName;
+#[derive(Component)]
+struct BossFill;
 
 /// Stable content IDs of the battle sprites (`assets/manifest.json`).
 pub mod ids {
@@ -81,6 +98,10 @@ pub mod ids {
     pub const ENEMY_BROOD: &str = "core.battle.enemy.void_brood";
     pub const ENEMY_BROOD_WINDUP: &str = "core.battle.pose.void_brood_windup";
     pub const ENEMY_WARDEN: &str = "core.battle.enemy.void_warden";
+    pub const ENEMY_GUARDIAN: &str = "core.battle.enemy.fissure_guardian";
+    pub const ENEMY_GUARDIAN_PHASE2: &str = "core.battle.pose.fissure_guardian_phase2";
+    pub const FX_GUARDIAN_RING_FLASH: &str = "core.battle.fx.guardian_ring_flash";
+    pub const FX_GUARDIAN_CHARGE_LINE: &str = "core.battle.fx.guardian_charge_line";
     pub const FX_LANCER_CHARGE_LINE: &str = "core.battle.fx.lancer_charge_line";
     pub const FX_BLOATER_WARNING_RING: &str = "core.battle.fx.bloater_warning_ring";
     pub const FX_WARDEN_TETHER: &str = "core.battle.fx.warden_tether";
@@ -181,6 +202,8 @@ const SPRITES: &[SpriteArt] = &[
     role(ids::ENEMY_BROOD),
     role(ids::ENEMY_BROOD_WINDUP),
     role(ids::ENEMY_WARDEN),
+    role(ids::ENEMY_GUARDIAN),
+    role(ids::ENEMY_GUARDIAN_PHASE2),
     // Fissures have no hit circle; drawn at about their spawn ring's size.
     // Static (no spin, TAKOAI-58), with a gentle pulse.
     SpriteArt {
@@ -208,6 +231,8 @@ pub fn battle_image_ids() -> Vec<&'static str> {
             ids::ELITE_AURA,
             ids::ELITE_BURNING_PATCH,
             ids::ELITE_TELEPORT_MARK,
+            ids::FX_GUARDIAN_RING_FLASH,
+            ids::FX_GUARDIAN_CHARGE_LINE,
         ])
         .chain(Affix::ALL.map(affix_icon))
         .collect()
@@ -303,14 +328,16 @@ pub fn enemy_id(kind: EnemyKind) -> &'static str {
         EnemyKind::Bloater => ids::ENEMY_BLOATER,
         EnemyKind::Brood => ids::ENEMY_BROOD,
         EnemyKind::Warden => ids::ENEMY_WARDEN,
+        EnemyKind::Guardian => ids::ENEMY_GUARDIAN,
     }
 }
 
 /// The pose an enemy is drawn in right now: the Lancer crouches through its
 /// wind-up and smears through its dash, the Bloater swells once armed, the
-/// Brood's sac bulges before a release.
+/// Brood's sac bulges before a release, the Guardian cracks open in phase 2.
 pub fn enemy_pose(e: &Enemy) -> &'static str {
     match e.kind {
+        EnemyKind::Guardian if e.boss.is_some_and(|b| b.phase >= 2) => ids::ENEMY_GUARDIAN_PHASE2,
         EnemyKind::Lancer if e.dash > 0 => ids::ENEMY_LANCER_DASH,
         EnemyKind::Lancer if e.windup > 0 => ids::ENEMY_LANCER_WINDUP,
         EnemyKind::Bloater if e.struck != 0 => ids::ENEMY_BLOATER_SWELLING,
@@ -351,6 +378,7 @@ const HUD_MARGIN: f32 = 10.0;
 
 fn setup_scene(mut commands: Commands) {
     commands.spawn(Camera2d);
+    spawn_boss_bar(&mut commands);
     commands.spawn((
         Hud,
         Text::new(""),
@@ -447,8 +475,9 @@ pub fn move_marker(gizmos: &mut Gizmos, t: Vec2, color: Color) {
 fn draw_world(mut gizmos: Gizmos, world: Option<Res<SimWorld>>, local: Option<Res<LocalPlayers>>) {
     let Some(world) = world else { return };
     for e in &world.enemies {
-        // An elite always shows its bar, in gold.
-        if e.hp < e.max_hp() || e.is_elite() {
+        // An elite always shows its bar, in gold; the Guardian has its own
+        // at the top of the screen.
+        if e.boss.is_none() && (e.hp < e.max_hp() || e.is_elite()) {
             let c = to_world(e.pos);
             let r = e.radius() as f32;
             let color = if e.is_elite() {
@@ -577,13 +606,19 @@ fn draw_sprites(
             }
             Some(draws.len() - 1)
         };
+        // Quiet fissures (the Guardian is out) dim.
+        let fissure_tint = if world.mission.stage == MissionStage::Kills {
+            Color::WHITE
+        } else {
+            Color::srgba(0.55, 0.5, 0.6, 0.55)
+        };
         for f in &world.fissures {
             push(
                 ids::FISSURE,
                 to_world(f.pos),
                 FISSURE_RADIUS as f32,
                 0.0,
-                Color::WHITE,
+                fissure_tint,
                 0.05,
             );
         }
@@ -661,10 +696,19 @@ fn draw_sprites(
                 Some(s) => (s.pos - e.pos).x,
                 None => 1,
             };
-            d.flip = !matches!(e.kind, EnemyKind::Swarmer | EnemyKind::Spitter) && toward < 0;
+            // The Guardian faces the camera: never mirrored.
+            d.flip = !matches!(
+                e.kind,
+                EnemyKind::Swarmer | EnemyKind::Spitter | EnemyKind::Guardian
+            ) && toward < 0;
             if e.kind == EnemyKind::Brood && e.windup > 0 {
                 let k = telegraph_done(e.windup, BROOD_WINDUP);
                 d.size *= 1.0 + 0.12 * k * (t * 18.0).sin().abs();
+            }
+            if e.boss.is_some_and(|b| b.attack == BossAttack::Summon) && e.windup > 0 {
+                let k = telegraph_done(e.windup, GUARDIAN_SUMMON_WINDUP);
+                d.size *= 1.0 + 0.08 * k * (t * 14.0).sin().abs();
+                d.color = hit_tint(0.15 * k);
             }
         }
         let glow = state
@@ -702,7 +746,11 @@ fn draw_sprites(
         }
         let windup = art.get(&mut images, ids::FX_SPITTER_WINDUP);
         let aim_line = art.get(&mut images, ids::FX_SPITTER_AIM_LINE);
-        for e in world.enemies.iter().filter(|e| e.windup > 0) {
+        for e in world
+            .enemies
+            .iter()
+            .filter(|e| e.kind == EnemyKind::Spitter && e.windup > 0)
+        {
             let at = to_world(e.pos);
             let (frame, done) = windup_frame(e.windup);
             if let Some(image) = aim_line.clone() {
@@ -756,6 +804,7 @@ fn draw_sprites(
             &mut images,
             &mut draws,
         );
+        guardian_telegraphs(world, &mut art, &mut images, &mut draws);
     }
 
     for (i, d) in draws.iter().enumerate() {
@@ -891,6 +940,90 @@ fn role_telegraphs(
                 0.16,
             ));
         }
+    }
+}
+
+/// Where the Guardian's coming ring will fly (unit directions), gaps left
+/// out: the same slots the sim fires (`Boss::in_gap`).
+pub fn ring_preview(b: &Boss) -> Vec<Vec2> {
+    let (n, _, _) = b.ring();
+    let steps = sim::trig::ANGLE_STEPS;
+    (0..n)
+        .filter(|&k| !Boss::in_gap(k, n))
+        .map(|k| {
+            // The sim's angle units -> radians, visual only.
+            let a = ((b.gap + k * steps / n) % steps) as f32 / steps as f32 * std::f32::consts::TAU;
+            Vec2::new(a.cos(), a.sin())
+        })
+        .collect()
+}
+
+/// The Guardian's warnings, from its wind-up:
+/// - Ring: Art's ring flash grows and brightens round it, and a faint shot
+///   marks each slot of the coming ring just outside it, so the two gaps
+///   show before a shot leaves.
+/// - Charge: its charge line along the locked dash, brightening.
+///
+/// (The summon throbs the body, in `draw_sprites`.)
+fn guardian_telegraphs(
+    world: &SimState,
+    art: &mut ContentImages,
+    images: &mut Assets<Image>,
+    draws: &mut Vec<Draw>,
+) {
+    let Some(g) = world.guardian() else {
+        return;
+    };
+    let Some(b) = g.boss.filter(|_| g.windup > 0) else {
+        return;
+    };
+    let at = to_world(g.pos);
+    let r = g.radius() as f32;
+    match b.attack {
+        BossAttack::Ring => {
+            let done = telegraph_done(g.windup, b.ring().2);
+            if let Some(image) = art.get(images, ids::FX_GUARDIAN_RING_FLASH) {
+                let size = crate::fx::GUARDIAN_RING_FLASH_SIZE * (0.6 + 0.4 * done);
+                draws.push(exact_draw(
+                    image,
+                    at,
+                    Vec2::splat(size),
+                    0.0,
+                    Color::srgba(1.0, 1.0, 1.0, 0.4 + 0.6 * done),
+                    0.26,
+                ));
+            }
+            if let Some(image) = art.get(images, ids::FX_SPIT) {
+                let out = r * 1.9;
+                let d = 2.0 * GUARDIAN_SHOT_RADIUS as f32 * SPRITE_SCALE;
+                for dir in ring_preview(&b) {
+                    draws.push(exact_draw(
+                        image.clone(),
+                        at + dir * out,
+                        Vec2::splat(d),
+                        dir.y.atan2(dir.x),
+                        Color::srgba(1.0, 1.0, 1.0, 0.15 + 0.45 * done),
+                        0.27,
+                    ));
+                }
+            }
+        }
+        BossAttack::Charge => {
+            if let Some(image) = art.get(images, ids::FX_GUARDIAN_CHARGE_LINE) {
+                let dir = to_world(g.aim).normalize_or_zero();
+                let done = telegraph_done(g.windup, GUARDIAN_CHARGE_WINDUP);
+                let len = GUARDIAN_CHARGE_DISTANCE as f32;
+                draws.push(exact_draw(
+                    image,
+                    at + dir * len / 2.0,
+                    Vec2::new(len, 2.0 * r * 0.7),
+                    dir.y.atan2(dir.x),
+                    Color::srgba(1.0, 1.0, 1.0, 0.35 + 0.65 * done),
+                    0.15,
+                ));
+            }
+        }
+        BossAttack::Summon => {}
     }
 }
 
@@ -1148,8 +1281,9 @@ pub fn clear_of(tip: Vec2, keep_out: Rect, centre: Vec2, on_top_or_bottom: bool)
     }
 }
 
-/// Every off-screen fissure gets an arrow at the screen edge pointing at
-/// it, kept off the HUD text. Client-only.
+/// Every off-screen fissure (or, once it is out, the Guardian) gets an
+/// arrow at the screen edge pointing at it, kept off the HUD text.
+/// Client-only.
 fn draw_fissure_pointers(
     mut gizmos: Gizmos,
     world: Option<Res<SimWorld>>,
@@ -1170,7 +1304,11 @@ fn draw_fissure_pointers(
         _ => 1.0,
     };
     let half = window.size() / 2.0 * scale;
-    let fissures: Vec<Vec2> = world.fissures.iter().map(|f| to_world(f.pos)).collect();
+    // While the Guardian is out the arrow points at it instead.
+    let fissures: Vec<Vec2> = match world.guardian() {
+        Some(g) => vec![to_world(g.pos)],
+        None => world.fissures.iter().map(|f| to_world(f.pos)).collect(),
+    };
     let centre = cam.translation.truncate();
     let size = 22.0 * scale;
     let inset = 24.0 * scale;
@@ -1319,9 +1457,21 @@ pub fn battle_hud(world: &SimState, me: usize) -> String {
     }
     let secs = world.frame / TICKS_PER_SEC as u32;
     let target = m.kill_target;
+    let objective = match m.stage {
+        MissionStage::Kills => format!(
+            "Kills {}/{target} - Objective: destroy {target} void monsters",
+            m.kills
+        ),
+        MissionStage::Guardian => {
+            format!(
+                "Kills {} - Objective: destroy the Fissure Guardian",
+                m.kills
+            )
+        }
+        MissionStage::Outro => format!("Kills {} - Fissure Guardian destroyed", m.kills),
+    };
     s += &format!(
-        "\nKills {}/{target} - Objective: destroy {target} void monsters\nTime {}:{:02}   Enemies {}\nLoot: {} credits, {} Void Crystal",
-        m.kills,
+        "\n{objective}\nTime {}:{:02}   Enemies {}\nLoot: {} credits, {} Void Crystal",
         secs / 60,
         secs % 60,
         world.enemies.len(),
@@ -1370,17 +1520,142 @@ fn update_hud(
     text.0 = s;
 }
 
+/// How long the Guardian's banners stay up (seconds).
+const GUARDIAN_BANNER_SECS: u32 = 3;
+
+/// The battle banner: the Guardian coming out, its phase change and its
+/// death (each for `GUARDIAN_BANNER_SECS`), then the mission's end.
+pub fn banner_text(world: &SimState) -> &'static str {
+    let m = &world.mission;
+    let recent = |frame: u32| world.frame.saturating_sub(frame) < GUARDIAN_BANNER_SECS * 60;
+    match m.status {
+        MissionStatus::Success => return "MISSION SUCCESS",
+        MissionStatus::Failed => return "MISSION FAILED",
+        MissionStatus::InProgress => {}
+    }
+    match m.stage {
+        MissionStage::Outro => "FISSURE GUARDIAN DESTROYED",
+        MissionStage::Guardian => {
+            let phase = world.guardian().and_then(|g| g.boss).map(|b| b.phase_frame);
+            match phase {
+                Some(f) if f > 0 && recent(f) => "THE GUARDIAN CRACKS OPEN",
+                _ if recent(m.guardian_frame) => "THE FISSURE GUARDIAN AWAKENS",
+                _ => "",
+            }
+        }
+        MissionStage::Kills => "",
+    }
+}
+
 fn update_banner(mut banner: Query<&mut Text, With<Banner>>, world: Option<Res<SimWorld>>) {
     let Ok(mut text) = banner.single_mut() else {
         return;
     };
-    let s = match world.as_deref().map(|w| &w.mission) {
-        Some(m) if m.status == MissionStatus::Success => "MISSION SUCCESS".to_string(),
-        Some(m) if m.status == MissionStatus::Failed => "MISSION FAILED".to_string(),
-        _ => String::new(),
-    };
+    let s = world.as_deref().map_or("", |w| banner_text(w)).to_string();
     if text.0 != s {
         text.0 = s;
+    }
+}
+
+/// Boss bar colours: phase 1, phase 2.
+const BOSS_FILL: Color = Color::srgb(0.78, 0.36, 1.0);
+const BOSS_FILL_ENRAGED: Color = Color::srgb(1.0, 0.3, 0.55);
+const BOSS_BAR_WIDTH: f32 = 420.0;
+
+/// The Guardian's bar: its name over a wide bar at the bottom centre,
+/// shown while it is out.
+fn spawn_boss_bar(commands: &mut Commands) {
+    commands
+        .spawn((
+            BossBar,
+            Node {
+                position_type: PositionType::Absolute,
+                width: percent(100),
+                // Bottom centre, above the controls line: the top is the
+                // HUD's.
+                bottom: px(40),
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                row_gap: px(4),
+                ..default()
+            },
+            Visibility::Hidden,
+        ))
+        .with_children(|root| {
+            root.spawn((
+                BossName,
+                Text::new("FISSURE GUARDIAN"),
+                TextFont {
+                    font_size: FontSize::Px(20.0),
+                    ..default()
+                },
+                TextColor(Color::srgb(0.95, 0.85, 1.0)),
+            ));
+            root.spawn((
+                Node {
+                    width: px(BOSS_BAR_WIDTH),
+                    height: px(14),
+                    border: UiRect::all(px(2)),
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(0.1, 0.05, 0.15, 0.85)),
+                BorderColor::all(Color::srgb(0.95, 0.85, 1.0)),
+            ))
+            .with_child((
+                BossFill,
+                Node {
+                    width: percent(100),
+                    height: percent(100),
+                    ..default()
+                },
+                BackgroundColor(BOSS_FILL),
+            ));
+        });
+}
+
+/// The boss bar's name line, fill fraction and colour, while the Guardian
+/// is out.
+pub fn boss_bar(world: &SimState) -> Option<(&'static str, f32, Color)> {
+    let g = world.guardian()?;
+    let b = g.boss?;
+    let frac = g.hp.max(0) as f32 / b.max_hp.max(1) as f32;
+    Some(if b.phase >= 2 {
+        ("FISSURE GUARDIAN  -  ENRAGED", frac, BOSS_FILL_ENRAGED)
+    } else {
+        ("FISSURE GUARDIAN", frac, BOSS_FILL)
+    })
+}
+
+fn update_boss_bar(
+    world: Option<Res<SimWorld>>,
+    mut bar: Query<&mut Visibility, With<BossBar>>,
+    mut name: Query<&mut Text, With<BossName>>,
+    mut fill: Query<(&mut Node, &mut BackgroundColor), With<BossFill>>,
+) {
+    let shown = world.as_deref().and_then(|w| boss_bar(w));
+    for mut v in &mut bar {
+        let want = if shown.is_some() {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+        if *v != want {
+            *v = want;
+        }
+    }
+    let Some((label, frac, color)) = shown else {
+        return;
+    };
+    for mut text in &mut name {
+        if text.0 != label {
+            text.0 = label.to_string();
+        }
+    }
+    for (mut node, mut bg) in &mut fill {
+        node.width = percent(100.0 * frac);
+        if bg.0 != color {
+            bg.0 = color;
+        }
     }
 }
 
@@ -1557,5 +1832,55 @@ mod tests {
             "{hud}"
         );
         assert!(hud.contains("35 credits"), "{hud}");
+    }
+
+    #[test]
+    fn guardian_bar_banners_and_ring_preview_follow_the_sim() {
+        use sim::input::NetInput;
+        let mut w = SimState::with_loadouts(5, &[Loadout::default()]).with_kill_target(1);
+        w.mission.spawn_timer = u32::MAX;
+        assert!(boss_bar(&w).is_none());
+        let mut e = sim::Enemy::new(EnemyKind::Swarmer, FxVec2::from_px(500, 500));
+        e.hp = 0;
+        w.enemies.push(e);
+        w.step(&[NetInput::default()]);
+        assert_eq!(banner_text(&w), "THE FISSURE GUARDIAN AWAKENS");
+        let (name, frac, _) = boss_bar(&w).expect("bar");
+        assert_eq!((name, frac), ("FISSURE GUARDIAN", 1.0));
+        let g = w.guardian().unwrap();
+        assert_eq!(enemy_pose(g), ids::ENEMY_GUARDIAN);
+        // The preview shows every slot the ring will fire, gaps left out.
+        let b = g.boss.unwrap();
+        let (n, _, _) = b.ring();
+        assert_eq!(
+            ring_preview(&b).len() as i32,
+            n - 2 * sim::tuning::GUARDIAN_RING_GAP
+        );
+        // Phase 2: the cracked pose, the enraged bar and banner.
+        let id = w.mission.guardian;
+        let g = w.enemies.iter_mut().find(|e| e.id == id).unwrap();
+        g.hp = g.max_hp() / 2;
+        w.step(&[NetInput::default()]);
+        assert_eq!(banner_text(&w), "THE GUARDIAN CRACKS OPEN");
+        assert_eq!(
+            enemy_pose(w.guardian().unwrap()),
+            ids::ENEMY_GUARDIAN_PHASE2
+        );
+        assert!(boss_bar(&w).unwrap().0.contains("ENRAGED"));
+        for _ in 0..GUARDIAN_BANNER_SECS * 60 {
+            w.step(&[NetInput::default()]);
+        }
+        assert_eq!(banner_text(&w), "");
+        // Dead: the bar goes, the banner says so, then the mission ends.
+        let g = w.enemies.iter_mut().find(|e| e.id == id).unwrap();
+        g.hp = 0;
+        w.step(&[NetInput::default()]);
+        assert!(boss_bar(&w).is_none());
+        assert_eq!(banner_text(&w), "FISSURE GUARDIAN DESTROYED");
+        assert!(battle_hud(&w, 0).contains("Fissure Guardian destroyed"));
+        for _ in 0..sim::tuning::GUARDIAN_OUTRO {
+            w.step(&[NetInput::default()]);
+        }
+        assert_eq!(banner_text(&w), "MISSION SUCCESS");
     }
 }

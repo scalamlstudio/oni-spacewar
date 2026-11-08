@@ -12,10 +12,24 @@ use crate::tuning::*;
 pub enum MissionStatus {
     #[default]
     InProgress,
-    /// Kill target reached.
+    /// The Fissure Guardian (after the kill target) is dead.
     Success,
     /// Every battleship in the mission was destroyed.
     Failed,
+}
+
+/// Where an Elimination is (decision B5): kills, then the Fissure Guardian,
+/// then a short outro after its death before the mission succeeds.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default, Serialize, Deserialize)]
+pub enum MissionStage {
+    /// Packs pour out of the fissures until the kill target.
+    #[default]
+    Kills,
+    /// The fissures are quiet; the Guardian is out.
+    Guardian,
+    /// The Guardian is dead: the field is cleared and the loot pulled in;
+    /// the mission succeeds when `Mission::outro` runs out.
+    Outro,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
@@ -37,6 +51,13 @@ pub struct Mission {
     /// Loot picked up so far (shared by every ship in the mission).
     pub collected: Loot,
     pub status: MissionStatus,
+    pub stage: MissionStage,
+    /// Frame the Guardian came out (meaningful from `MissionStage::Guardian`).
+    pub guardian_frame: u32,
+    /// The Guardian's entity ID (0 before it comes out).
+    pub guardian: u32,
+    /// `MissionStage::Outro`: ticks left before success.
+    pub outro: u32,
     /// Frame on which the mission ended (meaningful once `status` isn't
     /// `InProgress`).
     pub end_frame: u32,
@@ -53,6 +74,10 @@ impl Default for Mission {
             elites: 0,
             collected: Loot::default(),
             status: MissionStatus::InProgress,
+            stage: MissionStage::Kills,
+            guardian_frame: 0,
+            guardian: 0,
+            outro: 0,
             end_frame: 0,
         }
     }

@@ -27,7 +27,10 @@ under [`crates/`](crates/), separate from the design docs — see
      charge line, Bloaters burst a second after they die or touch you,
      Broods release Swarmers and Wardens shield nearby monsters; later
      some packs are led by a named elite with an affix, and it drops
-     extra loot under a light beam) and fly over loot to collect it
+     extra loot under a light beam) and fly over loot to collect it; at
+     the kill target the fissures go quiet and the Fissure Guardian comes
+     out: fly through the gaps in its shot rings and off its charge line,
+     and the mission is won when it dies
    - Save: `~/Library/Application Support/oni-spacewar/save.json` (macOS),
      `%APPDATA%\oni-spacewar\save.json` (Windows); `ONI_SAVE_DIR` overrides
  - `cargo run --release --bin oni-spacewar -- --autoplay --missions 2` — scripted demo run (QA)

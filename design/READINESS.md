@@ -558,8 +558,34 @@ Basic attacks fire at the nearest enemy in range (design/DESIGN.md § Player).
   every peer gets the same N. The HUD shows "Kills x/N"; the Berth's launch
   panel and the Result screen show the same N. `--autoplay` QA runs use
   10 instead (shorter test battles, TAKOAI-77); `--kill-target N` (1–100)
-  overrides either for manual testing. Reaching the target is Success immediately: remaining enemies vanish and every pickup still on the field is
-  collected.
+  overrides either for manual testing. Reaching the target brings out the
+  **Fissure Guardian** (TAKOAI-118, below); the mission is a Success when
+  it dies.
+- **Fissure Guardian** (TAKOAI-118, design/BATTLE.md #7, decision B5).
+  Numbers are engine defaults to tune in playtests.
+  - **Arrival:** at the kill target the fissures go quiet (no more packs),
+    the monsters still out are drawn back into the fissures (no kill, no
+    loot), and the Guardian comes out of the fissure nearest a battleship
+    with a banner. It closes in fast (130 px/s) until 600 px away, then
+    slowly (50 px/s) to 240 px, and doesn't back off. Nothing pushes it.
+    The edge arrow points at it.
+  - **HP:** 400 solo, +60% per extra battleship. A boss bar with its name
+    sits at the bottom centre.
+  - **Phase 1:** Ring, Ring, Summon, repeating, 1.6 s between attacks.
+    Ring: its body flashes for 0.8 s while faint shots mark every slot of
+    the coming ring, then 24 shots (8 damage, 130 px/s) leave evenly round
+    it with two opposite gaps of 3 slots. Summon: its core throbs for 0.8 s,
+    then 5 Swarmers appear round it.
+  - **Phase 2** (at half HP): a flash, shake and roar (1.5 s, no attack, still
+    hittable), the cracked-open pose and an "ENRAGED" bar. Ring, Charge,
+    Ring, Summon, 1 s apart. Rings are 32 shots at 190 px/s with a 0.6 s
+    flash; the charge shows its line for 0.8 s, then dashes 460 px in 0.5 s
+    (18 damage, each ship once); the summon brings 2 Bloaters.
+  - **Death:** a long hit-stop, a full-screen flash, heavy shake, Art's big
+    burst and a loot burst (10 × 10 credits and 5 Void Crystal under the
+    elite light beam). Everything else vanishes and for 2.5 s every pickup
+    is pulled to the nearest battleship; then Success (anything left is
+    collected).
 - **Failed:** every battleship in the mission is destroyed (solo: yours). Quit
   Mission from the pause menu also counts as Failed.
 - **No time limit.**
