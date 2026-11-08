@@ -173,7 +173,8 @@ segment (see § Missions, § Ship Modules).
 
 The first mission type, and the only one in the First Playable Demo.
 
-- **Objective:** kill N enemies (20 in the demo). The HUD shows "Kills x/N".
+- **Objective:** kill N enemies, N rolled per mission, 1–100, never above
+  100. The HUD shows "Kills x/N".
   Kills by any battleship in the instance count toward the shared total.
 - **Waves:** enemies arrive in a fixed sequence of waves. The next wave comes
   once the current one is cleared or a timeout passes, after a short pause with

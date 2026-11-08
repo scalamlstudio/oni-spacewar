@@ -5,6 +5,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::entity::Loot;
+use crate::rng::SimRng;
 use crate::tuning::*;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default, Serialize, Deserialize)]
@@ -23,7 +24,7 @@ pub struct Mission {
     /// `MAX_LIVE_ENEMIES` are alive).
     pub spawn_timer: u32,
     /// Kills that win the mission. Part of the start state, so identical on
-    /// every peer; `KILL_TARGET` unless the launch sets another value.
+    /// every peer; rolled from the seed unless the launch sets another value.
     pub kill_target: u32,
     pub kills: u32,
     pub spawned: u32,
@@ -42,7 +43,7 @@ impl Default for Mission {
     fn default() -> Self {
         Self {
             spawn_timer: SPAWN_FIRST,
-            kill_target: KILL_TARGET,
+            kill_target: KILL_TARGET_MAX,
             kills: 0,
             spawned: 0,
             introduced: 0,
@@ -51,6 +52,14 @@ impl Default for Mission {
             end_frame: 0,
         }
     }
+}
+
+/// The kill target a mission with this seed rolls, in
+/// `KILL_TARGET_MIN..=KILL_TARGET_MAX`. Its own RNG stream (seed mixed with a
+/// constant), so the mission's `SimRng` sequence is untouched.
+pub fn rolled_kill_target(seed: u64) -> u32 {
+    let mut rng = SimRng::new(seed ^ 0x6B11_7A26_E700_0128);
+    rng.range(KILL_TARGET_MIN as i32, KILL_TARGET_MAX as i32) as u32
 }
 
 impl Mission {

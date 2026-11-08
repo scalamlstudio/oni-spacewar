@@ -34,8 +34,9 @@ pub struct MissionConfig {
     pub mission_type: MissionType,
     pub ship_loadouts: Vec<ShipLoadout>,
     pub seed: u64,
-    /// Kills that win the Elimination: `KILL_TARGET` in normal play,
-    /// `AUTOPLAY_KILL_TARGET` under `--autoplay`, or `--kill-target N`.
+    /// Kills that win the Elimination: rolled from `seed` in normal play
+    /// (1..=100), `AUTOPLAY_KILL_TARGET` under `--autoplay`, or
+    /// `--kill-target N`; never above `KILL_TARGET_MAX`.
     pub kill_target: u32,
 }
 
@@ -145,7 +146,13 @@ pub fn upgrade_ids(save: &SaveGame) -> Vec<String> {
     ids
 }
 
-pub fn config_from_save(save: &SaveGame, kill_target: u32) -> MissionConfig {
+/// The next mission's config. `kill_target` overrides the seed's roll
+/// (`--autoplay`, `--kill-target N`); either way it is capped at 100.
+pub fn config_from_save(save: &SaveGame, kill_target: Option<u32>) -> MissionConfig {
+    let seed = 10_000 + save.mission_count as u64;
+    let kill_target = kill_target
+        .map(|n| n.min(sim::tuning::KILL_TARGET_MAX))
+        .unwrap_or_else(|| sim::mission::rolled_kill_target(seed));
     MissionConfig {
         mission_type: MissionType::Elimination,
         ship_loadouts: vec![ShipLoadout {
@@ -153,7 +160,7 @@ pub fn config_from_save(save: &SaveGame, kill_target: u32) -> MissionConfig {
             battleship_id: save.selected_battleship.clone(),
             upgrade_ids: upgrade_ids(save),
         }],
-        seed: 10_000 + save.mission_count as u64,
+        seed,
         kill_target,
     }
 }
@@ -246,7 +253,7 @@ mod tests {
                 upgrade_ids: upgrades.iter().map(|s| s.to_string()).collect(),
             }],
             seed: 1,
-            kill_target: sim::tuning::KILL_TARGET,
+            kill_target: sim::tuning::KILL_TARGET_MAX,
         }
     }
 
@@ -287,7 +294,7 @@ mod tests {
         save.carrier.place(ItemId::CombatSimulator, 12, 9, None);
         assert!(upgrade_ids(&save).is_empty());
         save.carrier.tick(4000);
-        let config = config_from_save(&save, sim::tuning::KILL_TARGET);
+        let config = config_from_save(&save, None);
         assert_eq!(config.ship_loadouts[0].upgrade_ids, ["combat_simulator_1"]);
         assert_eq!(sim_loadouts(&config)[0].upgrades.training, 1);
         let sim = launch_sim(&config);
@@ -300,9 +307,25 @@ mod tests {
     }
 
     #[test]
+    fn normal_play_rolls_each_missions_kill_target_from_its_seed() {
+        let mut save = SaveGame::default();
+        for count in 0..200 {
+            save.mission_count = count;
+            let config = config_from_save(&save, None);
+            let n = config.kill_target;
+            assert!((1..=sim::tuning::KILL_TARGET_MAX).contains(&n), "{n}");
+            assert_eq!(n, sim::mission::rolled_kill_target(config.seed));
+            assert_eq!(n, config_from_save(&save, None).kill_target);
+            assert_eq!(launch_sim(&config).mission.kill_target, n);
+        }
+        // An override is capped too.
+        assert_eq!(config_from_save(&save, Some(500)).kill_target, 100);
+    }
+
+    #[test]
     fn kill_target_goes_from_config_to_sim_and_result() {
         let save = SaveGame::default();
-        let config = config_from_save(&save, sim::tuning::AUTOPLAY_KILL_TARGET);
+        let config = config_from_save(&save, Some(sim::tuning::AUTOPLAY_KILL_TARGET));
         let mut sim = launch_sim(&config);
         assert_eq!(sim.mission.kill_target, 10);
         sim.mission.kills = 10;

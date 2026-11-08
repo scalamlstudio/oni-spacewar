@@ -211,7 +211,7 @@ const BRIEFING: [Line; 3] = [
     line(
         Crew::Pilot,
         "normal",
-        "A hundred kills clears it. They pour out of void fissures in packs.",
+        "Hit the kill count and we're clear. They pour out of void fissures in packs.",
     ),
     line(
         Crew::Pilot,
@@ -3211,6 +3211,7 @@ fn sync_overlay(
     mut art: ResMut<ContentImages>,
     mut images: ResMut<Assets<Image>>,
     save: Res<SaveSlot>,
+    kill_target: Res<flow::KillTarget>,
     existing: Query<Entity, With<OverlayUi>>,
 ) {
     if !overlay.is_changed() {
@@ -3341,6 +3342,13 @@ fn sync_overlay(
                     p.spawn((
                         Text::new(format!("Launch the {}?", ship.name)),
                         font(22.0, Color::WHITE),
+                    ));
+                    p.spawn((
+                        Text::new(format!(
+                            "Elimination: {} kills clears it",
+                            kill_target.for_mission(&game)
+                        )),
+                        font(17.0, Color::srgb(0.95, 0.85, 0.45)),
                     ));
                     p.spawn((
                         Text::new(ship_card(ship, levels)),

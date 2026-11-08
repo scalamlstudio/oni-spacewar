@@ -220,12 +220,14 @@ pub const WARDEN_KEEP_AWAY: i32 = 220;
 
 // --- Elimination: void fissures and the spawn director ----------------------
 
-/// Normal play's kill target. Raised from 40 with packs and one-hit
-/// Swarmers (TAKOAI-113): the scripted QA pilot wins in 60-77 s over 12
-/// seeds per ship (target 60-90 s). The sim reads the
-/// mission's own [`Mission::kill_target`](crate::Mission::kill_target), set
-/// at launch (`SimState::with_kill_target`); this is only its default.
-pub const KILL_TARGET: u32 = 100;
+/// Each Elimination's kill target is rolled from the mission seed in
+/// `KILL_TARGET_MIN..=KILL_TARGET_MAX` (TAKOAI-128; was a fixed 100). The
+/// sim reads the mission's own
+/// [`Mission::kill_target`](crate::Mission::kill_target)
+/// (`mission::rolled_kill_target`, or `SimState::with_kill_target`).
+pub const KILL_TARGET_MIN: u32 = 1;
+/// Hard cap: nothing raises a kill target above this.
+pub const KILL_TARGET_MAX: u32 = 100;
 /// `--autoplay` / test runs' kill target (TAKOAI-77): shorter QA battles.
 pub const AUTOPLAY_KILL_TARGET: u32 = 10;
 
