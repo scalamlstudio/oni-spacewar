@@ -384,9 +384,20 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   `build_left_ms`), kept sorted (`normalize`). Nothing else is stored:
   `TileMap::new` derives hull / wall / floor / doorway tiles from the rooms
   (`TileMap::art` names each one's content ID, § Carrier Revision 3 art import),
-  one 2-tile doorway per shared straight wall with ≥ 2 facing floor tiles
-  (`doorway_between`), its clearance tiles, and which doorways are open (both
-  rooms finished). `CATALOGUE` holds every item's footprint, layer (object /
+  the doorways (`doorways_between`), their clearance tiles, and which
+  doorways are open (both rooms finished). Doorways come from fixed **door
+  slots** (TAKOAI-126): `RoomSize::door_slots` puts one 2-tile slot in the
+  middle of each Small wall and two per Large wall, lined up with a Small
+  room flush against either corner. Two rooms are *joined* (`contact`) when
+  one's shared wall lies wholly on the other's and at least one slot of
+  each sits on the same tiles; every facing slot pair opens, and slots that
+  face nothing stay wall. A new room must be joined to at least one room
+  and offset from none (`room_fits`, reason "Doors must line up with an
+  existing room"); `snap_room` finds the nearest joined anchor within
+  `ROOM_SNAP` (3) tiles, which Build mode's room ghost and click use
+  (`carrier::room_anchor`). Old saves keep offset rooms: an offset pair
+  still gets the pre-TAKOAI-126 doorway (one, mid-stretch, ≥ 2 facing floor
+  tiles), so the layout stays connected and validates. `CATALOGUE` holds every item's footprint, layer (object /
   floor / wall), placement (free / against a wall / on a wall), category,
   count rule, cost and `build_seconds`; everything faces S. The checks
   (`can_place_room`, `can_remove_room`, `can_place`, `can_move`,
@@ -608,7 +619,8 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   demo loop; its battles end at 10 kills unless `--kill-target` says otherwise: New Game
   (or Continue the existing save), fly N battles (default 1) with a scripted
   pilot (input only, like a player). The first Carrier visit shows Build
-  mode's flyouts and walks the Pilot in all 8 directions. Between missions
+  mode's room ghost snapping (`11b-build-mode-room-snap`) and refused
+  (`11b-build-mode-room-no-doors`), the flyouts and walks the Pilot in all 8 directions. Between missions
   it builds the spec's example edits when it can afford them: a Small
   Room at (14,10) (mouse tile (17,12)), waits for it, then the Salvage
   Sorter at (19,11) with a few Art batch B pieces around it

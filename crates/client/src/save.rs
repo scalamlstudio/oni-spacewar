@@ -622,6 +622,26 @@ mod tests {
         c
     }
 
+    /// TAKOAI-126: a room built offset before door slots (one tile south
+    /// of flush east of the Workshop) loads as it was.
+    #[test]
+    fn an_offset_room_from_an_old_save_still_loads() {
+        use crate::layout::{Room, RoomSize};
+        let path = temp_file("offset-room");
+        let mut carrier = Carrier::starting();
+        carrier.rooms.push(Room::new(RoomSize::Small, 21, 6));
+        carrier.normalize();
+        let save = SaveGame {
+            carrier,
+            ..Default::default()
+        };
+        store(&path, &save).unwrap();
+        let loaded = load(&path).unwrap();
+        assert_eq!(loaded, save);
+        assert_eq!(loaded.carrier.validate(), Ok(()));
+        let _ = fs::remove_file(path);
+    }
+
     #[test]
     fn built_v5_layout_survives_a_round_trip() {
         let path = temp_file("layout");
