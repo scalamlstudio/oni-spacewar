@@ -107,7 +107,7 @@ const SHEETS: [(&str, &str, &[&str], u32, u32); 2] = [
 /// `design/art/battle/feedback/README-v1.md`) is already transparent, one
 /// row of 256 x 256 frames with an 8 px margin; the client cuts the frames
 /// (`fx::FX`).
-const STRIPS: [(&str, &str); 6] = [
+const STRIPS: [(&str, &str); 8] = [
     ("battle/feedback/hit-enemy-v1", "battle/fx/hit_enemy"),
     ("battle/feedback/hit-ship-v1", "battle/fx/hit_ship"),
     (
@@ -125,6 +125,16 @@ const STRIPS: [(&str, &str); 6] = [
     (
         "battle/feedback/scatter-impact-v1",
         "battle/fx/scatter_impact",
+    ),
+    // The Spitter's wind-up glow (4 frames) and its stretchable aim line
+    // (one cell; the client stretches only its inner UV region).
+    (
+        "battle/feedback/spitter-windup-v1",
+        "battle/fx/spitter_windup",
+    ),
+    (
+        "battle/feedback/spitter-aim-line-v1",
+        "battle/fx/spitter_aim_line",
     ),
 ];
 

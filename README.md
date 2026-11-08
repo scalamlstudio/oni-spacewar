@@ -22,7 +22,8 @@ under [`crates/`](crates/), separate from the design docs — see
      refund) work on what is there; WASD / arrows pan, mouse wheel zooms,
      right click / Esc drops the pick, Esc / B again leaves
    - Battle: left-click to move, auto-fire, Q / W skills, Esc pause;
-     destroy 20 enemies and fly over loot to collect it
+     destroy 100 enemies (they come in packs; Spitters glow and
+     show an aim line before they fire) and fly over loot to collect it
    - Save: `~/Library/Application Support/oni-spacewar/save.json` (macOS),
      `%APPDATA%\oni-spacewar\save.json` (Windows); `ONI_SAVE_DIR` overrides
  - `cargo run --release --bin oni-spacewar -- --autoplay --missions 2` — scripted demo run (QA)

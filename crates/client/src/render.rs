@@ -12,7 +12,9 @@ use bevy::input::mouse::AccumulatedMouseScroll;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy_ggrs::{LocalPlayers, Session};
-use sim::tuning::{FISSURE_RADIUS, SHOCKWAVE_RADIUS, TICKS_PER_SEC};
+use sim::tuning::{
+    FISSURE_RADIUS, SHOCKWAVE_RADIUS, SPITTER_FIRE_RANGE, SPITTER_WINDUP, TICKS_PER_SEC,
+};
 use sim::{EnemyKind, FxVec2, LootKind, MissionStatus, Ship, ShipKind, SimState, SUB};
 
 use crate::art::ContentImages;
@@ -63,6 +65,8 @@ pub mod ids {
     pub const LOOT_CREDITS: &str = crate::art::ids::ICON_CREDITS;
     pub const LOOT_VOID_CRYSTAL: &str = crate::art::ids::ICON_VOID_CRYSTAL;
     pub const FX_SPIT: &str = "core.battle.fx.spit";
+    pub const FX_SPITTER_WINDUP: &str = "core.battle.fx.spitter_windup";
+    pub const FX_SPITTER_AIM_LINE: &str = "core.battle.fx.spitter_aim_line";
     pub const FISSURE: &str = "core.battle.env.void_fissure";
 }
 
@@ -141,7 +145,30 @@ pub fn battle_image_ids() -> Vec<&'static str> {
         .iter()
         .map(|s| s.id)
         .chain(crate::fx::FX.iter().map(|f| f.id))
+        .chain([ids::FX_SPITTER_WINDUP, ids::FX_SPITTER_AIM_LINE])
         .collect()
+}
+
+/// The Spitter's wind-up telegraph (TAKOAI-113, Art's
+/// `design/art/battle/feedback/README-v1.md`): a 4-frame glow over the
+/// Spitter, one frame per 100 ms of the sim's 0.4 s wind-up, and an aim
+/// line from it along the locked shot direction. Both are picked from the
+/// sim's `Enemy::windup`, so they always match when the shot leaves.
+const WINDUP_FRAMES: u32 = 4;
+const WINDUP_SIZE: f32 = 96.0;
+/// The aim line texture's stretchable inner region (x, y, w, h in px).
+const AIM_LINE_UV: (f32, f32, f32, f32) = (16.0, 120.0, 224.0, 16.0);
+const AIM_LINE_LENGTH: f32 = SPITTER_FIRE_RANGE as f32;
+const AIM_LINE_THICKNESS: f32 = 6.0;
+/// The strip's frame size (256 x 256 cells, one row).
+const FX_CELL: f32 = 256.0;
+
+/// Which wind-up frame to show with `windup` ticks left, and how far
+/// through the wind-up it is (0..1).
+pub fn windup_frame(windup: u32) -> (u32, f32) {
+    let done = SPITTER_WINDUP.saturating_sub(windup);
+    let frame = (done * WINDUP_FRAMES / SPITTER_WINDUP).min(WINDUP_FRAMES - 1);
+    (frame, done as f32 / SPITTER_WINDUP as f32)
 }
 
 /// Loot is drawn as if its hit circle had this radius (pickups have none;
@@ -332,6 +359,10 @@ struct Draw {
     angle: f32,
     color: Color,
     z: f32,
+    /// Part of the image to draw (px), and then its exact size: for strip
+    /// frames and the stretched aim line. `None` draws the whole image at
+    /// `size`.
+    rect: Option<(Rect, Vec2)>,
 }
 
 /// Reused sprite entities (hidden when unused) plus per-ship facing, which
@@ -417,6 +448,7 @@ fn draw_sprites(
                     angle: angle + spec.spin * t,
                     color,
                     z,
+                    rect: None,
                 });
             }
         };
@@ -498,19 +530,63 @@ fn draw_sprites(
                 angle: 0.0,
                 color: PLAYER_COLORS[p.owner % PLAYER_COLORS.len()],
                 z: 0.5,
+                rect: None,
             });
+        }
+        let windup = art.get(&mut images, ids::FX_SPITTER_WINDUP);
+        let aim_line = art.get(&mut images, ids::FX_SPITTER_AIM_LINE);
+        for e in world.enemies.iter().filter(|e| e.windup > 0) {
+            let at = to_world(e.pos);
+            let (frame, done) = windup_frame(e.windup);
+            if let Some(image) = aim_line.clone() {
+                let dir = to_world(e.aim).normalize_or_zero();
+                let (x, y, w, h) = AIM_LINE_UV;
+                draws.push(Draw {
+                    image,
+                    pos: at + dir * AIM_LINE_LENGTH / 2.0,
+                    size: 0.0,
+                    angle: dir.y.atan2(dir.x),
+                    color: Color::srgba(1.0, 1.0, 1.0, 0.45 + 0.55 * done),
+                    z: 0.15,
+                    rect: Some((
+                        Rect::new(x, y, x + w, y + h),
+                        Vec2::new(AIM_LINE_LENGTH, AIM_LINE_THICKNESS),
+                    )),
+                });
+            }
+            if let Some(image) = windup.clone() {
+                let x = frame as f32 * FX_CELL;
+                draws.push(Draw {
+                    image,
+                    pos: at,
+                    size: 0.0,
+                    angle: 0.0,
+                    color: Color::WHITE,
+                    z: 0.25,
+                    rect: Some((
+                        Rect::new(x, 0.0, x + FX_CELL, FX_CELL),
+                        Vec2::splat(WINDUP_SIZE),
+                    )),
+                });
+            }
         }
     }
 
     for (i, d) in draws.iter().enumerate() {
-        let px = ContentImages::size(&images, &d.image);
-        let size = px * (d.size / px.max_element());
+        let (rect, size) = match d.rect {
+            Some((rect, size)) => (Some(rect), size),
+            None => {
+                let px = ContentImages::size(&images, &d.image);
+                (None, px * (d.size / px.max_element()))
+            }
+        };
         let tf = Transform::from_translation(d.pos.extend(d.z))
             .with_rotation(Quat::from_rotation_z(d.angle));
         let sprite = Sprite {
             image: d.image.clone(),
             color: d.color,
             custom_size: Some(size),
+            rect,
             ..default()
         };
         match state.pool.get(i).copied() {
@@ -900,6 +976,21 @@ mod tests {
     }
 
     #[test]
+    fn windup_glow_steps_through_its_frames_with_the_sim() {
+        assert_eq!(windup_frame(SPITTER_WINDUP), (0, 0.0));
+        let frames: Vec<_> = (1..=SPITTER_WINDUP)
+            .rev()
+            .map(|w| windup_frame(w).0)
+            .collect();
+        // One frame per 100 ms: four equal steps, last frame at the end.
+        for f in 0..WINDUP_FRAMES {
+            let n = frames.iter().filter(|&&x| x == f).count() as u32;
+            assert_eq!(n, SPITTER_WINDUP / WINDUP_FRAMES, "frame {f}");
+        }
+        assert_eq!(windup_frame(1).0, WINDUP_FRAMES - 1);
+    }
+
+    #[test]
     fn heading_points_art_along_movement() {
         assert!(heading(Vec2::Y).abs() < 1e-6);
         assert!((heading(Vec2::X) + std::f32::consts::FRAC_PI_2).abs() < 1e-6);
@@ -922,7 +1013,8 @@ mod tests {
             .push(sim::Enemy::new(EnemyKind::Swarmer, FxVec2::ZERO));
         let hud = battle_hud(&w, 0);
         assert!(hud.contains("140/140"), "{hud}");
-        assert!(hud.contains("Kills 7/40"), "{hud}");
+        let kills = format!("Kills 7/{}", sim::tuning::KILL_TARGET);
+        assert!(hud.contains(&kills), "{hud}");
         assert!(hud.contains("Time 1:15   Enemies 1"), "{hud}");
         assert!(!hud.contains("Wave"), "{hud}");
         assert!(
