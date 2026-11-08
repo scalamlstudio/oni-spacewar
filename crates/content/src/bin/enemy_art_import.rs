@@ -5,10 +5,11 @@
 //! (`cutouts::extract_row_items`), never by equal widths, and centred on
 //! the suggested padded canvas. Run `content-pipeline` afterwards.
 //!
-//! Only the Step 3 roles (Lancer, Bloater, Brood, Warden) are imported;
-//! the Fissure Guardian and elite sheets come with their own steps. Each
-//! enemy's resting body goes to `battle/enemy/` (one codex entry each);
-//! its other poses to `battle/pose/`.
+//! The Step 3 roles (Lancer, Bloater, Brood, Warden) and the Step 4 elite
+//! sheets (affix icons, aura, burning patch, teleport mark) are imported;
+//! the Fissure Guardian comes with its own step. Each enemy's resting body
+//! goes to `battle/enemy/` (one codex entry each); its other poses to
+//! `battle/pose/`; elite pieces to `battle/elite/`.
 
 use std::fs;
 use std::path::PathBuf;
@@ -26,12 +27,13 @@ const MARGIN: u32 = 6;
 const BODY: (u32, u32) = (256, 256);
 const LINE: (u32, u32) = (512, 64);
 const TETHER: (u32, u32) = (256, 32);
+const ICON: (u32, u32) = (64, 64);
 
 type Item = (&'static str, (u32, u32));
 
 /// Sheet stem under `design/art/enemies/`, then each item left to right:
 /// pack-relative output (or "" to skip) and canvas size.
-const SHEETS: [(&str, &[Item]); 4] = [
+const SHEETS: [(&str, &[Item]); 6] = [
     (
         "lancer-source-v1",
         &[
@@ -69,6 +71,30 @@ const SHEETS: [(&str, &[Item]); 4] = [
             ("battle/fx/warden_tether", TETHER),
             ("battle/fx/warden_shield", BODY),
             ("battle/fx/death_warden", BODY),
+        ],
+    ),
+    (
+        "elite-affixes-source-v1",
+        &[
+            ("battle/elite/affix_swift", ICON),
+            ("battle/elite/affix_volatile", ICON),
+            ("battle/elite/affix_warding", ICON),
+            ("battle/elite/affix_blinking", ICON),
+            ("battle/elite/affix_splitting", ICON),
+            ("battle/elite/affix_scorching", ICON),
+            ("battle/elite/affix_chilling", ICON),
+        ],
+    ),
+    (
+        "elite-effects-source-v1",
+        &[
+            // Three aura options, none final (README-v1.md): ship the first
+            // (plain) one as the elite outline; the others stay in design/.
+            ("battle/elite/aura", BODY),
+            ("", BODY),
+            ("", BODY),
+            ("battle/elite/burning_patch", BODY),
+            ("battle/elite/teleport_mark", BODY),
         ],
     ),
 ];

@@ -319,6 +319,7 @@ pub fn shake_for(ev: &SimEvent, me: usize) -> f32 {
         },
         // A burst on screen rattles the camera a little even when it misses.
         SimEvent::Burst { .. } => 0.2,
+        SimEvent::Killed { elite: true, .. } => 0.4,
         _ => 0.0,
     }
 }
@@ -337,10 +338,11 @@ impl HitStop {
     }
 }
 
-/// Seconds of hit-stop a kill gives. Reserved for elite and boss kills
-/// (Steps 4 and 5); no current enemy has any.
-pub fn hit_stop_secs(kind: EnemyKind) -> Option<f32> {
+/// Seconds of hit-stop a kill gives: elite kills (TAKOAI-117) get a short
+/// freeze; ordinary enemies none. The Fissure Guardian will get a longer one.
+pub fn hit_stop_secs(kind: EnemyKind, elite: bool) -> Option<f32> {
     match kind {
+        _ if elite => Some(ELITE_HIT_STOP),
         EnemyKind::Swarmer
         | EnemyKind::Spitter
         | EnemyKind::Lancer
@@ -349,6 +351,11 @@ pub fn hit_stop_secs(kind: EnemyKind) -> Option<f32> {
         | EnemyKind::Warden => None,
     }
 }
+
+/// An elite kill: freeze this long, and draw its death burst this many
+/// times bigger.
+pub const ELITE_HIT_STOP: f32 = 0.12;
+pub const ELITE_BURST_SCALE: f32 = 2.2;
 
 // ---- Systems ---------------------------------------------------------------
 
@@ -375,8 +382,7 @@ fn spawn_feedback(
         .map(|s| s.settings.battle.clone())
         .unwrap_or_default();
     let me = local_handle(local.as_deref());
-    let mut bursts: Vec<(&FxArt, Vec2)> = Vec::new();
-    let mut play = |fx: &'static FxArt, at: Vec2| bursts.push((fx, at));
+    let mut bursts: Vec<(&FxArt, Vec2, f32)> = Vec::new();
     let font = art.font(&mut fonts, crate::art::ids::FONT_DISPLAY);
     let mut new_numbers = 0;
     for ev in events.fresh() {
@@ -386,23 +392,26 @@ fn spawn_feedback(
             } => {
                 flash.0.insert(enemy, now);
                 match attack {
-                    Attack::Scatter => play(&SCATTER_IMPACT, to_world(pos)),
-                    _ => play(&HIT_ENEMY, to_world(pos)),
+                    Attack::Scatter => bursts.push((&SCATTER_IMPACT, to_world(pos), 1.0)),
+                    _ => bursts.push((&HIT_ENEMY, to_world(pos), 1.0)),
                 }
             }
-            SimEvent::Killed { kind, pos, .. } => {
-                play(death_burst(kind), to_world(pos));
-                if let Some(secs) = hit_stop_secs(kind) {
+            SimEvent::Killed {
+                kind, elite, pos, ..
+            } => {
+                let scale = if elite { ELITE_BURST_SCALE } else { 1.0 };
+                bursts.push((death_burst(kind), to_world(pos), scale));
+                if let Some(secs) = hit_stop_secs(kind, elite) {
                     hit_stop.until = hit_stop.until.max(now + secs);
                 }
             }
-            SimEvent::ShipDamaged { pos, .. } => play(&HIT_SHIP, to_world(pos)),
-            SimEvent::Burst { pos, .. } => play(&BLOATER_EXPLOSION, to_world(pos)),
+            SimEvent::ShipDamaged { pos, .. } => bursts.push((&HIT_SHIP, to_world(pos), 1.0)),
+            SimEvent::Burst { pos, .. } => bursts.push((&BLOATER_EXPLOSION, to_world(pos), 1.0)),
             SimEvent::SkillUsed {
                 skill: Skill::Shockwave,
                 pos,
                 ..
-            } => play(&SHOCKWAVE_IMPACT, to_world(pos)),
+            } => bursts.push((&SHOCKWAVE_IMPACT, to_world(pos), 1.0)),
             _ => {}
         }
         if battle.screen_shake {
@@ -436,7 +445,7 @@ fn spawn_feedback(
         ));
         new_numbers += 1;
     }
-    for (fx, at) in bursts {
+    for (fx, at, scale) in bursts {
         let Some(image) = art.get(&mut images, fx.id) else {
             continue;
         };
@@ -461,7 +470,7 @@ fn spawn_feedback(
                 frames: fx.frames,
             },
             Sprite {
-                custom_size: Some(Vec2::splat(fx.size)),
+                custom_size: Some(Vec2::splat(fx.size * scale)),
                 ..Sprite::from_atlas_image(image, TextureAtlas { layout, index: 0 })
             },
             Transform::from_translation(at.extend(0.6)),
@@ -695,9 +704,10 @@ mod tests {
     }
 
     #[test]
-    fn hit_stop_is_reserved_for_elites_and_bosses() {
+    fn hit_stop_is_for_elite_kills_only() {
         for kind in EnemyKind::ALL {
-            assert_eq!(hit_stop_secs(kind), None);
+            assert_eq!(hit_stop_secs(kind, false), None);
+            assert_eq!(hit_stop_secs(kind, true), Some(ELITE_HIT_STOP));
         }
         let stop = HitStop { until: 2.0 };
         assert!(stop.active(1.9) && !stop.active(2.0));

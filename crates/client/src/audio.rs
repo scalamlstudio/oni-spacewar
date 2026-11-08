@@ -54,7 +54,7 @@ pub const BULWARK_BASTION: Sfx = sfx("core.audio.sfx.bulwark_bastion", 0.6, 0.0)
 pub const BULWARK_SHOCKWAVE: Sfx = sfx("core.audio.sfx.bulwark_shockwave", 0.8, 0.0);
 pub const CREDIT_PICKUP: Sfx = sfx("core.audio.sfx.credit_pickup", 0.4, 0.05);
 pub const CRYSTAL_PICKUP: Sfx = sfx("core.audio.sfx.crystal_pickup", 0.6, 0.05);
-/// Reserved for rare module drops (Step 7); nothing plays it yet.
+/// An elite's loot drop (TAKOAI-117); later also rare module drops.
 pub const RARE_DROP: Sfx = sfx("core.audio.sfx.rare_drop", 0.8, 0.0);
 pub const MISSION_SUCCESS: Sfx = sfx("core.audio.sfx.mission_success", 0.8, 0.0);
 pub const MISSION_FAILURE: Sfx = sfx("core.audio.sfx.mission_failure", 0.8, 0.0);
@@ -88,6 +88,7 @@ pub fn sound_for(ev: &SimEvent, me: usize) -> Option<Sfx> {
         SimEvent::Hit { attack, .. } if !matches!(attack, Attack::Shockwave | Attack::Blast) => HIT,
         // Placeholder: the Bloater's burst borrows the Shockwave's boom.
         SimEvent::Burst { .. } => BULWARK_SHOCKWAVE,
+        SimEvent::Killed { elite: true, .. } => RARE_DROP,
         SimEvent::Killed { .. } => ENEMY_DEATH,
         SimEvent::ShipDamaged { ship, .. } if ship == me => SHIP_HIT,
         SimEvent::SkillUsed { skill, .. } => match skill {
@@ -288,5 +289,13 @@ mod tests {
             sound_for(&SimEvent::MissionEnded { success: false }, 0),
             Some(MISSION_FAILURE)
         );
+        let killed = |elite| SimEvent::Killed {
+            enemy: 1,
+            kind: sim::EnemyKind::Spitter,
+            elite,
+            pos: FxVec2::ZERO,
+        };
+        assert_eq!(sound_for(&killed(false), 0), Some(ENEMY_DEATH));
+        assert_eq!(sound_for(&killed(true), 0), Some(RARE_DROP));
     }
 }

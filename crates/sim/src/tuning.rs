@@ -297,6 +297,54 @@ pub const WARDEN_PACK_SWARMERS: (i32, i32) = (6, 9);
 pub const BROOD_PACK_SPITTERS: (i32, i32) = (1, 2);
 pub const BROOD_PACK_SWARMERS: (i32, i32) = (2, 3);
 
+/// Elite packs (TAKOAI-117, design/BATTLE.md #6 and § Elite affixes).
+/// Elites unlock once the kills reach `ELITE_UNLOCK_PCT`% of the target;
+/// the first pack after that always has one, later packs
+/// `ELITE_PACK_PCT`% of the time. The pack's first enemy (its role enemy
+/// or a Spitter, else a Swarmer) becomes the leader: `ELITE_HP_MULT`× HP,
+/// `ELITE_SIZE_PCT`% size and `ELITE_AFFIXES` affix(es) (Threat levels
+/// will raise it to 2). Engine defaults to tune in playtests.
+pub const ELITE_UNLOCK_PCT: u32 = 15;
+pub const ELITE_PACK_PCT: i32 = 25;
+pub const ELITE_HP_MULT: i32 = 4;
+pub const ELITE_SIZE_PCT: i32 = 140;
+pub const ELITE_AFFIXES: usize = 1;
+/// An elite drops `ELITE_CREDITS_MULT`× its kind's credits and always
+/// `ELITE_CRYSTALS` Void Crystal.
+pub const ELITE_CREDITS_MULT: u32 = 4;
+pub const ELITE_CRYSTALS: u32 = 2;
+/// Swift: +40% speed.
+pub const SWIFT_SPEED_PCT: i32 = 40;
+/// Warding: every `WARDING_INTERVAL` it shields itself and allies within
+/// `WARDING_RANGE` px for `WARDING_DURATION` (half damage).
+pub const WARDING_FIRST: u32 = ticks(2, 1);
+pub const WARDING_INTERVAL: u32 = ticks(5, 1);
+pub const WARDING_DURATION: u32 = ticks(2, 1);
+pub const WARDING_RANGE: i32 = 160;
+/// Blinking: with the ship within `BLINK_RANGE` px it marks a spot
+/// `BLINK_GAP` px off the ship's edge (on its own side) and lands there
+/// `BLINK_MARK` later; then waits `BLINK_INTERVAL`.
+pub const BLINK_FIRST: u32 = ticks(2, 1);
+pub const BLINK_INTERVAL: u32 = ticks(5, 1);
+pub const BLINK_MARK: u32 = ticks(1, 2);
+pub const BLINK_RANGE: i32 = 700;
+pub const BLINK_GAP: i32 = 24;
+/// Splitting: `SPLIT_COPIES` normal copies, `SPLIT_OFFSET` px from where
+/// it died.
+pub const SPLIT_COPIES: i32 = 2;
+pub const SPLIT_OFFSET: i32 = 20;
+/// Scorching: a patch every `SCORCH_DROP_INTERVAL` that burns for
+/// `SCORCH_LIFETIME`; a ship in any patch takes `SCORCH_DAMAGE` every
+/// `SCORCH_TICK`.
+pub const SCORCH_DROP_INTERVAL: u32 = ticks(1, 2);
+pub const SCORCH_LIFETIME: u32 = ticks(3, 1);
+pub const SCORCH_RADIUS: i32 = 26;
+pub const SCORCH_DAMAGE: i32 = 2;
+pub const SCORCH_TICK: u32 = ticks(1, 2);
+/// Chilling: a hit slows the ship to `CHILL_SPEED_PCT`% for `CHILL_DURATION`.
+pub const CHILL_DURATION: u32 = ticks(3, 2);
+pub const CHILL_SPEED_PCT: i32 = 60;
+
 /// `start` moved toward `end` by the fraction of the ramp elapsed at tick `t`.
 const fn ramp(start: i64, end: i64, t: u32) -> i64 {
     let t = if t < SPAWN_RAMP { t } else { SPAWN_RAMP } as i64;

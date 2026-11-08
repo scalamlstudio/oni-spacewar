@@ -3,8 +3,8 @@
 //! One Elimination mission (design/READINESS.md § Demo Spec): click-to-move
 //! battleships with an auto-firing basic attack and two skills each, void
 //! monster packs pouring out of void fissures (Swarmers and Spitters, and from
-//! TAKOAI-116 the Lancer, Bloater, Brood and Warden roles), loot drops, and a
-//! win/lose result.
+//! TAKOAI-116 the Lancer, Bloater, Brood and Warden roles; from TAKOAI-117
+//! elite pack leaders with affixes), loot drops, and a win/lose result.
 //!
 //! - All state is plain data in [`SimState`] (entities in `Vec`s, see
 //!   [`crate::entity`]).
@@ -52,8 +52,10 @@ pub struct SimState {
     /// Shots fired by enemies.
     pub enemy_projectiles: Vec<Projectile>,
     pub pickups: Vec<Pickup>,
-    /// Bloater bursts waiting to go off.
+    /// Bloater (and Volatile elite) bursts waiting to go off.
     pub blasts: Vec<Blast>,
+    /// Scorching elites' burning patches.
+    pub patches: Vec<Patch>,
     /// Where enemies come from; placed once at mission start.
     pub fissures: Vec<Fissure>,
     pub mission: Mission,
@@ -75,6 +77,11 @@ fn new_id(next: &mut u32) -> u32 {
 
 const fn px(v: i32) -> i32 {
     v * SUB
+}
+
+/// Chill a ship hit by a Chilling elite (refreshes the slow).
+fn chill(ship: &mut Ship) {
+    ship.chill = CHILL_DURATION;
 }
 
 fn ship_spawn(handle: usize, n: usize) -> FxVec2 {
@@ -165,9 +172,10 @@ pub const fn warded(amount: i32) -> i32 {
     amount - amount / 2
 }
 
-/// Damage enemy `i` takes from a hit of `amount`, after any Warden.
+/// Damage enemy `i` takes from a hit of `amount`, after any Warden or
+/// Warding shield (the two don't stack).
 fn damage_to(enemies: &[Enemy], i: usize, amount: i32) -> i32 {
-    if warden_of(enemies, i).is_some() {
+    if enemies[i].ward > 0 || warden_of(enemies, i).is_some() {
         warded(amount)
     } else {
         amount
@@ -211,6 +219,7 @@ impl SimState {
             enemy_projectiles: Vec::new(),
             pickups: Vec::new(),
             blasts: Vec::new(),
+            patches: Vec::new(),
             fissures,
             mission: Mission {
                 kill_target: rolled_kill_target(seed),
@@ -247,10 +256,12 @@ impl SimState {
             self.move_ships();
             self.basic_attacks();
             self.enemy_behaviour();
+            self.elite_affixes();
             self.move_projectiles();
             self.projectile_hits();
             self.separate();
             self.update_blasts();
+            self.update_patches();
             self.kill_and_drop();
             self.update_pickups();
             self.check_end();
@@ -289,8 +300,31 @@ impl SimState {
             }
         };
         kinds.truncate(room);
-        self.spawn_pack(kinds);
+        let elite = self.roll_elite(kinds[0]);
+        self.spawn_pack(kinds, elite);
         self.mission.spawn_timer = pack_interval(t);
+    }
+
+    /// Does this pack get an elite leader of `kind`, and with which affixes
+    /// and name? Elites unlock at `ELITE_UNLOCK_PCT`% of the kill target;
+    /// the first pack after that always gets one, later ones
+    /// `ELITE_PACK_PCT`% of the time. No RNG is drawn before the unlock.
+    fn roll_elite(&mut self, kind: EnemyKind) -> Option<(u8, u32)> {
+        let m = &self.mission;
+        if (m.kills as u64) * 100 < ELITE_UNLOCK_PCT as u64 * m.kill_target as u64 {
+            return None;
+        }
+        if m.elites > 0 && self.rng.range(0, 99) >= ELITE_PACK_PCT {
+            return None;
+        }
+        let mut pool: Vec<Affix> = Affix::ALL.into_iter().filter(|a| a.fits(kind)).collect();
+        let mut affixes = 0;
+        for _ in 0..ELITE_AFFIXES.min(pool.len()) {
+            let a = pool.remove(self.rng.range(0, pool.len() as i32 - 1) as usize);
+            affixes |= a.bit();
+        }
+        self.mission.elites += 1;
+        Some((affixes, self.rng.next_u32()))
     }
 
     /// How many of `rolls` Spitter rolls come up at the current ramp.
@@ -340,8 +374,9 @@ impl SimState {
     }
 
     /// Spawn a pack evenly round the spawn ring of one random fissure,
-    /// starting at a random angle. Spitters strafe a random way round.
-    fn spawn_pack(&mut self, kinds: Vec<EnemyKind>) {
+    /// starting at a random angle. Spitters strafe a random way round. With
+    /// `elite` (affixes, name seed) the first enemy leads it as an elite.
+    fn spawn_pack(&mut self, kinds: Vec<EnemyKind>, elite: Option<(u8, u32)>) {
         let f = self.rng.range(0, self.fissures.len() as i32 - 1) as usize;
         let start = self.rng.range(0, ANGLE_STEPS - 1);
         let r = px(FISSURE_SPAWN_RING);
@@ -355,6 +390,9 @@ impl SimState {
             e.home = self.fissures[f].pos;
             if kind == EnemyKind::Spitter && self.rng.range(0, 1) == 0 {
                 e.orbit = -1;
+            }
+            if let (0, Some((affixes, name))) = (i, elite) {
+                e.make_elite(affixes, name);
             }
             self.enemies.push(e);
             self.mission.spawned += 1;
@@ -372,6 +410,7 @@ impl SimState {
             ship.q_cooldown = ship.q_cooldown.saturating_sub(1);
             ship.w_cooldown = ship.w_cooldown.saturating_sub(1);
             ship.shield_ticks = ship.shield_ticks.saturating_sub(1);
+            ship.chill = ship.chill.saturating_sub(1);
             if ship.shield_ticks == 0 {
                 ship.shield = 0;
             }
@@ -449,6 +488,7 @@ impl SimState {
                         damage,
                         radius: SCATTER_RADIUS,
                         attack: Attack::Scatter,
+                        chill: false,
                     });
                 }
                 self.ships[i].w_cooldown = self.ships[i].stats.w_cooldown;
@@ -471,7 +511,7 @@ impl SimState {
                     .map(|j| damage_to(&self.enemies, j, damage))
                     .collect();
                 for (e, dealt) in self.enemies.iter_mut().zip(dealt) {
-                    if !overlaps(centre, px(SHOCKWAVE_RADIUS), e.pos, px(e.kind.radius())) {
+                    if !overlaps(centre, px(SHOCKWAVE_RADIUS), e.pos, px(e.radius())) {
                         continue;
                     }
                     e.hp -= dealt;
@@ -507,7 +547,11 @@ impl SimState {
                 }
                 continue;
             }
-            let speed = ship.stats.speed;
+            let speed = if ship.chill > 0 {
+                ship.stats.speed * CHILL_SPEED_PCT / 100
+            } else {
+                ship.stats.speed
+            };
             let d = ship.target - ship.pos;
             ship.pos = if d.length() <= speed as i64 {
                 ship.target
@@ -546,6 +590,7 @@ impl SimState {
                 damage: ship.stats.basic_damage,
                 radius: BOLT_RADIUS,
                 attack: Attack::Bolt,
+                chill: false,
             });
             ship.basic_cooldown = ship.stats.basic_interval;
             self.events.push(SimEvent::Fired {
@@ -587,17 +632,19 @@ impl SimState {
             };
             let ship = &mut self.ships[h];
             let to_ship = ship.pos - e.pos;
-            let speed = e.kind.speed();
+            let speed = e.speed();
             match e.kind {
                 EnemyKind::Swarmer => {
                     if to_ship.length() > speed as i64 {
                         e.pos = e.pos + to_ship.scale_to(speed);
                     }
                     let reach = ship.stats.radius + CONTACT_REACH;
-                    if e.cooldown == 0 && overlaps(e.pos, px(e.kind.radius()), ship.pos, px(reach))
-                    {
+                    if e.cooldown == 0 && overlaps(e.pos, px(e.radius()), ship.pos, px(reach)) {
                         let hull_lost = ship.take_damage(SWARMER_CONTACT_DAMAGE);
                         e.cooldown = SWARMER_CONTACT_COOLDOWN;
+                        if e.has(Affix::Chilling) {
+                            chill(ship);
+                        }
                         self.events.push(SimEvent::ShipDamaged {
                             ship: h,
                             source: e.id,
@@ -621,6 +668,7 @@ impl SimState {
                                 damage: SPIT_DAMAGE,
                                 radius: SPIT_RADIUS,
                                 attack: Attack::Bolt,
+                                chill: e.has(Affix::Chilling),
                             });
                             e.cooldown = SPITTER_FIRE_INTERVAL - SPITTER_WINDUP;
                         }
@@ -650,13 +698,15 @@ impl SimState {
                         for s in self.ships.iter_mut().filter(|s| s.alive()) {
                             let bit = 1 << s.handle;
                             let reach = px(s.stats.radius + CONTACT_REACH);
-                            if e.struck & bit != 0
-                                || !overlaps(e.pos, px(e.kind.radius()), s.pos, reach)
+                            if e.struck & bit != 0 || !overlaps(e.pos, px(e.radius()), s.pos, reach)
                             {
                                 continue;
                             }
                             e.struck |= bit;
                             let hull_lost = s.take_damage(LANCER_DASH_DAMAGE);
+                            if e.has(Affix::Chilling) {
+                                chill(s);
+                            }
                             self.events.push(SimEvent::ShipDamaged {
                                 ship: s.handle,
                                 source: e.id,
@@ -701,7 +751,7 @@ impl SimState {
                         e.pos = e.pos + to_ship.scale_to(speed);
                     }
                     let reach = ship.stats.radius + CONTACT_REACH;
-                    if overlaps(e.pos, px(e.kind.radius()), ship.pos, px(reach)) {
+                    if overlaps(e.pos, px(e.radius()), ship.pos, px(reach)) {
                         e.struck = 1 << h;
                         e.windup = BLOATER_FUSE;
                     }
@@ -753,24 +803,108 @@ impl SimState {
             }
         }
         for at in releases {
-            self.release_swarmers(at);
+            self.spawn_ring(
+                EnemyKind::Swarmer,
+                at,
+                at,
+                BROOD_SWARMERS,
+                BROOD_RELEASE_RING,
+            );
         }
     }
 
-    /// A Brood at `at` releases `BROOD_SWARMERS` Swarmers round itself, as
-    /// many as fit under `MAX_LIVE_ENEMIES`.
-    fn release_swarmers(&mut self, at: FxVec2) {
+    /// `count` normal `kind` enemies evenly round a ring of `ring` px about
+    /// `at`, from a random angle, as many as fit under `MAX_LIVE_ENEMIES`
+    /// (a Brood's release, a Splitting elite's copies).
+    fn spawn_ring(&mut self, kind: EnemyKind, at: FxVec2, home: FxVec2, count: i32, ring: i32) {
         let room = MAX_LIVE_ENEMIES.saturating_sub(self.enemies.len());
-        let n = (BROOD_SWARMERS as usize).min(room);
+        let n = (count as usize).min(room);
         let start = self.rng.range(0, ANGLE_STEPS - 1);
-        let r = px(BROOD_RELEASE_RING);
+        let r = px(ring);
         for k in 0..n as i32 {
-            let angle = (start + k * ANGLE_STEPS / BROOD_SWARMERS) % ANGLE_STEPS;
+            let angle = (start + k * ANGLE_STEPS / count) % ANGLE_STEPS;
             let pos = at + FxVec2::new(mul_q16(r, cos_q16(angle)), mul_q16(r, sin_q16(angle)));
-            let mut e = Enemy::new(EnemyKind::Swarmer, pos);
+            let mut e = Enemy::new(kind, pos);
             e.id = new_id(&mut self.next_id);
+            e.home = home;
             self.enemies.push(e);
             self.mission.spawned += 1;
+        }
+    }
+
+    /// Elite affixes that act on their own timers, after every enemy moved:
+    /// - Warding pulses a shield (`Enemy::ward`) on itself and allies near it.
+    /// - Blinking marks a spot beside the nearest ship, then lands on it.
+    /// - Scorching drops a burning patch where it stands.
+    ///
+    /// Swift, Chilling, Volatile and Splitting act elsewhere (speed, hits,
+    /// death).
+    fn elite_affixes(&mut self) {
+        for e in &mut self.enemies {
+            e.ward = e.ward.saturating_sub(1);
+        }
+        for i in 0..self.enemies.len() {
+            let Some(mut el) = self.enemies[i].elite else {
+                continue;
+            };
+            let e = &self.enemies[i];
+            let (id, pos, radius) = (e.id, e.pos, e.radius());
+            let busy = e.windup > 0 || e.dash > 0;
+            let (warding, blinking) = (e.has(Affix::Warding), e.has(Affix::Blinking));
+            if warding {
+                el.ward_cd = el.ward_cd.saturating_sub(1);
+                if el.ward_cd == 0 {
+                    el.ward_cd = WARDING_INTERVAL;
+                    let range = px(WARDING_RANGE) as i64;
+                    for a in &mut self.enemies {
+                        if a.hp > 0 && (a.pos - pos).length_squared() <= range * range {
+                            a.ward = WARDING_DURATION;
+                        }
+                    }
+                    self.events.push(SimEvent::Warded { enemy: id, pos });
+                }
+            }
+            if blinking {
+                if el.blink > 0 {
+                    el.blink -= 1;
+                    if el.blink == 0 {
+                        self.enemies[i].pos = el.mark;
+                        el.blink_cd = BLINK_INTERVAL;
+                        self.events.push(SimEvent::Blinked {
+                            enemy: id,
+                            pos: el.mark,
+                        });
+                    }
+                } else {
+                    el.blink_cd = el.blink_cd.saturating_sub(1);
+                    if let Some(h) = nearest_ship(&self.ships, pos).filter(|_| el.blink_cd == 0) {
+                        let ship = &self.ships[h];
+                        let away = pos - ship.pos;
+                        let range = px(BLINK_RANGE) as i64;
+                        if !busy && away != FxVec2::ZERO && away.length_squared() <= range * range {
+                            let gap = ship.stats.radius + radius + BLINK_GAP;
+                            el.mark = ship.pos + away.scale_to(px(gap));
+                            el.blink = BLINK_MARK;
+                            self.events.push(SimEvent::BlinkMarked {
+                                enemy: id,
+                                pos: el.mark,
+                            });
+                        }
+                    }
+                }
+            }
+            if self.enemies[i].has(Affix::Scorching) {
+                el.scorch_cd = el.scorch_cd.saturating_sub(1);
+                if el.scorch_cd == 0 {
+                    el.scorch_cd = SCORCH_DROP_INTERVAL;
+                    self.patches.push(Patch {
+                        id: new_id(&mut self.next_id),
+                        pos: self.enemies[i].pos,
+                        ttl: SCORCH_LIFETIME,
+                    });
+                }
+            }
+            self.enemies[i].elite = Some(el);
         }
     }
 
@@ -789,9 +923,10 @@ impl SimState {
     /// A ship's shot also knocks the enemy back a little along its flight.
     fn projectile_hits(&mut self) {
         for p in &mut self.projectiles {
-            let hit = self.enemies.iter().position(|e| {
-                e.hp > 0 && overlaps(p.pos, px(p.radius), e.pos, px(e.kind.radius()))
-            });
+            let hit = self
+                .enemies
+                .iter()
+                .position(|e| e.hp > 0 && overlaps(p.pos, px(p.radius), e.pos, px(e.radius())));
             if let Some(i) = hit {
                 let dealt = damage_to(&self.enemies, i, p.damage);
                 let e = &mut self.enemies[i];
@@ -820,6 +955,9 @@ impl SimState {
             if let Some(s) = hit {
                 let hull_lost = s.take_damage(p.damage);
                 p.ttl = 0;
+                if p.chill {
+                    chill(s);
+                }
                 self.events.push(SimEvent::ShipDamaged {
                     ship: s.handle,
                     source: p.id,
@@ -840,8 +978,7 @@ impl SimState {
         let total = SHIP_MASS + ENEMY_MASS;
         for ship in self.ships.iter_mut().filter(|s| s.alive()) {
             for e in self.enemies.iter_mut().filter(|e| e.dash == 0) {
-                let Some(push) =
-                    separation(ship.pos, px(ship.stats.radius), e.pos, px(e.kind.radius()))
+                let Some(push) = separation(ship.pos, px(ship.stats.radius), e.pos, px(e.radius()))
                 else {
                     continue;
                 };
@@ -854,8 +991,7 @@ impl SimState {
         for i in 0..self.enemies.len() {
             for j in i + 1..self.enemies.len() {
                 let (a, b) = (&self.enemies[i], &self.enemies[j]);
-                let Some(push) = separation(a.pos, px(a.kind.radius()), b.pos, px(b.kind.radius()))
-                else {
+                let Some(push) = separation(a.pos, px(a.radius()), b.pos, px(b.radius())) else {
                     continue;
                 };
                 let half = FxVec2::new(push.x / 2, push.y / 2);
@@ -896,7 +1032,7 @@ impl SimState {
                 .map(|j| damage_to(&self.enemies, j, BLOATER_BLAST_ENEMY_DAMAGE))
                 .collect();
             for (e, dealt) in self.enemies.iter_mut().zip(dealt) {
-                if e.hp <= 0 || !overlaps(b.pos, r, e.pos, px(e.kind.radius())) {
+                if e.hp <= 0 || !overlaps(b.pos, r, e.pos, px(e.radius())) {
                     continue;
                 }
                 e.hp -= dealt;
@@ -913,15 +1049,59 @@ impl SimState {
         self.blasts.retain(|b| b.fuse > 0);
     }
 
+    /// Burning patches tick down; every `SCORCH_TICK` (mission clock) a
+    /// living ship standing in any patch takes `SCORCH_DAMAGE` once.
+    fn update_patches(&mut self) {
+        for p in &mut self.patches {
+            p.ttl = p.ttl.saturating_sub(1);
+        }
+        self.patches.retain(|p| p.ttl > 0);
+        if !self.frame.is_multiple_of(SCORCH_TICK) {
+            return;
+        }
+        for ship in self.ships.iter_mut().filter(|s| s.alive()) {
+            let Some(p) = self
+                .patches
+                .iter()
+                .find(|p| overlaps(p.pos, px(SCORCH_RADIUS), ship.pos, px(ship.stats.radius)))
+            else {
+                continue;
+            };
+            let hull_lost = ship.take_damage(SCORCH_DAMAGE);
+            self.events.push(SimEvent::ShipDamaged {
+                ship: ship.handle,
+                source: p.id,
+                amount: SCORCH_DAMAGE,
+                hull_lost,
+                pos: ship.pos,
+            });
+        }
+    }
+
     /// Dead enemies count as kills and drop loot rolled with the sim RNG.
+    /// An elite drops `ELITE_CREDITS_MULT`× credits and `ELITE_CRYSTALS`
+    /// Void Crystal (flagged `Pickup::elite`); a Volatile one leaves a
+    /// Bloater burst and a Splitting one `SPLIT_COPIES` normal copies.
     fn kill_and_drop(&mut self) {
+        let mut splits: Vec<(EnemyKind, FxVec2, FxVec2)> = Vec::new();
         for e in self.enemies.iter().filter(|e| e.hp <= 0) {
             self.mission.kills += 1;
             self.events.push(SimEvent::Killed {
                 enemy: e.id,
                 kind: e.kind,
+                elite: e.is_elite(),
                 pos: e.pos,
             });
+            if e.has(Affix::Volatile) {
+                self.blasts.push(Blast {
+                    id: new_id(&mut self.next_id),
+                    pos: e.pos,
+                    fuse: BLOATER_FUSE,
+                });
+            }
+            if e.has(Affix::Splitting) {
+                splits.push((e.kind, e.pos, e.home));
+            }
             if e.kind == EnemyKind::Bloater {
                 // Killed: the full fuse. Burst on contact: what's left of it.
                 self.blasts.push(Blast {
@@ -934,6 +1114,26 @@ impl SimState {
                     },
                 });
             }
+            if e.is_elite() {
+                let (credits, _) = e.kind.loot();
+                self.pickups.push(Pickup {
+                    id: new_id(&mut self.next_id),
+                    kind: LootKind::Credits,
+                    amount: credits * ELITE_CREDITS_MULT,
+                    pos: e.pos,
+                    ttl: PICKUP_LIFETIME,
+                    elite: true,
+                });
+                self.pickups.push(Pickup {
+                    id: new_id(&mut self.next_id),
+                    kind: LootKind::VoidCrystal,
+                    amount: ELITE_CRYSTALS,
+                    pos: e.pos + FxVec2::from_px(CRYSTAL_DROP_OFFSET, 0),
+                    ttl: PICKUP_LIFETIME,
+                    elite: true,
+                });
+                continue;
+            }
             let (credits, crystal_pct) = e.kind.loot();
             self.pickups.push(Pickup {
                 id: new_id(&mut self.next_id),
@@ -941,6 +1141,7 @@ impl SimState {
                 amount: credits,
                 pos: e.pos,
                 ttl: PICKUP_LIFETIME,
+                elite: false,
             });
             if self.rng.range(0, 99) < crystal_pct {
                 self.pickups.push(Pickup {
@@ -949,10 +1150,14 @@ impl SimState {
                     amount: 1,
                     pos: e.pos + FxVec2::from_px(CRYSTAL_DROP_OFFSET, 0),
                     ttl: PICKUP_LIFETIME,
+                    elite: false,
                 });
             }
         }
         self.enemies.retain(|e| e.hp > 0);
+        for (kind, at, home) in splits {
+            self.spawn_ring(kind, at, home, SPLIT_COPIES, SPLIT_OFFSET);
+        }
     }
 
     /// Pickups drift toward a nearby ship, are collected on contact, and
@@ -999,6 +1204,7 @@ impl SimState {
             }
             self.enemies.clear();
             self.blasts.clear();
+            self.patches.clear();
             self.projectiles.clear();
             self.enemy_projectiles.clear();
         } else if self.ships.iter().all(|s| !s.alive()) {
@@ -1450,7 +1656,7 @@ mod tests {
                     let d = (e.pos - f.pos).length();
                     (d - px(FISSURE_SPAWN_RING) as i64).abs() <= px(2) as i64
                 });
-                let moved = e.kind.speed() as i64 + px(e.kind.radius()) as i64;
+                let moved = e.kind.speed() as i64 + px(e.radius()) as i64;
                 let near = s
                     .fissures
                     .iter()
@@ -1640,6 +1846,7 @@ mod tests {
             amount: 7,
             pos: FxVec2::from_px(500, 500),
             ttl: PICKUP_LIFETIME,
+            elite: false,
         });
         let mut last = enemy(EnemyKind::Spitter, 0, 400);
         last.hp = 0;
@@ -1819,6 +2026,7 @@ mod tests {
             amount: 1,
             pos: FxVec2::from_px(70, 0),
             ttl: PICKUP_LIFETIME,
+            elite: false,
         });
         s.pickups.push(Pickup {
             id: 0,
@@ -1826,6 +2034,7 @@ mod tests {
             amount: 5,
             pos: FxVec2::from_px(-500, 0),
             ttl: 3,
+            elite: false,
         });
         s.step(&idle(1));
         assert!(s.pickups[0].pos.x < px(70));
@@ -2264,6 +2473,270 @@ mod tests {
             "{}",
             a.mission.introduced
         );
+        let mut s = go(1800);
+        let snapshot = s.clone();
+        for f in 1800..2000 {
+            s.step(&scripted_inputs(f, 2));
+        }
+        let ahead = s.checksum();
+        let mut s = snapshot;
+        for f in 1800..2000 {
+            s.step(&scripted_inputs(f, 2));
+        }
+        assert_eq!(s.checksum(), ahead);
+    }
+
+    /// An elite `kind` at (x, y) with one affix (ID 900, name seed 5).
+    fn elite(kind: EnemyKind, affix: Affix, x: i32, y: i32) -> Enemy {
+        let mut e = enemy(kind, x, y);
+        e.id = 900;
+        e.make_elite(affix.bit(), 5);
+        e
+    }
+
+    #[test]
+    fn elites_lead_packs_once_unlocked() {
+        // Before the unlock: no elites.
+        let mut s = SimState::with_loadouts(3, &[KITE]).with_kill_target(100);
+        s.mission.spawn_timer = 1;
+        s.step(&idle(1));
+        assert!(!s.enemies.is_empty());
+        assert!(s.enemies.iter().all(|e| !e.is_elite()));
+        // At the unlock the next pack is always led by one: its first enemy.
+        let mut s = SimState::with_loadouts(3, &[KITE]).with_kill_target(100);
+        s.mission.kills = ELITE_UNLOCK_PCT;
+        s.mission.spawn_timer = 1;
+        s.step(&idle(1));
+        assert_eq!(s.mission.elites, 1);
+        let leader = &s.enemies[0];
+        let el = leader.elite.expect("the pack's first enemy leads it");
+        assert_eq!(el.affixes.count_ones() as usize, ELITE_AFFIXES);
+        assert!(Affix::in_mask(el.affixes).all(|a| a.fits(leader.kind)));
+        assert_eq!(leader.hp, leader.kind.hp() * ELITE_HP_MULT);
+        assert_eq!(leader.max_hp(), leader.hp);
+        assert!(leader.radius() > leader.kind.radius());
+        assert_eq!(s.enemies.iter().filter(|e| e.is_elite()).count(), 1);
+        assert!(!elite_name(el.name).is_empty());
+    }
+
+    #[test]
+    fn elite_names_are_varied_and_stable() {
+        assert_eq!(elite_name(0), "Gloomwhisker the Hollow");
+        assert_eq!(elite_name(5), elite_name(5));
+        let names: std::collections::HashSet<_> = (0..960).map(elite_name).collect();
+        assert_eq!(names.len(), 960);
+    }
+
+    #[test]
+    fn affixes_fit_their_kind() {
+        assert!(!Affix::Volatile.fits(EnemyKind::Bloater));
+        assert!(!Affix::Blinking.fits(EnemyKind::Brood));
+        assert!(!Affix::Blinking.fits(EnemyKind::Warden));
+        assert!(Affix::Blinking.fits(EnemyKind::Lancer));
+        for kind in EnemyKind::ALL {
+            assert!(Affix::ALL.iter().filter(|a| a.fits(kind)).count() >= 5);
+        }
+    }
+
+    #[test]
+    fn swift_elites_are_faster() {
+        let plain = elite(EnemyKind::Swarmer, Affix::Chilling, 0, 0);
+        let swift = elite(EnemyKind::Swarmer, Affix::Swift, 0, 0);
+        assert_eq!(plain.speed(), EnemyKind::Swarmer.speed());
+        assert_eq!(swift.speed(), EnemyKind::Swarmer.speed() * 140 / 100);
+    }
+
+    #[test]
+    fn elite_kill_drops_more_loot_with_a_beam() {
+        let mut s = quiet(&[KITE]);
+        let mut e = elite(EnemyKind::Spitter, Affix::Swift, 500, 500);
+        e.hp = 0;
+        s.enemies.push(e);
+        s.step(&idle(1));
+        assert!(s.events.iter().any(|ev| matches!(
+            ev,
+            SimEvent::Killed {
+                enemy: 900,
+                elite: true,
+                ..
+            }
+        )));
+        let loot: Vec<_> = s
+            .pickups
+            .iter()
+            .map(|p| (p.kind, p.amount, p.elite))
+            .collect();
+        assert_eq!(
+            loot,
+            [
+                (
+                    LootKind::Credits,
+                    SPITTER_CREDITS * ELITE_CREDITS_MULT,
+                    true
+                ),
+                (LootKind::VoidCrystal, ELITE_CRYSTALS, true),
+            ]
+        );
+    }
+
+    #[test]
+    fn volatile_elites_burst_and_bloater_elites_still_do() {
+        let mut s = quiet(&[KITE]);
+        let mut v = elite(EnemyKind::Swarmer, Affix::Volatile, 500, 500);
+        v.hp = 0;
+        s.enemies.push(v);
+        let mut b = elite(EnemyKind::Bloater, Affix::Swift, -500, 500);
+        (b.id, b.hp) = (901, 0);
+        s.enemies.push(b);
+        s.step(&idle(1));
+        assert_eq!(s.blasts.len(), 2);
+        assert!(s.blasts.iter().all(|b| b.fuse == BLOATER_FUSE));
+    }
+
+    #[test]
+    fn splitting_elites_leave_two_normal_copies() {
+        let mut s = quiet(&[KITE]);
+        let mut e = elite(EnemyKind::Lancer, Affix::Splitting, 500, 500);
+        e.hp = 0;
+        s.enemies.push(e);
+        s.step(&idle(1));
+        assert_eq!(s.enemies.len(), SPLIT_COPIES as usize);
+        for c in &s.enemies {
+            assert_eq!(
+                (c.kind, c.hp, c.is_elite()),
+                (EnemyKind::Lancer, LANCER_HP, false)
+            );
+        }
+        // Opposite sides of where it died.
+        let apart = (s.enemies[0].pos - s.enemies[1].pos).length();
+        assert!((apart - px(2 * SPLIT_OFFSET) as i64).abs() <= 4, "{apart}");
+    }
+
+    #[test]
+    fn warding_shields_itself_and_allies_for_half_damage() {
+        let mut s = quiet(&[KITE]);
+        let mut w = elite(EnemyKind::Spitter, Affix::Warding, 600, 0);
+        w.cooldown = u32::MAX;
+        w.elite.as_mut().unwrap().ward_cd = 1;
+        s.enemies.push(w);
+        let mut ally = enemy(EnemyKind::Spitter, 600, 100);
+        (ally.id, ally.cooldown) = (901, u32::MAX);
+        s.enemies.push(ally);
+        let mut far = enemy(EnemyKind::Spitter, 600, -600);
+        (far.id, far.cooldown) = (902, u32::MAX);
+        s.enemies.push(far);
+        s.step(&idle(1));
+        assert!(s
+            .events
+            .iter()
+            .any(|ev| matches!(ev, SimEvent::Warded { enemy: 900, .. })));
+        assert!(s.enemies[0].ward > 0 && s.enemies[1].ward > 0);
+        assert_eq!(s.enemies[2].ward, 0);
+        assert_eq!(damage_to(&s.enemies, 1, 9), 5);
+        assert_eq!(damage_to(&s.enemies, 2, 9), 9);
+        // It wears off.
+        for _ in 0..WARDING_DURATION {
+            s.step(&idle(1));
+        }
+        assert_eq!(s.enemies[1].ward, 0);
+    }
+
+    #[test]
+    fn blinking_marks_a_spot_by_the_ship_then_lands_on_it() {
+        let mut s = quiet(&[BULWARK]);
+        s.ships[0].stats.basic_range = 0; // don't shoot it
+        let mut e = elite(EnemyKind::Spitter, Affix::Blinking, 400, 0);
+        e.cooldown = u32::MAX;
+        e.elite.as_mut().unwrap().blink_cd = 1;
+        s.enemies.push(e);
+        s.step(&idle(1));
+        let mark = s
+            .events
+            .iter()
+            .find_map(|ev| match *ev {
+                SimEvent::BlinkMarked { enemy: 900, pos } => Some(pos),
+                _ => None,
+            })
+            .expect("marked");
+        let gap = BULWARK_RADIUS + s.enemies[0].radius() + BLINK_GAP;
+        assert!((mark.length() - px(gap) as i64).abs() <= 2, "{mark:?}");
+        assert!(mark.x > 0, "on its own side of the ship");
+        // Still where it was during the mark, there BLINK_MARK ticks later.
+        for _ in 1..BLINK_MARK {
+            s.step(&idle(1));
+            assert_ne!(s.enemies[0].pos, mark);
+        }
+        s.step(&idle(1));
+        assert!(s
+            .events
+            .iter()
+            .any(|ev| matches!(ev, SimEvent::Blinked { enemy: 900, .. })));
+        assert!((s.enemies[0].pos - mark).length() <= px(BULWARK_RADIUS) as i64);
+    }
+
+    #[test]
+    fn scorching_leaves_patches_that_burn_ships() {
+        let mut s = quiet(&[BULWARK]);
+        s.ships[0].stats.basic_range = 0;
+        s.enemies
+            .push(elite(EnemyKind::Warden, Affix::Scorching, 300, 0));
+        for _ in 0..SCORCH_DROP_INTERVAL * 2 {
+            s.step(&idle(1));
+        }
+        assert_eq!(s.patches.len(), 2);
+        // A patch under the ship burns it once per SCORCH_TICK.
+        s.patches[0].pos = s.ships[0].pos;
+        let hull = s.ships[0].hull;
+        for _ in 0..SCORCH_TICK {
+            s.step(&idle(1));
+        }
+        assert_eq!(s.ships[0].hull, hull - SCORCH_DAMAGE);
+        // Patches burn out.
+        s.enemies.clear();
+        for _ in 0..SCORCH_LIFETIME {
+            s.step(&idle(1));
+        }
+        assert!(s.patches.is_empty());
+    }
+
+    #[test]
+    fn chilling_hits_slow_the_ship() {
+        let mut s = quiet(&[KITE]);
+        s.ships[0].stats.basic_range = 0;
+        s.enemies
+            .push(elite(EnemyKind::Swarmer, Affix::Chilling, 20, 0));
+        s.step(&idle(1));
+        assert_eq!(s.ships[0].chill, CHILL_DURATION);
+        s.enemies.clear();
+        let from = s.ships[0].pos;
+        s.step(&[input(INPUT_MOVE, 2000, 0)]);
+        let moved = (s.ships[0].pos - from).length();
+        let slow = (KITE_SPEED * CHILL_SPEED_PCT / 100) as i64 * SUB as i64 / 60;
+        assert!((moved - slow).abs() <= 2, "{moved} vs {slow}");
+        // A plain Swarmer's hit doesn't chill.
+        let mut s = quiet(&[KITE]);
+        s.ships[0].stats.basic_range = 0;
+        s.enemies.push(enemy(EnemyKind::Swarmer, 20, 0));
+        s.step(&idle(1));
+        assert_eq!(s.ships[0].chill, 0);
+    }
+
+    #[test]
+    fn elites_stay_deterministic_under_rollback() {
+        // A short kill target unlocks elites early in a scripted run.
+        let go = |frames: u32| {
+            let mut s = SimState::with_loadouts(5, &mixed(2)).with_kill_target(60);
+            for f in 0..frames {
+                for sh in &mut s.ships {
+                    sh.hull = sh.hull.max(1000);
+                }
+                s.step(&scripted_inputs(f, 2));
+            }
+            s
+        };
+        let a = go(2400);
+        assert_eq!(a.checksum(), go(2400).checksum());
+        assert!(a.mission.elites >= 2, "{}", a.mission.elites);
         let mut s = go(1800);
         let snapshot = s.clone();
         for f in 1800..2000 {

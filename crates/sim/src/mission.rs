@@ -31,6 +31,9 @@ pub struct Mission {
     /// Role packs already introduced (bit per `ROLES` index in `state`):
     /// the first pack after a role unlocks always brings it.
     pub introduced: u8,
+    /// Elite leaders spawned so far (the first after `ELITE_UNLOCK_PCT` is
+    /// guaranteed).
+    pub elites: u32,
     /// Loot picked up so far (shared by every ship in the mission).
     pub collected: Loot,
     pub status: MissionStatus,
@@ -47,6 +50,7 @@ impl Default for Mission {
             kills: 0,
             spawned: 0,
             introduced: 0,
+            elites: 0,
             collected: Loot::default(),
             status: MissionStatus::InProgress,
             end_frame: 0,

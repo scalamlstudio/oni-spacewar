@@ -163,6 +163,8 @@ pub struct Ship {
     /// Afterburn: per-tick dash velocity and ticks left.
     pub dash_vel: FxVec2,
     pub dash_ticks: u32,
+    /// Ticks left slowed by a Chilling elite's hit (0 = not chilled).
+    pub chill: u32,
     /// `NetInput::buttons` from the previous tick. Skills fire on the tick
     /// their button goes down (edge), not while it is held.
     pub prev_buttons: u8,
@@ -185,6 +187,7 @@ impl Ship {
             shield_ticks: 0,
             dash_vel: FxVec2::ZERO,
             dash_ticks: 0,
+            chill: 0,
             prev_buttons: 0,
         }
     }
@@ -319,6 +322,11 @@ pub struct Enemy {
     pub struck: u8,
     /// Brood: the fissure it hangs back by.
     pub home: FxVec2,
+    /// Ticks left of a Warding elite's shield on it (0 = none): it takes
+    /// half damage meanwhile, like next to a Warden (they don't stack).
+    pub ward: u32,
+    /// Set on a pack's elite leader (design/BATTLE.md § Elite affixes).
+    pub elite: Option<Elite>,
 }
 
 impl Enemy {
@@ -340,8 +348,180 @@ impl Enemy {
             dash: 0,
             struck: 0,
             home: pos,
+            ward: 0,
+            elite: None,
         }
     }
+
+    /// Promote to an elite leader: `ELITE_HP_MULT`× HP, bigger, with
+    /// `affixes` (bit per [`Affix`]) and a generated name (`elite_name`).
+    pub fn make_elite(&mut self, affixes: u8, name: u32) {
+        self.hp = self.kind.hp() * ELITE_HP_MULT;
+        self.elite = Some(Elite {
+            affixes,
+            name,
+            ward_cd: WARDING_FIRST,
+            blink_cd: BLINK_FIRST,
+            blink: 0,
+            mark: FxVec2::ZERO,
+            scorch_cd: SCORCH_DROP_INTERVAL,
+        });
+    }
+
+    pub fn is_elite(&self) -> bool {
+        self.elite.is_some()
+    }
+
+    /// Does this elite have `affix`? (Always false for a normal enemy.)
+    pub fn has(&self, affix: Affix) -> bool {
+        self.elite.is_some_and(|e| e.affixes & affix.bit() != 0)
+    }
+
+    /// HP it spawned with (elites: `ELITE_HP_MULT`× the kind's), for bars.
+    pub fn max_hp(&self) -> i32 {
+        if self.is_elite() {
+            self.kind.hp() * ELITE_HP_MULT
+        } else {
+            self.kind.hp()
+        }
+    }
+
+    /// Pixels; an elite is `ELITE_SIZE_PCT`% of its kind.
+    pub fn radius(&self) -> i32 {
+        if self.is_elite() {
+            self.kind.radius() * ELITE_SIZE_PCT / 100
+        } else {
+            self.kind.radius()
+        }
+    }
+
+    /// Sub-pixels per tick; Swift adds `SWIFT_SPEED_PCT`.
+    pub fn speed(&self) -> i32 {
+        if self.has(Affix::Swift) {
+            self.kind.speed() * (100 + SWIFT_SPEED_PCT) / 100
+        } else {
+            self.kind.speed()
+        }
+    }
+}
+
+/// An elite affix (design/BATTLE.md § Elite affixes). Elites roll
+/// `ELITE_AFFIXES` of them; `Elite::affixes` is a bitmask so Threat levels
+/// can add a second.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
+pub enum Affix {
+    /// Moves faster.
+    Swift,
+    /// Bursts on death like a Bloater.
+    Volatile,
+    /// Every few seconds shields itself and nearby allies (half damage).
+    Warding,
+    /// Teleports next to the ship after a visible mark.
+    Blinking,
+    /// Splits into two normal copies on death.
+    Splitting,
+    /// Leaves short-lived burning patches behind it.
+    Scorching,
+    /// Its hits slow the ship briefly.
+    Chilling,
+}
+
+impl Affix {
+    pub const ALL: [Affix; 7] = [
+        Self::Swift,
+        Self::Volatile,
+        Self::Warding,
+        Self::Blinking,
+        Self::Splitting,
+        Self::Scorching,
+        Self::Chilling,
+    ];
+
+    pub const fn bit(self) -> u8 {
+        1 << self as u8
+    }
+
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Swift => "Swift",
+            Self::Volatile => "Volatile",
+            Self::Warding => "Warding",
+            Self::Blinking => "Blinking",
+            Self::Splitting => "Splitting",
+            Self::Scorching => "Scorching",
+            Self::Chilling => "Chilling",
+        }
+    }
+
+    /// Can a `kind` elite roll this? A Bloater already bursts (no
+    /// Volatile); a Brood or Warden hangs back by design (no Blinking).
+    pub const fn fits(self, kind: EnemyKind) -> bool {
+        !matches!(
+            (self, kind),
+            (Self::Volatile, EnemyKind::Bloater)
+                | (Self::Blinking, EnemyKind::Brood | EnemyKind::Warden)
+        )
+    }
+
+    /// The affixes in a bitmask, in declaration order.
+    pub fn in_mask(mask: u8) -> impl Iterator<Item = Affix> {
+        Self::ALL.into_iter().filter(move |a| mask & a.bit() != 0)
+    }
+}
+
+/// An elite's affixes, name and affix timers (ticks).
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
+pub struct Elite {
+    /// Bit per [`Affix`].
+    pub affixes: u8,
+    /// Seed of its generated name ([`elite_name`]), drawn from the sim RNG.
+    pub name: u32,
+    /// Warding: until the next shield pulse.
+    pub ward_cd: u32,
+    /// Blinking: until it can mark again.
+    pub blink_cd: u32,
+    /// Blinking: ticks left on the mark (0 = not marking); it lands on
+    /// `mark` when this reaches 0.
+    pub blink: u32,
+    pub mark: FxVec2,
+    /// Scorching: until it drops the next burning patch.
+    pub scorch_cd: u32,
+}
+
+const NAME_HEADS: [&str; 12] = [
+    "Gloom", "Rift", "Hex", "Null", "Shard", "Umbra", "Vex", "Murk", "Wisp", "Ash", "Grim", "Nyx",
+];
+const NAME_TAILS: [&str; 10] = [
+    "whisker", "fang", "maw", "purr", "claw", "tail", "eye", "howl", "paw", "mane",
+];
+const NAME_TITLES: [&str; 8] = [
+    "the Hollow",
+    "the Starving",
+    "the Unbound",
+    "the Pale",
+    "the Restless",
+    "the Cracked",
+    "the Hungry",
+    "the Old",
+];
+
+/// An elite's display name from its seed, e.g. "Hexfang the Hollow".
+/// Cosmetic, but derived only from sim state, so every peer shows the same.
+pub fn elite_name(seed: u32) -> String {
+    let head = NAME_HEADS[(seed % 12) as usize];
+    let tail = NAME_TAILS[(seed / 12 % 10) as usize];
+    let title = NAME_TITLES[(seed / 120 % 8) as usize];
+    format!("{head}{tail} {title}")
+}
+
+/// A Scorching elite's burning patch: hurts ships standing in it.
+#[derive(Clone, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
+pub struct Patch {
+    /// Stable entity ID (unique within the mission).
+    pub id: u32,
+    pub pos: FxVec2,
+    /// Ticks left.
+    pub ttl: u32,
 }
 
 /// A Bloater's burst waiting to go off: left behind when a Bloater dies, so
@@ -381,6 +561,8 @@ pub struct Projectile {
     pub radius: i32,
     /// What kind of attack it is (ship shots; enemy shots: `Bolt`, unused).
     pub attack: Attack,
+    /// Enemy shots: fired by a Chilling elite, so a hit slows the ship.
+    pub chill: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
@@ -399,6 +581,8 @@ pub struct Pickup {
     pub pos: FxVec2,
     /// Ticks left before it disappears.
     pub ttl: u32,
+    /// Dropped by an elite: the client marks it with a light beam.
+    pub elite: bool,
 }
 
 /// Loot totals.
