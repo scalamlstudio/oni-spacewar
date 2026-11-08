@@ -77,7 +77,7 @@ Ranked by fun per effort. Size: **S** ≈ a few days, **M** ≈ a week or two,
 | 7 | **Fissure Guardian.** A mini-boss with 2 phases (§ Enemy roles) that ends the mission, so a run goes chaff → elites → boss. | 2, 5 | M | Design + Eng + Art |
 | 8 | **Ship modules that change skills.** Each battleship gets module sockets; modules modify Q, W or the basic attack (§ Ship modules). They reach the sim through `Loadout`, like upgrades today. | 3 | M–L | Design + Eng |
 | 9 | **Loot rarity and module drops.** Modules drop in missions in rarity tiers (common, magic, rare, unique) with their own colour, beam and sound; unwanted modules salvage into Void Crystal. | 4, 3 | M | Eng + Art |
-| 10 | **Threat levels.** The Berth offers Threat 1–5: more enemy HP and damage, more elites and affixes, better loot. | 5 | S–M | Design + Eng |
+| 10 | **Threat levels.** The mission-selection station offers Threat 1–5: more enemy HP and damage, more elites and affixes, better loot. | 5 | S–M | Design + Eng |
 | 11 | **E and R skills.** Each ship picks 2 more skills from a small per-ship pool at the Berth. | 3 | M | Design + Eng + Art |
 | 12 | **More objectives:** close the fissures, survive, defend a drone, chase a loot runner. | 5 | L | Design + Eng |
 | 13 | **Pilot Combat Operation tree** as the passive tree (already in DESIGN.md, deferred from the demo). | 3 | L | Design + Eng |
@@ -121,10 +121,12 @@ design/OPEN_QUESTIONS.md._
   stays slow (DESIGN.md § Player), but every battleship has one mobility or
   defensive skill (Kite: Afterburn; Bulwark: Bastion), and enemy shots are
   tuned so the slowest ship can dodge them.
-- **B3. Build depth → modules first.** Module sockets that change Q, W and
+- **B3. Build depth → modules first.** Originally module sockets that change Q, W and
   the basic attack (§ Ship modules), built so random-affix hull / weapon /
   thruster parts, E/R picks and the Pilot's Combat Operation tree can be
   added later. Random-affix parts only once module drops prove fun.
+  Playtest #2 supersedes the socket framing with six replaceable component
+  categories (§ Ship modules); the concrete mapping and balance remain proposed.
 - **B4. Where modules come from → drops plus salvage.** Modules drop in
   missions by rarity; unwanted ones salvage into materials that craft or
   upgrade modules, so no drop is useless. Later the Manufacturing Module
@@ -136,7 +138,7 @@ design/OPEN_QUESTIONS.md._
 - **B6. Sound in the demo → placeholder CC0 pack.** A placeholder pack
   (CC0, or licensed if CC0 has gaps) goes in now and is replaced once audio
   direction is done (OPEN_QUESTIONS.md § Not yet started).
-- **B7. Difficulty → Threat levels at the Berth.** The player picks Threat
+- **B7. Difficulty → Threat levels at the mission-selection station.** The player picks Threat
   1–5 before launching: more enemy HP and damage, more elites and affixes,
   better loot. Threat never raises the kill target above 100 (TAKOAI-128).
 
@@ -155,7 +157,7 @@ numbers refer to § Prioritised change list._
    TAKOAI-5's roster), #6 elite packs with affixes, #7 Fissure Guardian
    ending Elimination (B5).
 3. **Batch 3: building and loot.** #8 Ship modules (B3), #9 loot rarity,
-   module drops and salvage (B4), #10 Threat levels at the Berth (B7),
+   module drops and salvage (B4), #10 Threat levels at the mission-selection station (B7),
    #11 E and R skills.
 4. **Later:** #12 more objectives (close the fissures first), #13 Pilot
    Combat Operation tree, #14 enemy families and story bosses.
@@ -200,21 +202,207 @@ that only make the player wait.
 
 ## Ship modules
 
-_Examples to make B3 (§ Decisions) concrete. Not a catalogue._
+**Accepted interaction direction — Wei, playtest #2, 2026-11-08:** replace
+engine, armor, main gun, automatic side gun, targeting system and extra equipment
+at the existing battleship interaction point (Berth). Mission selection and
+launch belong at a separate station (TAKOAI-130). This supersedes B3's original
+skill-sockets-only framing and B7's Berth location. The boss fight is accepted.
 
-| Slot | Module | Effect |
+**TAKOAI-120 proposal, awaiting Wei's confirmation:** all catalogue values,
+slot mapping, unlocks, rarity, crafting and Threat numbers below are starting
+balance values, not accepted decisions or descriptions of implemented gameplay.
+Confirmation lives only in [OPEN_QUESTIONS.md § Component and loot proposal](OPEN_QUESTIONS.md#component-and-loot-proposal).
+
+### Component sockets and progression
+
+Both Kite and Bulwark have **six component sockets**, one of each requested
+type. One component occupies each socket; replacing it returns the old one to
+inventory. Engine carries the Q modifier, extra equipment carries the W
+modifier, main gun carries the basic-attack modifier. These are complete
+replacement components, not three additional rune sockets. Armor, side gun
+and targeting are independent components. Q/W names and inputs stay intact;
+E/R remain deferred. Carrier Ship Modules (Docking, Lab, etc.) are a different
+system.
+
+Proposed demo unlock: all six sockets open immediately on both ships, with
+free stock components. No Workshop socket tax or hidden progression gate.
+One item instance can be equipped on only one ship at once; shared types can
+be transferred at the Berth. Engine and extra equipment are hull-specific;
+the other four types fit either hull. Selection previews old/new effective
+stats, behavior and trade-offs before confirmation. Refit only in the carrier;
+mission start snapshots the selected hull and all six components.
+
+Stock engine/equipment preserve the current Q/W; stock armor/targeting preserve
+hull and nearest-enemy targeting; stock main gun preserves current basic fire.
+Stock side gun is inactive, so migrating an old save preserves its balance.
+Stock items cannot be sold or salvaged and can always be restored for free.
+Existing Workshop upgrades and Combat Simulator remain applicable.
+
+### Demo catalogue
+
+Numbers use current unupgraded stats (READINESS.md § Battleships): Kite basic
+4 damage / 0.35 s, Bulwark 8 / 0.6 s; Q Afterburn 160 px / 4 s or Bastion
+40 shield / 5 s duration / 12 s cooldown; W Scatter 5 × 6 damage / 6 s or
+Shockwave 15 damage / 150 px / 100 px push / 9 s. Below, D is the equipped
+hull's base basic damage, before Workshop bonuses. Unmentioned parameters stay
+at stock. Percentages are multiplicative; cooldown reduction from Simulator
+applies after component changes. Damage receives Weapon Tuning once, including
+secondary damage. Stock is additional to these **28 lootable designs**.
+
+| Socket / hull / skill | Component | Effect and trade-off (common baseline) |
 |---|---|---|
-| Kite Q, Afterburn | Ion Wake | the dash leaves a damaging trail |
-| | Twin Burn | 2 charges |
-| Kite W, Scatter | Flechettes | bolts pierce 2 enemies |
-| | Focus Barrel | 3 bolts in a narrow cone, double damage |
-| Bulwark Q, Bastion | Reactive Plating | the shield bursts for damage when it breaks |
-| | Overcharge | damage absorbed raises basic-attack damage for 4 s |
-| Bulwark W, Shockwave | Implosion | pulls enemies in instead of pushing them away (pairs with Bloaters) |
-| | Echo | a second, weaker pulse 0.5 s later |
-| Basic attack (any ship) | Chain | each bolt bounces to 2 more enemies |
-| | Incendiary | hits burn for a few seconds |
-| | Splinter | kills fire 3 small bolts outward |
+| Engine / Kite Q | Ion Wake | Dash leaves a 24 px wide trail for 2 s; enemies touching it take 4 damage/s (no stacking trails). Dash cooldown 5 s. |
+| Engine / Kite Q | Twin Burn | Two dash charges, one restored every 5 s sequentially; each dash travels 120 px. |
+| Engine / Kite Q | Long Burn | Dash 240 px; cooldown 6 s. No invulnerability added. |
+| Extra / Kite W | Flechettes | Each Scatter bolt can hit 3 distinct enemies once each; bolt damage 4 instead of 6. |
+| Extra / Kite W | Focus Barrel | Three bolts in a 12° cone, 12 damage each; cooldown 7 s. |
+| Extra / Kite W | Wide Sweep | Seven bolts over 70°, 5 damage each; cooldown 7 s. |
+| Engine / Bulwark Q | Reactive Plating | Shield 30 instead of 40; on damage breaking it, burst for 20 damage in 100 px. Expiry gives no burst. |
+| Engine / Bulwark Q | Overcharge | Shield 30; each absorbed damage adds 1% basic damage, capped at 30%, for 4 s from the latest absorption. |
+| Engine / Bulwark Q | Deep Bastion | Shield 60 for 6 s; cooldown 16 s. |
+| Extra / Bulwark W | Implosion | Pull enemies 80 px toward the ship instead of pushing; damage 12. Boss displacement immunity remains. |
+| Extra / Bulwark W | Echo | Initial pulse 10 damage and 100 px push; second pulse after 0.5 s, centered on current ship position, 8 damage, no push, same 150 px radius. |
+| Extra / Bulwark W | Repulsor | Radius 200 px and push 140 px; damage 10, cooldown 11 s. |
+| Main gun / either / basic | Chain | Primary retains D; bounces to two distinct targets within 100 px of last hit, for 0.5D then 0.25D. Fire interval ×1.2. |
+| Main gun / either / basic | Incendiary | Hit D plus burn 0.25D/s for 3 s; interval ×1.2. Rehits refresh, do not stack burns from this ship. |
+| Main gun / either / basic | Splinter | Primary D; direct primary kills launch three outward bolts 120° apart, 0.5D each, range 100 px; interval ×1.2. |
+| Main gun / either / basic | Rail | Primary 1.5D, pierces up to 3 distinct enemies; interval ×1.6, range ×0.85. |
+| Armor / either | Reinforced | Maximum hull ×1.25; movement speed ×0.90. |
+| Armor / either | Lightweight | Maximum hull ×0.85; movement speed ×1.15. |
+| Armor / either | Ablative | First incoming hit every 8 s reduced by 50%; maximum hull ×0.90. Recharge starts on that hit, no charges. |
+| Side gun / either | Point Defense | Every 1 s removes one hostile projectile within 90 px, nearest first; deals no enemy damage and cannot erase beams, contact or explosions. |
+| Side gun / either | Flak | Automatically fires at nearest enemy within 120 px every 1.5 s; impact deals 0.5D in 40 px radius. Short reach requires approaching danger. |
+| Side gun / either | Needle | Automatically fires at nearest enemy within 260 px every 1 s for 0.25D; single target, no control effect. |
+| Targeting / either | Long Lens | Main-gun range ×1.25; main fire interval ×1.10. |
+| Targeting / either | Priority Lock | Main gun prefers Guardian, then elites, then nearest; main range ×0.90. |
+| Targeting / either | Close Tracker | Main interval ×0.90; main range ×0.80. |
+| Extra / either / passive | Recovery Rig | Replaces the W modifier with stock W; after 6 s without hull damage, heal 1% maximum hull/s, capped at 20% maximum hull per mission. |
+| Engine / either / passive | Cruise Drive | Replaces Q modifier with stock Q; move speed ×1.10, Q cooldown ×1.15. |
+| Armor / either | Emergency Bulkhead (unique only) | Once per mission, fatal hull damage instead leaves 1 HP and grants 1 s damage immunity; maximum hull ×0.75. |
+
+Recovery Rig and Cruise Drive are shared alternatives, not extra sockets.
+Unique-only Emergency Bulkhead has no common/magic/rare version. The other
+27 designs have those three rarities. Secondary hits never trigger Chain,
+Splinter, burns or side guns recursively; side guns do not inherit main-gun
+modifiers or targeting. Closest-target ties resolve by stable entity ID.
+
+### Rarity and drops
+
+| Tier | Color (label also shown) | Numeric quality and effects |
+|---|---|---|
+| Common | white #D9DEE8 | Catalogue baseline; no random bonus. |
+| Magic | blue #559DFF | One roll: +5–10% maximum hull. |
+| Rare | yellow #FFD45A | Two rolls: +10–15% maximum hull and +3–6% movement speed. |
+| Unique | orange #FF953D | Fixed build-defining design; no random bonuses and cannot be quality-rerolled. |
+
+Rolls use whole integer percentage points, uniformly inclusive. Random bonuses
+are deliberately restricted to hull/speed in this demo to avoid changing the
+catalogue's one-hit chaff breakpoints. Sum hull bonuses across equipped items,
+and speed bonuses separately, then multiply Workshop stats, component-specific
+multipliers, and the summed bonus factor. Numeric quality never changes the
+negative trade-off. Unique pool: Emergency Bulkhead, **Storm Relay** (main gun:
+Chain with four bounces at 0.5D each instead of two, interval ×1.5), **Furnace
+Core** (Kite engine: Ion Wake deals 8/s for 3 s, cooldown 6 s), **Gravity Heart**
+(Bulwark extra: Implosion radius 200 px, damage 8, cooldown 12 s). These last
+three are unique variants of catalogue designs, bringing total item templates
+to 31. There is no random unique conversion.
+
+Threat 1 table: roll module presence first, then rarity conditional on a drop.
+Existing Credits/VC remain separate. Non-elite non-chaff roles use the normal
+row; Guardian supersedes elite; summoned enemies and splitting copies give no
+module drops. Eligible designs are uniform within tier, restricted to the
+mission's selected hull plus shared components. Each roll gives one item.
+
+| Enemy | Module chance per kill | Common | Magic | Rare | Unique |
+|---|---:|---:|---:|---:|---:|
+| Chaff (Swarmer) | 1% | 80% | 18% | 2% | 0% |
+| Normal role | 3% | 70% | 25% | 5% | 0% |
+| Elite leader | 30% | 20% | 55% | 24% | 1% |
+| Guardian | 100% | 0% | 55% | 40% | 5% |
+
+Modules are mission escrow: collected pickups persist only on success; failure
+or quit loses newly collected items, preserving pre-mission inventory/equipment.
+No pickup expiry for modules; victory collects all remaining drops before the
+Result screen. Persistent inventory is unbounded in the demo (filter/sort by
+socket, hull, rarity). Salvaging requires an explicit carrier action; equipped
+items must be unequipped first. Unique salvage shows a confirmation.
+
+Art handoff: socket icons for six categories, distinct silhouettes for each
+design, hull/skill tags, and rarity label + border + beam (never color alone).
+Common: small white sparkle; magic: blue short beam; rare: taller yellow beam
+and rare sound; unique: orange pulsing beam and distinct unique sound. Compare
+panel shows every effect, penalty, rolled bonus and salvage yield.
+
+### Salvage and craft (Workshop / Upgrade Bench)
+
+Use existing **Void Crystal**, not a new currency. Common → 1 VC, magic → 2,
+rare → 5, unique → 12. Salvage Sorter's existing mission-haul bonus applies to
+Credits/VC pickups only, not module quantity, rarity or salvage yields.
+
+| Action | Cost | Result |
+|---|---|---|
+| Craft known non-unique design | 50 credits + 3 VC | Common item, player chooses hull/socket/design; all 27 recipes available immediately. |
+| Upgrade common → magic | 75 credits + 4 VC | Same design, new magic roll. |
+| Upgrade magic → rare | 150 credits + 8 VC | Same design, new rare rolls. Preview warns that existing roll is replaced. |
+| Reroll magic | 25 credits + 2 VC | Rerolls its hull bonus, retains design/tier; equal result possible. |
+| Reroll rare | 50 credits + 4 VC | Rerolls both bonuses, retains design/tier; equal result possible. |
+
+Upgrades consume the previous item and retain its identity/equip binding;
+no rare→unique upgrade, salvage→craft loop profit, or mission-time crafting.
+Crafting a common for 3 VC and salvaging it for 1 always loses resources.
+These costs compete with existing Workshop upgrades and need playtest tuning.
+
+### Threat 1–5
+
+All levels available from the **separate mission-selection station**, with
+loadout summary, risk/loot preview and explicit launch. Default Threat 1;
+remember last choice but never silently raise it. Threat multiplies current
+role HP/damage after elite base scaling; Guardian uses the same multipliers.
+**Non-elite Swarmers stay 4 HP at every Threat**, preserving one-hit chaff;
+other enemies scale. Telegraph duration and projectile speed stay unchanged.
+
+| Threat | HP × | Damage × | Elite leaders / eligible packs | Affixes per leader | Loot bonus |
+|---|---:|---:|---:|---:|---|
+| 1 | 1.00 | 1.00 | 10% | 1 | baseline |
+| 2 | 1.15 | 1.10 | 15% | 1 | +15% currency, module chance ×1.15 |
+| 3 | 1.35 | 1.20 | 20% | 2 | +30% currency, module chance ×1.30 |
+| 4 | 1.60 | 1.35 | 25% | 2 | +50% currency, module chance ×1.50 |
+| 5 | 1.90 | 1.50 | 30% | 2 | +75% currency, module chance ×1.75 |
+
+Round HP/damage to nearest integer (minimum 1). Eligible packs are ordinary
+mission packs with at least one non-summoned enemy; one leader maximum,
+selected by seeded RNG before spawning. Boss adds never roll elite. No random
+elite affixes on Guardian; its authored phases remain unchanged. Affixes are
+chosen without replacement from implemented, compatible affixes; if fewer
+than required exist, use those available. Module chance caps at 100%; Guardian
+always gives exactly one module. Currency bonus multiplies pickup amounts,
+rounding down per pickup, before Salvage Sorter bonus. Rarity weights stay as
+above: higher Threat improves quantity, not a hidden second rarity multiplier.
+Elimination N remains seeded **1–100**, unaffected by Threat. No extra mandatory
+waves or minimum elites can lengthen a short-N mission.
+
+### Implementation handoff and verification
+
+TAKOAI-130 owns the mission-selection station and walking/spawn fixes; its
+station launches the selected hull with mission seed and later Threat, while
+the existing Berth opens component refit. TAKOAI-122 owns six-slot equipment,
+loadout validation, stock-save migration and the catalogue; TAKOAI-121 owns
+icons, compare panels and loot effects; TAKOAI-123 owns escrow, drops, inventory,
+salvage and craft; TAKOAI-124 owns Threat scaling/preview. These are scope
+boundaries, not permission to implement unconfirmed design (see canonical
+confirmation entry). Existing saves receive stock components, preserving
+credits, VC, upgrades and hull unlocks. Stable item IDs, template IDs, rolls,
+per-hull equipment and selected Threat must be persisted/versioned; mission
+seed controls drops, rarity, rolls, affixes and all target tie-breaking in sim.
+
+Acceptance examples for downstream work: reject wrong-hull/duplicate-instance
+equipment; verify one-hit 4-HP chaff with every main gun; compare Twin Burn
+recharge and Echo timing; ensure secondary damage cannot recurse; same seed +
+loadout gives identical drops; failure retains old gear and loses escrow;
+Guardian gives one module at every Threat; rarity rows sum to 100%; salvage
+and reroll never mutate equipped gear silently; old saves load stock stats;
+Berth refits and the separate station launches. Balance is to be playtested,
+not claimed as validated by these document checks.
 
 ## Engineering notes
 

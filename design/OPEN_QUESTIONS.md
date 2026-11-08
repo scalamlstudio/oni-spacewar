@@ -130,3 +130,22 @@ level design), and the rest left scope with manufacturing and the research loop
 - Audio direction. The demo uses a placeholder CC0 sound pack in the
   meantime (design/BATTLE.md § Decisions, B6).
   `Deferred` · TAKOAI-7
+
+## Component and loot proposal
+
+- **C1. Component mapping and catalogue:** approve BATTLE.md § Ship modules as
+  the next implementation baseline (recommended), or keep the six requested
+  component categories but revise which carry Q/W modifiers? The proposal
+  unlocks six sockets immediately, keeps stock fallbacks, and offers 31 item
+  templates including four uniques. `Blocks (partial)` · TAKOAI-120/122.
+- **C2. Loot and economy:** approve the proposed rarity/drop tables and
+  VC-only salvage/craft costs as playtest defaults (recommended), or defer
+  quality rolls and ship common behavior variants first? Common crafting
+  makes every non-unique behavior directly accessible; rare hull/speed rolls
+  add power and compete with existing Workshop spending.
+  `Blocks (partial)` · TAKOAI-120/123.
+- **C3. Threat tuning:** approve all five levels available immediately with
+  fixed 4-HP chaff and quantity-only loot bonuses (recommended), or gate each
+  level behind a win on the previous one? See BATTLE.md § Threat 1–5 for the
+  single numeric table. Mission selection stays separate from refit in either
+  option, as Wei already decided. `Blocks (partial)` · TAKOAI-120/124.
