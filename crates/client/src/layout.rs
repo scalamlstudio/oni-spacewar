@@ -26,6 +26,9 @@ pub const HULL_H: i32 = 22;
 pub const TILE: f32 = 64.0;
 /// A station's use point sits this far south of its front edge, px.
 pub const USE_POINT_OFFSET: f32 = 24.0;
+/// How far, in tiles each way, Build mode's room ghost reaches to snap to a
+/// door-matched spot (TAKOAI-126).
+pub const ROOM_SNAP: i32 = 3;
 /// The battleships the demo owns; one berth each.
 pub const SHIPS: [&str; 2] = [KITE_ID, BULWARK_ID];
 
@@ -99,6 +102,20 @@ impl RoomSize {
             RoomSize::Small => (6, 4),
             RoomSize::Large => (13, 9),
             RoomSize::Unknown => (0, 0),
+        }
+    }
+
+    /// Where its door slots sit (TAKOAI-126): the first tile of each
+    /// 2-tile slot, counted from the anchor, along the north and south
+    /// walls (x) and along the west and east walls (y). Small has one slot
+    /// in the middle of each wall; Large has two per wall, lined up with a
+    /// Small room flush against either corner, so Small and Large rooms
+    /// join wherever their walls are flush.
+    pub fn door_slots(self) -> (&'static [i32], &'static [i32]) {
+        match self {
+            RoomSize::Small => (&[3], &[2]),
+            RoomSize::Large => (&[3, 10], &[2, 7]),
+            RoomSize::Unknown => (&[], &[]),
         }
     }
 
@@ -182,6 +199,25 @@ impl Room {
         (y0..=y1).flat_map(move |y| (x0..=x1).map(move |x| (x, y)))
     }
 
+    /// Its door slots on all four walls: placeholder doorways that open
+    /// where they face another room's slot and stay wall otherwise.
+    pub fn door_slots(&self) -> Vec<Door> {
+        let (x0, y0, x1, y1) = self.bounds();
+        let (along_x, along_y) = self.size.door_slots();
+        let mut slots = Vec::new();
+        for &dx in along_x {
+            for y in [y0, y1] {
+                slots.push(([(x0 + dx, y), (x0 + dx + 1, y)], false));
+            }
+        }
+        for &dy in along_y {
+            for x in [x0, x1] {
+                slots.push(([(x, y0 + dy), (x, y0 + dy + 1)], true));
+            }
+        }
+        slots
+    }
+
     /// The anchor for a room whose middle floor tile (rounded north-west)
     /// is `t`: Build mode's mouse tile.
     pub fn anchor_for(size: RoomSize, (x, y): Tile) -> Tile {
@@ -213,30 +249,121 @@ impl Doorway {
     }
 }
 
-/// The doorway two rooms get from a shared straight wall with at least 2
-/// floor tiles facing each other across it, at the middle of the facing
-/// stretch (rounded north or west).
-fn doorway_between(a: &Room, b: &Room) -> Option<([Tile; 2], bool)> {
+/// A door slot or doorway: its two wall tiles and whether the wall runs
+/// north–south.
+type Door = ([Tile; 2], bool);
+
+/// How two rooms' walls meet.
+#[derive(Clone, PartialEq, Eq, Debug)]
+enum Contact {
+    /// Apart, or touching only at a corner.
+    None,
+    /// A shared straight wall where the walls aren't flush or no door slots
+    /// face each other (only old saves have these, TAKOAI-126).
+    Offset,
+    /// Flush, with these door slots facing each other.
+    Joined(Vec<Door>),
+}
+
+/// The shared straight wall of two rooms.
+struct SharedWall {
+    /// The wall line: x when it runs north–south, else y.
+    at: i32,
+    /// The facing stretch along it, inclusive, without the corners.
+    lo: i32,
+    hi: i32,
+    /// Each room's wall span along it, corners included.
+    a: (i32, i32),
+    b: (i32, i32),
+    /// True when the wall runs north–south.
+    vertical: bool,
+}
+
+/// The shared straight wall of `a` and `b`; `None` when they only touch
+/// at a corner or not at all.
+fn shared_wall(a: &Room, b: &Room) -> Option<SharedWall> {
     let (ax0, ay0, ax1, ay1) = a.bounds();
     let (bx0, by0, bx1, by1) = b.bounds();
-    let (at, lo, hi, vertical) = if ax0 == bx1 || ax1 == bx0 {
+    let (at, sa, sb, vertical) = if ax0 == bx1 || ax1 == bx0 {
         let at = if ax0 == bx1 { ax0 } else { ax1 };
-        (at, ay0.max(by0) + 1, ay1.min(by1) - 1, true)
+        (at, (ay0, ay1), (by0, by1), true)
     } else if ay0 == by1 || ay1 == by0 {
         let at = if ay0 == by1 { ay0 } else { ay1 };
-        (at, ax0.max(bx0) + 1, ax1.min(bx1) - 1, false)
+        (at, (ax0, ax1), (bx0, bx1), false)
     } else {
         return None;
     };
-    if hi - lo + 1 < 2 {
-        return None;
-    }
-    let s = lo + (hi - lo + 1 - 2) / 2;
-    Some(if vertical {
-        ([(at, s), (at, s + 1)], true)
-    } else {
-        ([(s, at), (s + 1, at)], false)
+    let (lo, hi) = (sa.0.max(sb.0) + 1, sa.1.min(sb.1) - 1);
+    (lo <= hi).then_some(SharedWall {
+        at,
+        lo,
+        hi,
+        a: sa,
+        b: sb,
+        vertical,
     })
+}
+
+/// How rooms `a` and `b` meet: joined when one's shared wall lies wholly
+/// on the other's and at least one door slot of each sits on the same two
+/// tiles (§ Rooms, TAKOAI-126).
+fn contact(a: &Room, b: &Room) -> Contact {
+    let Some(w) = shared_wall(a, b) else {
+        return Contact::None;
+    };
+    let within = |(p0, p1): (i32, i32), (q0, q1): (i32, i32)| q0 <= p0 && p1 <= q1;
+    if !(within(w.a, w.b) || within(w.b, w.a)) {
+        return Contact::Offset;
+    }
+    let on_wall = |d: &Door| {
+        d.1 == w.vertical
+            && d.0
+                .iter()
+                .all(|&(x, y)| (if w.vertical { x } else { y }) == w.at)
+    };
+    let theirs = b.door_slots();
+    let doors: Vec<Door> = a
+        .door_slots()
+        .into_iter()
+        .filter(|d| on_wall(d) && theirs.contains(d))
+        .collect();
+    if doors.is_empty() {
+        Contact::Offset
+    } else {
+        Contact::Joined(doors)
+    }
+}
+
+/// The doorways rooms `a` and `b` get: their facing door slots when they
+/// are joined. An offset pair from an old save keeps the doorway it had
+/// before TAKOAI-126, so the save still connects: one doorway at the middle
+/// of a facing stretch of at least 2 floor tiles (rounded north or west).
+fn doorways_between(a: &Room, b: &Room) -> Vec<Door> {
+    match contact(a, b) {
+        Contact::None => Vec::new(),
+        Contact::Joined(doors) => doors,
+        Contact::Offset => {
+            let Some(SharedWall {
+                at,
+                lo,
+                hi,
+                vertical,
+                ..
+            }) = shared_wall(a, b)
+            else {
+                return Vec::new();
+            };
+            if hi - lo + 1 < 2 {
+                return Vec::new();
+            }
+            let s = lo + (hi - lo + 1 - 2) / 2;
+            vec![if vertical {
+                ([(at, s), (at, s + 1)], true)
+            } else {
+                ([(s, at), (s + 1, at)], false)
+            }]
+        }
+    }
 }
 
 /// What a hull tile is, derived from the rooms.
@@ -291,7 +418,7 @@ impl TileMap {
         }
         for i in 0..rooms.len() {
             for j in i + 1..rooms.len() {
-                if let Some((tiles, vertical)) = doorway_between(&rooms[i], &rooms[j]) {
+                for (tiles, vertical) in doorways_between(&rooms[i], &rooms[j]) {
                     let d = Doorway {
                         tiles,
                         rooms: (i, j),
@@ -1061,7 +1188,9 @@ impl Crew {
 pub enum Reason {
     OutsideHull,
     OverlapsRoom,
-    MustShareWall,
+    /// No door slot meets an existing room's flush, or a shared wall is
+    /// offset (TAKOAI-126).
+    DoorsMustLineUp,
     /// The new doorways would land on these items (indices into
     /// [`Carrier::items`]); they flash.
     ClearDoorway(Vec<usize>),
@@ -1089,7 +1218,7 @@ impl fmt::Display for Reason {
         match self {
             Reason::OutsideHull => write!(f, "Outside the hull"),
             Reason::OverlapsRoom => write!(f, "Overlaps a room"),
-            Reason::MustShareWall => write!(f, "Must share a wall with a room"),
+            Reason::DoorsMustLineUp => write!(f, "Doors must line up with an existing room"),
             Reason::ClearDoorway(_) => write!(f, "Clear the doorway first"),
             Reason::RoomNotEmpty => write!(f, "Room isn't empty"),
             Reason::WouldCutOffRoom => write!(f, "Would cut off a room"),
@@ -1349,7 +1478,7 @@ impl Carrier {
         let mut queue = VecDeque::from([root]);
         while let Some(i) = queue.pop_front() {
             for (j, other) in self.rooms.iter().enumerate() {
-                if !seen[j] && doorway_between(&self.rooms[i], other).is_some() {
+                if !seen[j] && !doorways_between(&self.rooms[i], other).is_empty() {
                     seen[j] = true;
                     queue.push_back(j);
                 }
@@ -1440,32 +1569,7 @@ impl Carrier {
             build_left_ms: Some(size.build_seconds() * 1000),
             ..Room::new(size, x, y)
         };
-        if !room.tiles().all(in_hull) {
-            return Err(Reason::OutsideHull);
-        }
-        let map = self.tile_map();
-        for t in room.tiles() {
-            match map.kind(t) {
-                TileKind::Hull => {}
-                TileKind::Wall if room.is_ring(t) => {}
-                _ => return Err(Reason::OverlapsRoom),
-            }
-        }
-        let doors: Vec<Doorway> = self
-            .rooms
-            .iter()
-            .enumerate()
-            .filter_map(|(i, r)| {
-                doorway_between(&room, r).map(|(tiles, vertical)| Doorway {
-                    tiles,
-                    rooms: (i, self.rooms.len()),
-                    vertical,
-                })
-            })
-            .collect();
-        if doors.is_empty() {
-            return Err(Reason::MustShareWall);
-        }
+        let doors = self.room_fits(&room)?;
         let mut blockers = BTreeSet::new();
         for d in &doors {
             for t in d.tiles {
@@ -1495,6 +1599,83 @@ impl Carrier {
             return Err(Reason::WouldCutOff(after.items[i].id));
         }
         afford(size.cost(), wallet)
+    }
+
+    /// The shape half of [`Self::can_place_room`]: inside the hull, overlapping
+    /// rooms only on walls, flush with every room it shares a wall with and
+    /// joined to at least one by facing door slots. `Ok` holds the doorways
+    /// it would open.
+    fn room_fits(&self, room: &Room) -> Result<Vec<Doorway>, Reason> {
+        if !room.tiles().all(in_hull) {
+            return Err(Reason::OutsideHull);
+        }
+        let map = self.tile_map();
+        for t in room.tiles() {
+            match map.kind(t) {
+                TileKind::Hull => {}
+                TileKind::Wall if room.is_ring(t) => {}
+                _ => return Err(Reason::OverlapsRoom),
+            }
+        }
+        let mut doors = Vec::new();
+        for (i, r) in self.rooms.iter().enumerate() {
+            match contact(room, r) {
+                Contact::None => {}
+                Contact::Offset => return Err(Reason::DoorsMustLineUp),
+                Contact::Joined(d) => {
+                    doors.extend(d.into_iter().map(|(tiles, vertical)| Doorway {
+                        tiles,
+                        rooms: (i, self.rooms.len()),
+                        vertical,
+                    }))
+                }
+            }
+        }
+        if doors.is_empty() {
+            return Err(Reason::DoorsMustLineUp);
+        }
+        Ok(doors)
+    }
+
+    /// Where Build mode's ghost for a room of `size` snaps with its raw
+    /// anchor at `raw`: the nearest anchor (squared distance, then north,
+    /// then west) within [`ROOM_SNAP`] tiles each way whose door slot meets
+    /// an existing room's (TAKOAI-126). `None` when there isn't one; the
+    /// ghost then stays at `raw`. Items and money don't matter here: the
+    /// snapped ghost shows those reasons.
+    pub fn snap_room(&self, size: RoomSize, raw: Tile) -> Option<Tile> {
+        let (along_x, along_y) = size.door_slots();
+        let (w, d) = size.floor();
+        let mut best: Option<(i32, Tile)> = None;
+        for r in &self.rooms {
+            for ([(sx, sy), _], vertical) in r.door_slots() {
+                // Line one of the new room's slots up with this one, on
+                // the far side of the wall.
+                let anchors: Vec<Tile> = if vertical {
+                    along_y
+                        .iter()
+                        .flat_map(|&dy| [(sx, sy - dy), (sx - w - 1, sy - dy)])
+                        .collect()
+                } else {
+                    along_x
+                        .iter()
+                        .flat_map(|&dx| [(sx - dx, sy), (sx - dx, sy - d - 1)])
+                        .collect()
+                };
+                for (x, y) in anchors {
+                    let (dx, dy) = (x - raw.0, y - raw.1);
+                    if dx.abs() > ROOM_SNAP || dy.abs() > ROOM_SNAP {
+                        continue;
+                    }
+                    let key = dx * dx + dy * dy;
+                    let better = best.is_none_or(|(k, (bx, by))| (key, y, x) < (k, by, bx));
+                    if better && self.room_fits(&Room::new(size, x, y)).is_ok() {
+                        best = Some((key, (x, y)));
+                    }
+                }
+            }
+        }
+        best.map(|(_, t)| t)
     }
 
     /// Starts building a room (no checks; see [`Self::can_place_room`]).
@@ -2225,7 +2406,7 @@ mod tests {
     }
 
     /// TAKOAI-102: random valid layouts (Small and Large rooms built onto
-    /// the starting carrier wherever `can_place_room` allows, joined every
+    /// the starting carrier wherever the snapped ghost and `can_place_room` allow, joined every
     /// way that gives) draw every hull-edge wall with a shipped tile, each
     /// one a case the enumeration covers.
     #[test]
@@ -2237,13 +2418,18 @@ mod tests {
         for _ in 0..40 {
             let mut c = Carrier::starting();
             let mut built = 0;
-            for _ in 0..400 {
+            // Door-matched rooms fill the hull fast; stop at random points
+            // to see half-built shapes too.
+            let tries = 20 + rng.below(380);
+            for _ in 0..tries {
                 let size = if rng.below(3) == 0 {
                     RoomSize::Large
                 } else {
                     RoomSize::Small
                 };
-                let (x, y) = (rng.below(HULL_W), rng.below(HULL_H));
+                let raw = (rng.below(HULL_W), rng.below(HULL_H));
+                // Through Build mode's snap: few raw spots line doors up.
+                let (x, y) = c.snap_room(size, raw).unwrap_or(raw);
                 if c.can_place_room(size, x, y, RICH).is_ok() {
                     c.place_room(size, x, y);
                     // Half the time the site stays under construction.
@@ -2270,8 +2456,10 @@ mod tests {
                 }
             }
         }
-        // The fuzz reaches well past the starter's 15 cases.
-        assert!(seen.len() > 20, "{} hull cases", seen.len());
+        // The fuzz reaches past the starter's 15 cases (door-matched rooms
+        // sit on a coarser lattice than before TAKOAI-126, so fewer cases
+        // than the enumeration's superset come up).
+        assert!(seen.len() >= 20, "{} hull cases", seen.len());
     }
 
     #[test]
@@ -2488,23 +2676,20 @@ mod tests {
         );
         assert_eq!(
             c.can_place_room(RoomSize::Small, 26, 14, RICH),
-            Err(Reason::MustShareWall)
+            Err(Reason::DoorsMustLineUp)
         );
-        // Only a corner, or a single facing tile, doesn't connect.
+        // Only a corner doesn't connect; a single facing tile is offset.
         assert_eq!(
             c.can_place_room(RoomSize::Small, 21, 10, RICH),
-            Err(Reason::MustShareWall)
+            Err(Reason::DoorsMustLineUp)
         );
         assert_eq!(
             c.can_place_room(RoomSize::Small, 21, 8, RICH),
-            Err(Reason::MustShareWall)
+            Err(Reason::DoorsMustLineUp)
         );
-        // East of the Workshop: the doorway at (21,8)-(21,9) would land
-        // next to a crate stack; one row up it's clear.
-        let crate_stack = c.item_at((20, 9), Layer::Object).unwrap();
         assert_eq!(
-            c.can_place_room(RoomSize::Small, 21, 7, RICH),
-            Err(Reason::ClearDoorway(vec![crate_stack]))
+            Reason::DoorsMustLineUp.to_string(),
+            "Doors must line up with an existing room"
         );
         assert_eq!(c.can_place_room(RoomSize::Small, 21, 5, RICH), Ok(()));
         assert_eq!(
@@ -2513,6 +2698,96 @@ mod tests {
                 .to_string(),
             "Need 220 cr + 4 VC"
         );
+    }
+
+    #[test]
+    fn rooms_join_only_where_door_slots_meet_flush() {
+        let c = Carrier::starting();
+        // East of the Workshop (anchor (14,5)): flush at (21,5), offset by
+        // any number of tiles otherwise.
+        assert_eq!(c.can_place_room(RoomSize::Small, 21, 5, RICH), Ok(()));
+        for dy in [-4, -3, -2, -1, 1, 2, 3, 4] {
+            assert_eq!(
+                c.can_place_room(RoomSize::Small, 21, 5 + dy, RICH),
+                Err(Reason::DoorsMustLineUp),
+                "offset {dy}"
+            );
+        }
+        // South of the Hangar (0,5)-(14,15): a Small room flush with either
+        // corner meets one of its two south slots.
+        for x in [0, 7] {
+            assert_eq!(
+                c.can_place_room(RoomSize::Small, x, 15, RICH),
+                Ok(()),
+                "x {x}"
+            );
+        }
+        for x in [1, 2, 3, 4, 5, 6] {
+            assert_eq!(
+                c.can_place_room(RoomSize::Small, x, 15, RICH),
+                Err(Reason::DoorsMustLineUp),
+                "x {x}"
+            );
+        }
+        // The new room's doorway is the two facing slots.
+        let mut after = c.clone();
+        after.place_room(RoomSize::Small, 7, 15);
+        after.tick(5000);
+        let map = after.tile_map();
+        assert!(map.is_open_doorway((10, 15)) && map.is_open_doorway((11, 15)));
+        // Its other slots face nothing and stay wall.
+        for t in [(10, 20), (7, 17), (14, 17)] {
+            assert_eq!(map.kind(t), TileKind::Wall, "{t:?}");
+        }
+        // Two Large rooms join only fully flush (both slot pairs open),
+        // though a 7-tile offset puts one slot pair face to face.
+        let a = Room::new(RoomSize::Large, 0, 0);
+        assert!(matches!(
+            contact(&a, &Room::new(RoomSize::Large, 7, 10)),
+            Contact::Offset
+        ));
+        match contact(&a, &Room::new(RoomSize::Large, 0, 10)) {
+            Contact::Joined(d) => assert_eq!(d.len(), 2),
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn the_room_ghost_snaps_to_the_nearest_door_matched_spot() {
+        let c = Carrier::starting();
+        // Already valid: stays put.
+        assert_eq!(c.snap_room(RoomSize::Small, (14, 10)), Some((14, 10)));
+        // Two tiles off east of the Workshop: back to flush.
+        assert_eq!(c.snap_room(RoomSize::Small, (21, 7)), Some((21, 5)));
+        assert_eq!(c.snap_room(RoomSize::Small, (23, 4)), Some((21, 5)));
+        // Every snapped spot is placeable (money aside).
+        for y in 0..HULL_H {
+            for x in 0..HULL_W {
+                if let Some((sx, sy)) = c.snap_room(RoomSize::Large, (x, y)) {
+                    assert!(c.room_fits(&Room::new(RoomSize::Large, sx, sy)).is_ok());
+                    assert!((sx - x).abs() <= ROOM_SNAP && (sy - y).abs() <= ROOM_SNAP);
+                }
+            }
+        }
+        // Far from every room: nothing to snap to.
+        assert_eq!(c.snap_room(RoomSize::Small, (27, 15)), None);
+    }
+
+    #[test]
+    fn an_old_save_with_an_offset_room_still_loads() {
+        // Built before TAKOAI-126: a Small room one tile off east of the
+        // Workshop keeps its doorway and validates; a new one can't go
+        // there.
+        let mut c = Carrier::starting();
+        assert_eq!(
+            c.can_place_room(RoomSize::Small, 21, 6, RICH),
+            Err(Reason::DoorsMustLineUp)
+        );
+        c.rooms.push(Room::new(RoomSize::Small, 21, 6));
+        c.normalize();
+        assert_eq!(c.validate(), Ok(()));
+        let map = c.tile_map();
+        assert!(map.is_open_doorway((21, 7)) && map.is_open_doorway((21, 8)));
     }
 
     #[test]

@@ -641,6 +641,15 @@ pub fn room_mouse(size: RoomSize, (x, y): Tile) -> Tile {
     (x + (w - 1) / 2 + 1, y + (d - 1) / 2 + 1)
 }
 
+/// Where Build mode puts a room of `size` with the mouse on `mouse`: the
+/// nearest spot whose door slot meets an existing room's
+/// (`Carrier::snap_room`, TAKOAI-126), else right under the mouse, where
+/// the ghost shows why not.
+fn room_anchor(carrier: &Carrier, size: RoomSize, mouse: Tile) -> Tile {
+    let raw = Room::anchor_for(size, mouse);
+    carrier.snap_room(size, raw).unwrap_or(raw)
+}
+
 /// What a Build-mode click does.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Tool {
@@ -795,8 +804,8 @@ pub fn entry_card(game: &SaveGame, entry: Entry) -> EntryCard {
                 cost: size.cost(),
                 seconds: size.build_seconds(),
                 size: format!("{w} x {d} floor"),
-                placement: "Shares a wall with a room",
-                effect: "Floor space. Opens into every room it shares a wall with".into(),
+                placement: "Doors line up with a room",
+                effect: "Floor space. Opens where its doors meet another room's".into(),
                 lock,
             }
         }
@@ -2281,7 +2290,7 @@ pub fn apply_build_click(
     };
     match tool {
         Tool::Place(Entry::Room(size)) => {
-            let (x, y) = Room::anchor_for(size, mouse);
+            let (x, y) = room_anchor(&game.carrier, size, mouse);
             match workshop::build_room(game, size, x, y) {
                 Ok(_) => done(
                     format!("Building a {}: {}.", size.name(), cost_text(size.cost())),
@@ -2748,7 +2757,7 @@ fn ghost(game: &SaveGame, tool: Tool, mouse: Tile, pilot: Option<Tile>) -> Optio
     };
     match tool {
         Tool::Place(entry @ Entry::Room(size)) => {
-            let (x, y) = Room::anchor_for(size, mouse);
+            let (x, y) = room_anchor(c, size, mouse);
             let result = c.can_place_room(size, x, y, wallet);
             let flash = match &result {
                 Err(Reason::ClearDoorway(items)) => items.clone(),
@@ -4418,8 +4427,13 @@ mod tests {
         let g = ghost(&game, room, (30, 18), None).unwrap();
         assert_eq!(
             (g.ok, g.text.as_str()),
-            (false, "Must share a wall with a room")
+            (false, "Doors must line up with an existing room")
         );
+        // Two tiles south of flush east of the Workshop: the ghost snaps
+        // back to (21,5) (TAKOAI-126).
+        let g = ghost(&game, room, room_mouse(RoomSize::Small, (21, 7)), None).unwrap();
+        assert_eq!((g.at, g.ok), ((21, 5), true));
+        assert_eq!(g.doorways, [(21, 7), (21, 8)]);
         // A stool on the new doorway's clearance: refused, and it flashes.
         let stool = game.carrier.place(ItemId::Stool, 17, 9, None);
         let g = ghost(&game, room, (17, 12), None).unwrap();

@@ -1357,20 +1357,35 @@ fn autoplay_flow(
                 if at(2.9) {
                     autoplay.shoot(&mut commands, "11b-build-mode-first-visit");
                 }
-                // Then the other flyouts and a tool, each with its ghost
-                // on the Bridge.
+                // Then the room ghost snapping (TAKOAI-126): the mouse two
+                // tiles south of flush east of the Workshop snaps it to
+                // (21,5); four or more tiles from any door-matched spot it stays put,
+                // invalid. Then
+                // the other flyouts and a tool, each with its ghost on the
+                // Bridge.
+                let small = Tool::Place(Entry::Room(RoomSize::Small));
                 let flyouts = [
+                    (
+                        small,
+                        carrier::room_mouse(RoomSize::Small, (21, 7)),
+                        "room-snap",
+                    ),
+                    (
+                        small,
+                        carrier::room_mouse(RoomSize::Small, (24, 9)),
+                        "room-no-doors",
+                    ),
                     (Tool::Place(Entry::Item(ItemId::Stool)), (3, 3), "furniture"),
                     (Tool::Place(Entry::Item(ItemId::Rug)), (2, 3), "decor"),
                     (Tool::Remove, (6, 1), "remove"),
                 ];
                 for (i, (tool, at_tile, name)) in flyouts.into_iter().enumerate() {
-                    let t = 3.1 + i as f32 * 0.7;
+                    let t = 3.1 + i as f32 * 0.42;
                     if at(t) {
                         *overlay = Overlay::building(tool);
                         cursor.0 = Some(at_tile);
                     }
-                    if at(t + 0.5) {
+                    if at(t + 0.35) {
                         autoplay.shoot(&mut commands, &format!("11b-build-mode-{name}"));
                     }
                 }
