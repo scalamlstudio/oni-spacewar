@@ -2,6 +2,18 @@
 
 _Running log of what's decided and what's built. Newest entries on top._
 
+## 2026-11-09 — Animation frames are whole drawings (TAKOAI-130)
+
+- Wei's standard after the Pilot walk review: fix the original art, never
+  patch frames in the importer. ART_GUIDELINES.md § Animation frames now
+  forbids compositing (pasted legs/feet, borrowed heads or ears, erased and
+  repainted regions), requires one scale per sheet, and requires committing
+  each source sheet and its prompt. This turns the TAKOAI-79 ear lesson into a
+  rule for every character animation.
+- The Pilot's 25 authored frames (idle + 4 walk, five facings) were redrawn
+  as whole drawings with alternating legs and the original chibi ratio,
+  replacing the boots that had been pasted under the cut original body.
+
 ## 2026-11-08 — Playtest #2 component direction (TAKOAI-120)
 
 - Recorded Wei's accepted six replaceable component categories at the existing

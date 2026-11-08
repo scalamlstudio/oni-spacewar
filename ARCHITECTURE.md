@@ -1086,16 +1086,17 @@ The sideways walking hitch came from `pilot.e.walk_1` being drawn 18 source
 pixels left of its sibling frames. West mirrors east, so both directions
 hitched. The source, processed PNG, bundle and manifest hash are corrected;
 the character frame contract now checks horizontal drift within each facing.
-Wei's review requested natural alternating steps in every direction without
-lengthening the original tiny legs. Runtime frames now retain the original
-upper-body pixels and animate two stable boot identities within the original
-19 px foot band (rows 162–180). Opposite projected foot paths swap front/back
-positions, including diagonal depth. Five authored views cover all eight
-facings through the existing west-side mirroring. Every facing advances per
-24 px travelled (0.6 s full cycle), with unchanged scale and movement speed.
-Source sheets, exact prompts, original-body bases and import instructions are
-in `assets/authoring/`; `pilot_stride_import` composites feet below the original
-rounded waist and tail. Regression checks enforce the original body pixels,
-foot baseline and distinct poses in each authored view. `--autoplay --shots
-DIR --clip` captures all eight strides in real-window frame sequences
-(`11c-stride-<dir>-*`) and the populated start.
+Wei's review requested natural alternating steps in every direction, with
+the original chibi leg/body ratio, and then asked for the original assets to
+be fixed rather than feet pasted under a cut body. All 25 authored Pilot
+frames (idle + walk_1..4 for E, SE, S, NE, N) are now whole drawings: each
+facing comes from one generated five-cell sheet in `assets/authoring/`, and
+`pilot_walk_import` only keys out the magenta background, cuts the five
+drawings, scales the whole sheet once (idle = 150 px visible height) and
+places each frame on the 165×192 canvas at the row-181 baseline, with the
+head aligned to idle. W, SW and NW still mirror E, SE and NE. Every facing
+advances per 24 px travelled (0.6 s full cycle), with unchanged scale and
+movement speed. The character frame contract now passes for every Pilot
+frame, including N idle. `--autoplay --shots DIR --clip` captures all eight
+strides in real-window frame sequences (`11c-stride-<dir>-*`) and the
+populated start.

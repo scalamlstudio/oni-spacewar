@@ -61,3 +61,26 @@ clipped, flattened or patched back on.
 Before shipping a sprite or frame, check its alpha bounding box. Directional
 character frames must keep a consistent head shape across facings, especially
 when comparing north with south.
+
+## Animation frames
+
+Every frame of a character, idle and animation alike, is one whole drawing
+(TAKOAI-79 ears, TAKOAI-130 legs). When a pose looks wrong, fix the source
+art by redrawing or regenerating the whole frame. Never fix it in the import
+step.
+
+- **No compositing.** Do not cut a frame into regions and paste new parts
+  onto it: no new legs or feet under a kept body, no heads or ears from
+  another frame or direction, no polygon or ellipse body parts, no erasing
+  and repainting. An import script may only cut frames from a sheet, remove
+  the background, scale them and place them on the canvas.
+- **One scale per sheet.** Draw an animation's frames together, with the idle
+  pose, on one sheet, and scale the whole sheet by one factor. Do not fit
+  each frame to a target height, since that changes the body ratio whenever
+  a pose's outline changes.
+- **Keep the proportions.** New poses keep the character's established head,
+  body and leg ratio. Walk cycles alternate: each leg takes its turn in front
+  in every facing, diagonals included.
+- **Keep the source.** Commit the generated or painted sheet and its exact
+  prompt next to it (`assets/authoring/`), together with the importer that
+  turns it into runtime frames, so it can be redrawn and re-imported.

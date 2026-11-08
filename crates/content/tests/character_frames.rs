@@ -39,12 +39,7 @@ const DIRECTIONS: [&str; 8] = ["n", "ne", "e", "se", "s", "sw", "w", "nw"];
 /// Frames that break the contract and wait for an art fix (`id`, reason).
 /// The test fails if one of them starts passing, so the entry gets removed
 /// with the fix.
-const KNOWN_BAD: &[(&str, &str)] = &[
-    // TAKOAI-79's back-view repaint draws the ears lower than every other
-    // facing: 141 px tall against 150 px, so the head reads smaller facing
-    // away. Waits for an Art follow-up.
-    ("core.carrier.pilot.n.idle", "N ears 9 px low"),
-];
+const KNOWN_BAD: &[(&str, &str)] = &[];
 
 fn assets_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
@@ -330,45 +325,40 @@ fn processed_images_match_their_source() {
     );
 }
 
-/// Wei's proportion regression: generated art must never resize the head,
-/// torso or thighs. Every authored view keeps the original upper pixels,
-/// while all four foot poses must differ below that fixed boundary.
+/// TAKOAI-130: every walk frame is a whole drawing with its own legs, so
+/// the four poses differ across the full body (arms swing, the body bobs),
+/// not only in a foot band under a frozen torso; and each authored facing
+/// has a whole-character source sheet with its prompt beside it.
 #[test]
-fn pilot_walk_preserves_original_body_and_animates_every_view() {
+fn pilot_walk_frames_are_whole_drawings() {
     let root = assets_root();
     for dir in ["e", "se", "s", "ne", "n"] {
-        let mut original = image::open(root.join(format!("authoring/pilot-walk-bases/{dir}.png")))
-            .unwrap()
-            .into_rgba8();
-        if dir == "n" {
-            let head = image::open(root.join("authoring/pilot-walk-bases/n-head.png"))
-                .unwrap()
-                .into_rgba8();
-            for y in 0..96 {
-                for x in 0..165 {
-                    original.put_pixel(x, y, *head.get_pixel(x, y));
-                }
-            }
-        }
-        let mut poses = Vec::new();
-        for phase in 1..=4 {
-            let frame =
-                image::open(root.join(format!("source/core/carrier/pilot/{dir}/walk_{phase}.png")))
-                    .unwrap()
-                    .into_rgba8();
-            assert_eq!(frame.dimensions(), original.dimensions());
-            assert_eq!(
-                image::imageops::crop_imm(&frame, 0, 0, 165, 162).to_image(),
-                image::imageops::crop_imm(&original, 0, 0, 165, 162).to_image(),
-                "{dir} phase {phase}: original body changed"
-            );
+        for file in [
+            format!("pilot-walk-{dir}.png"),
+            format!("pilot-walk-{dir}-prompt.txt"),
+        ] {
             assert!(
-                (181..192).all(|y| (0..165).all(|x| frame.get_pixel(x, y)[3] <= 8)),
-                "{dir} phase {phase}: feet extended below original baseline"
+                root.join("authoring").join(&file).exists(),
+                "missing authoring/{file}"
             );
-            let feet = image::imageops::crop_imm(&frame, 0, 162, 165, 19).to_image();
-            assert!(!poses.contains(&feet), "{dir}: repeated foot pose {phase}");
-            poses.push(feet);
+        }
+        let frames: Vec<_> = ["idle", "walk_1", "walk_2", "walk_3", "walk_4"]
+            .map(|f| {
+                image::open(root.join(format!("source/core/carrier/pilot/{dir}/{f}.png")))
+                    .unwrap()
+                    .into_rgba8()
+            })
+            .into();
+        let upper =
+            |img: &image::RgbaImage| image::imageops::crop_imm(img, 0, 0, 165, 150).to_image();
+        for (i, a) in frames.iter().enumerate() {
+            for b in &frames[i + 1..] {
+                assert_ne!(
+                    upper(a),
+                    upper(b),
+                    "{dir}: two frames share an identical upper body"
+                );
+            }
         }
     }
 }
