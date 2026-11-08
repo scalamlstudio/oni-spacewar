@@ -1,0 +1,167 @@
+{
+  "version": 1,
+  "issue": "TAKOAI-114",
+  "status": "exploratory options; no final art direction",
+  "assets": [
+    {
+      "file": "lancer-source-v1.png",
+      "sheet_size_px": [
+        2172,
+        724
+      ],
+      "items_left_to_right": [
+        "move",
+        "windup",
+        "dash-smear",
+        "charge-line",
+        "death-burst"
+      ],
+      "layout": "one row; semantic cutouts, NOT equal-width grid frames"
+    },
+    {
+      "file": "bloater-source-v1.png",
+      "sheet_size_px": [
+        2172,
+        724
+      ],
+      "items_left_to_right": [
+        "move",
+        "swelling-with-ring",
+        "warning-ring",
+        "explosion",
+        "death-burst"
+      ],
+      "layout": "one row; semantic cutouts, NOT equal-width grid frames"
+    },
+    {
+      "file": "brood-source-v1.png",
+      "sheet_size_px": [
+        2172,
+        724
+      ],
+      "items_left_to_right": [
+        "idle",
+        "sac-windup",
+        "pulsing-sac",
+        "death-burst"
+      ],
+      "layout": "one row; semantic cutouts, NOT equal-width grid frames"
+    },
+    {
+      "file": "warden-source-v1.png",
+      "sheet_size_px": [
+        2172,
+        724
+      ],
+      "items_left_to_right": [
+        "idle",
+        "tether",
+        "shield-shimmer",
+        "death-burst"
+      ],
+      "layout": "one row; semantic cutouts, NOT equal-width grid frames"
+    },
+    {
+      "file": "fissure-guardian-source-v1.png",
+      "sheet_size_px": [
+        2172,
+        724
+      ],
+      "items_left_to_right": [
+        "phase-1",
+        "phase-2",
+        "shot-ring-flash",
+        "charge-line",
+        "death-burst"
+      ],
+      "layout": "one row; semantic cutouts, NOT equal-width grid frames"
+    },
+    {
+      "file": "elite-affixes-source-v1.png",
+      "sheet_size_px": [
+        2172,
+        724
+      ],
+      "items_left_to_right": [
+        "Swift",
+        "Volatile",
+        "Warding",
+        "Blinking",
+        "Splitting",
+        "Scorching",
+        "Chilling"
+      ],
+      "layout": "one row; semantic cutouts, NOT equal-width grid frames"
+    },
+    {
+      "file": "elite-effects-source-v1.png",
+      "sheet_size_px": [
+        2172,
+        724
+      ],
+      "items_left_to_right": [
+        "aura-option-1",
+        "aura-option-2",
+        "aura-option-3",
+        "burning-patch",
+        "teleport-mark"
+      ],
+      "layout": "one row; semantic cutouts, NOT equal-width grid frames"
+    }
+  ],
+  "cutout": "Use the asset pipeline cutout tool. Keep disconnected particles grouped per effect. Do not slice equal-width strips. Remove white including ring interiors; preserve white creature highlights.",
+  "suggested_output_frames_px": {
+    "ordinary_enemy": [
+      256,
+      256
+    ],
+    "guardian": [
+      512,
+      512
+    ],
+    "death_effect": [
+      256,
+      256
+    ],
+    "guardian_death": [
+      512,
+      512
+    ],
+    "affix_icon": [
+      64,
+      64
+    ],
+    "aura": [
+      256,
+      256
+    ],
+    "ground_patch": [
+      256,
+      256
+    ],
+    "charge_line": [
+      512,
+      64
+    ],
+    "tether": [
+      256,
+      32
+    ]
+  },
+  "suggested_world_render_px": {
+    "ordinary_enemy": 56,
+    "guardian": 140,
+    "affix_icon": 24,
+    "bloater_explosion_diameter": 180
+  },
+  "timing_from_design": {
+    "lancer_warning_s": 0.7,
+    "bloater_warning_s": 1.0,
+    "blinking_warning_s": 0.5
+  },
+  "notes": [
+    "Output sizes are import suggestions, not existing animation cells.",
+    "Bloater 90 px AoE treated as radius for art scale; game simulation remains authoritative.",
+    "Animate pulse/scale/opacity in the client; these are key poses, not full frame-by-frame animations."
+  ]
+}
