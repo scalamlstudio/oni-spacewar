@@ -400,10 +400,14 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
 - The first-playable single-player flow launches missions through
   `client::mission::MissionConfig`, which carries a list of ship loadouts even
   when that list currently has one entry, plus the mission's `kill_target`
-  (`KILL_TARGET` = 40 in normal play, `AUTOPLAY_KILL_TARGET` = 10 under
-  `--autoplay`, or `--kill-target N`; the run's value is the `flow::KillTarget`
-  resource). `launch_sim` puts it into the sim's start state with
-  `SimState::with_kill_target`; it lives in `Mission::kill_target`, so it is
+  (normal play rolls it from the mission seed with
+  `sim::mission::rolled_kill_target`, in `KILL_TARGET_MIN..=KILL_TARGET_MAX`
+  = 1..=100, on its own `SimRng` stream so the mission's RNG sequence is
+  untouched; `AUTOPLAY_KILL_TARGET` = 10 under `--autoplay`, or
+  `--kill-target N`; the run's override is the `flow::KillTarget` resource,
+  `None` = rolled). `SimState::with_loadouts` starts with the rolled value
+  and `launch_sim` applies the config's with `SimState::with_kill_target`,
+  which caps it at 100 (later Threat levels go through it too); it lives in `Mission::kill_target`, so it is
   rolled back, hashed and identical on every peer, and the sim, HUD and Result
   screen all read it from there. The demo battle path steps the same
   `SimWorld` resource at a fixed rate without opening a network session; the

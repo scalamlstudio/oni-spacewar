@@ -59,8 +59,8 @@ const USAGE: &str = "\
 usage:
   oni-spacewar [--autoplay [--ship kite|bulwark] [--missions N] [--continue] [--abandon]
                 [--shots DIR [--clip]]] [--kill-target N]
-                --autoplay battles end at 10 kills, normal play at 40;
-                --kill-target N overrides either (manual testing)
+                --autoplay battles end at 10 kills; normal play rolls 1-100
+                per mission; --kill-target N (1-100) overrides either
   oni-spacewar synctest [--minutes M] [--check-distance D] [--headless] [--bot]
   oni-spacewar p2p [--room ws://127.0.0.1:3536/oni?next=2]
                    [--delay-ms 50] [--jitter-ms 0] [--loss 0.0] [--input-delay 2]
@@ -102,18 +102,16 @@ struct Args {
     /// `--clip`: extra battle frames for a short clip (`flow::Autoplay::clip`).
     clip: bool,
     shots: Option<std::path::PathBuf>,
-    /// `--kill-target N`; `None` = 10 under `--autoplay`, else 40.
+    /// `--kill-target N`; `None` = 10 under `--autoplay`, else rolled.
     kill_target: Option<u32>,
 }
 
 impl Args {
-    /// Kills that win each Elimination in this run.
-    fn kill_target(&self) -> u32 {
-        self.kill_target.unwrap_or(if self.autoplay {
-            sim::tuning::AUTOPLAY_KILL_TARGET
-        } else {
-            sim::tuning::KILL_TARGET
-        })
+    /// Kills that win each Elimination in this run; `None` = each mission
+    /// rolls its own from its seed.
+    fn kill_target(&self) -> Option<u32> {
+        self.kill_target
+            .or(self.autoplay.then_some(sim::tuning::AUTOPLAY_KILL_TARGET))
     }
 }
 
@@ -197,8 +195,10 @@ fn parse_args() -> Args {
     if !(1..=MAX_PLAYERS).contains(&a.players) {
         usage_exit(&format!("--players must be 1..={MAX_PLAYERS}\n"));
     }
-    if a.kill_target == Some(0) {
-        usage_exit("--kill-target must be at least 1\n");
+    if a.kill_target
+        .is_some_and(|n| !(1..=sim::tuning::KILL_TARGET_MAX).contains(&n))
+    {
+        usage_exit("--kill-target must be 1..=100\n");
     }
     if a.room.is_empty() {
         a.room = format!("ws://127.0.0.1:3536/oni?next={}", a.players);
@@ -319,10 +319,13 @@ fn main() {
 
     app.add_plugins(GgrsPlugin::<GameConfig>::default())
         .insert_resource(RollbackFrameRate(60))
-        .insert_resource(SimWorld(
-            SimState::with_loadouts(args.seed, &test_loadouts(args.players))
-                .with_kill_target(args.kill_target()),
-        ))
+        .insert_resource(SimWorld({
+            let s = SimState::with_loadouts(args.seed, &test_loadouts(args.players));
+            match args.kill_target() {
+                Some(n) => s.with_kill_target(n),
+                None => s,
+            }
+        }))
         .insert_resource(RunLimit {
             frames,
             warmup_frames: 180,

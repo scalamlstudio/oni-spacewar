@@ -1257,7 +1257,7 @@ mod tests {
             .push(sim::Enemy::new(EnemyKind::Swarmer, FxVec2::ZERO));
         let hud = battle_hud(&w, 0);
         assert!(hud.contains("140/140"), "{hud}");
-        let kills = format!("Kills 7/{}", sim::tuning::KILL_TARGET);
+        let kills = format!("Kills 7/{}", w.mission.kill_target);
         assert!(hud.contains(&kills), "{hud}");
         assert!(hud.contains("Time 1:15   Enemies 1"), "{hud}");
         assert!(!hud.contains("Wave"), "{hud}");

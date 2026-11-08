@@ -138,7 +138,7 @@ design/OPEN_QUESTIONS.md._
   direction is done (OPEN_QUESTIONS.md § Not yet started).
 - **B7. Difficulty → Threat levels at the Berth.** The player picks Threat
   1–5 before launching: more enemy HP and damage, more elites and affixes,
-  better loot.
+  better loot. Threat never raises the kill target above 100 (TAKOAI-128).
 
 ## Build order
 

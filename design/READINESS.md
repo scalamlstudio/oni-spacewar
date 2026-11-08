@@ -553,9 +553,12 @@ Basic attacks fire at the nearest enemy in range (design/DESIGN.md § Player).
   procedural "magical night sky with nebula" (deep blue-violet, drifting
   magenta / teal / violet clouds, twinkling stars at 3 parallax depths), kept
   dark so ships and shots read.
-- **Kill target:** 100 (40 before packs, TAKOAI-113). The HUD shows "Kills x/100". `--autoplay` QA runs use
-  10 instead (shorter test battles, TAKOAI-77); `--kill-target N` overrides
-  either for manual testing. Reaching the target is Success immediately: remaining enemies vanish and every pickup still on the field is
+- **Kill target:** rolled per mission, 1–100, never above 100 (TAKOAI-128;
+  was a fixed 100, 40 before packs). The roll comes from the mission seed, so
+  every peer gets the same N. The HUD shows "Kills x/N"; the Berth's launch
+  panel and the Result screen show the same N. `--autoplay` QA runs use
+  10 instead (shorter test battles, TAKOAI-77); `--kill-target N` (1–100)
+  overrides either for manual testing. Reaching the target is Success immediately: remaining enemies vanish and every pickup still on the field is
   collected.
 - **Failed:** every battleship in the mission is destroyed (solo: yours). Quit
   Mission from the pause menu also counts as Failed.
@@ -630,7 +633,7 @@ sleepy).
 
 | Crew | Lines (expression) |
 |---|---|
-| **Pilot** (main character) — briefing at a berth | "Elimination run. Void monsters are nesting in the next segment." (serious) · "A hundred kills clears it. They pour out of void fissures in packs." (normal) · "Grab whatever they drop — the Workshop runs on it." (excited) |
+| **Pilot** (main character) — briefing at a berth | "Elimination run. Void monsters are nesting in the next segment." (serious) · "Hit the kill count and we're clear. They pour out of void fissures in packs." (normal) · "Grab whatever they drop — the Workshop runs on it." (excited) |
 | **Gunner** — Command Console | "Swarmers rush you. Keep moving and let the guns work." (serious) · "Spitters hang back. Their shots are slow — sidestep them." (normal) · Reaction — success: "Clean shooting out there." (happy) / failed: "We lost the hull, not the crew. Again." (angry) |
 | **Researcher** — Sample Analyzer | "Void Crystal hums when you hold it. I'd love a proper lab." (excited) · "Kite or Bulwark? Speed or armor — both are valid." (confused) · Reaction — success: "Fascinating samples! Well, crystals." (happy) / failed: "We'll learn from it… next time." (sad) |
 | **Engineer** — Upgrade Bench | "Bring me credits and crystals and I'll make her sing." (happy) · "Plating, weapons, thrusters — pick one." (normal) · Reaction — success: "Haul's in. Let's upgrade." (excited) / failed: "Nothing came back with you. Not even scrap." (sleepy) |

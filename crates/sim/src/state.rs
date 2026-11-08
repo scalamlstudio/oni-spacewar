@@ -21,7 +21,7 @@ use crate::entity::*;
 use crate::event::{Attack, SimEvent, Skill};
 use crate::fixed::{mul_q16, FxVec2, SUB};
 use crate::input::{NetInput, INPUT_MOVE, INPUT_SKILL_Q, INPUT_SKILL_W};
-use crate::mission::{Mission, MissionOutcome, MissionStatus};
+use crate::mission::{rolled_kill_target, Mission, MissionOutcome, MissionStatus};
 use crate::rng::SimRng;
 use crate::trig::{cos_q16, sin_q16, ANGLE_STEPS};
 use crate::tuning::*;
@@ -212,18 +212,22 @@ impl SimState {
             pickups: Vec::new(),
             blasts: Vec::new(),
             fissures,
-            mission: Mission::default(),
+            mission: Mission {
+                kill_target: rolled_kill_target(seed),
+                ..Mission::default()
+            },
             next_id: 1,
             events: Vec::new(),
         }
     }
 
-    /// The same mission won at `kill_target` kills instead of `KILL_TARGET`.
-    /// A launch setting: call it before the first `step`.
+    /// The same mission won at `kill_target` kills instead of the rolled
+    /// one, capped at `KILL_TARGET_MAX`. A launch setting: call it before the
+    /// first `step`.
     pub fn with_kill_target(mut self, kill_target: u32) -> Self {
         assert_eq!(self.frame, 0, "the kill target is set at launch");
         assert!(kill_target > 0, "kill target must be at least 1");
-        self.mission.kill_target = kill_target;
+        self.mission.kill_target = kill_target.min(KILL_TARGET_MAX);
         self
     }
 
@@ -1627,8 +1631,9 @@ mod tests {
     #[test]
     fn kill_target_wins_and_collects_the_field() {
         let mut s = quiet(&[KITE]);
-        assert_eq!(s.mission.kill_target, KILL_TARGET);
-        s.mission.kills = KILL_TARGET - 1;
+        let target = s.mission.kill_target;
+        assert_eq!(target, rolled_kill_target(7));
+        s.mission.kills = target - 1;
         s.pickups.push(Pickup {
             id: 0,
             kind: LootKind::Credits,
@@ -1643,7 +1648,7 @@ mod tests {
         s.step(&idle(1));
         let out = s.outcome().expect("mission over");
         assert!(out.success);
-        assert_eq!(out.kills, KILL_TARGET);
+        assert_eq!(out.kills, target);
         // 7 on the field + the Spitter's 15 (+ maybe a crystal).
         assert_eq!(out.collected.credits, 7 + SPITTER_CREDITS);
         assert_eq!(out.bonus.credits, SUCCESS_BONUS_CREDITS);
@@ -1673,13 +1678,63 @@ mod tests {
             let out = s.outcome().expect("mission over");
             assert!(out.success, "{loadout:?} wins");
             // Several enemies can die on the winning tick.
-            assert!((AUTOPLAY_KILL_TARGET..KILL_TARGET).contains(&out.kills));
+            assert!((AUTOPLAY_KILL_TARGET..KILL_TARGET_MAX).contains(&out.kills));
             assert!(s.enemies.is_empty());
         }
         // Same seed and inputs, different target: a different state hash.
         let a = SimState::with_loadouts(3, &[KITE]);
         let b = a.clone().with_kill_target(10);
         assert_ne!(a, b);
+    }
+
+    #[test]
+    fn kill_target_is_rolled_from_the_seed_and_capped_at_100() {
+        let mut seen = [false; KILL_TARGET_MAX as usize + 1];
+        for seed in 0..5000 {
+            let t = SimState::with_loadouts(seed, &[KITE]).mission.kill_target;
+            assert!((KILL_TARGET_MIN..=KILL_TARGET_MAX).contains(&t), "{t}");
+            assert_eq!(t, rolled_kill_target(seed));
+            assert_eq!(
+                t,
+                SimState::with_loadouts(seed, &[KITE]).mission.kill_target
+            );
+            seen[t as usize] = true;
+        }
+        // The whole range comes up, both ends included.
+        assert!(seen[1..].iter().all(|&s| s));
+        // Rolling the target doesn't shift the mission's own RNG stream.
+        let s = SimState::with_loadouts(3, &[KITE]);
+        let mut rng = SimRng::new(3);
+        assert_eq!(s.fissures, place_fissures(&mut rng));
+        // Whatever sets it at launch is capped.
+        let s = SimState::with_loadouts(3, &[KITE]).with_kill_target(250);
+        assert_eq!(s.mission.kill_target, KILL_TARGET_MAX);
+    }
+
+    #[test]
+    fn short_missions_end_at_one_and_ten_kills_with_roles_valid() {
+        for target in [1, 10] {
+            for seed in [5, 11, 23] {
+                let mut s = SimState::with_loadouts(seed, &mixed(2)).with_kill_target(target);
+                let mut f = 0;
+                while s.outcome().is_none() && f < 60 * 300 {
+                    for sh in &mut s.ships {
+                        sh.hull = sh.hull.max(1000);
+                    }
+                    s.step(&scripted_inputs(f, 2));
+                    f += 1;
+                }
+                let out = s.outcome().expect("mission over");
+                assert!(out.success, "target {target} seed {seed}");
+                assert!(out.kills >= target);
+                // Only roles whose share of the target was reached came.
+                for (i, (_, pct)) in ROLES.iter().enumerate() {
+                    if s.mission.introduced & (1 << i) != 0 {
+                        assert!(out.kills * 100 >= pct * target);
+                    }
+                }
+            }
+        }
     }
 
     #[test]
@@ -1715,8 +1770,9 @@ mod tests {
                 "{loadout:?} loses"
             );
 
-            // Win: a hull too thick to break, guns and skills going.
-            let mut s = SimState::with_loadouts(11, &[loadout]);
+            // Win: a hull too thick to break, guns and skills going, at
+            // the full kill target.
+            let mut s = SimState::with_loadouts(11, &[loadout]).with_kill_target(KILL_TARGET_MAX);
             let mut f = 0;
             while s.outcome().is_none() && f < 60 * 300 {
                 s.ships[0].hull = 10_000;
@@ -1727,7 +1783,7 @@ mod tests {
             }
             let out = s.outcome().expect("mission over");
             assert!(out.success, "{loadout:?} wins");
-            assert!(out.kills >= KILL_TARGET && out.collected.credits > 0);
+            assert!(out.kills >= KILL_TARGET_MAX && out.collected.credits > 0);
         }
     }
 

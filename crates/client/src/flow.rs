@@ -122,15 +122,17 @@ impl Plugin for FlowPlugin {
 /// arrival. After the last mission it quits to the Title, reloads the save
 /// from disk and Continues once (a restart inside the same process) before
 /// quitting. Prints `autoplay:` lines.
-/// Kills that win each Elimination in this run: `KILL_TARGET` in normal
-/// play, `AUTOPLAY_KILL_TARGET` under `--autoplay`, or `--kill-target N`.
-/// Goes into the `MissionConfig` at launch.
-#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
-pub struct KillTarget(pub u32);
+/// Kills that win each Elimination in this run: `None` in normal play (each
+/// mission rolls its own from its seed, 1..=100), `AUTOPLAY_KILL_TARGET`
+/// under `--autoplay`, or `--kill-target N`. Goes into the `MissionConfig`
+/// at launch.
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct KillTarget(pub Option<u32>);
 
-impl Default for KillTarget {
-    fn default() -> Self {
-        Self(sim::tuning::KILL_TARGET)
+impl KillTarget {
+    /// The kill target of the next mission launched from `save`.
+    pub fn for_mission(self, save: &crate::save::SaveGame) -> u32 {
+        mission::config_from_save(save, self.0).kill_target
     }
 }
 
@@ -1962,7 +1964,7 @@ mod tests {
                 upgrade_ids: upgrades.iter().map(|s| s.to_string()).collect(),
             }],
             seed,
-            kill_target: sim::tuning::KILL_TARGET,
+            kill_target: sim::tuning::KILL_TARGET_MAX,
         };
         let mut world = mission::launch_sim(&config);
         for _ in 0..60 * 60 * 5 {

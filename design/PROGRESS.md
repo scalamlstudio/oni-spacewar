@@ -303,3 +303,14 @@ _Running log of what's decided and what's built. Newest entries on top._
   in the demo; Threat levels picked at the Berth. Removed from
   OPEN_QUESTIONS.md § Battle direction; DESIGN.md § Player, § Elimination,
   § Battle Direction and READINESS.md § First Playable Scope updated.
+
+## 2026-11-08
+
+- **Elimination kill target rolled per mission, 1–100** (TAKOAI-128, Wei on
+  TAKOAI-109: the fixed 100 made missions boring). Each mission rolls its
+  kill target from its seed, so every peer agrees, and nothing raises it
+  above 100, Threat levels included. Wei first said 40–100, then lowered the
+  minimum to 1. The Pilot's briefing no longer names a number; the Berth's
+  launch panel, the HUD and the Result screen show the rolled N.
+  READINESS.md § Elimination mission, DESIGN.md § Elimination and BATTLE.md
+  B7 updated.
