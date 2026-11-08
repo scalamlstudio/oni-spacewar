@@ -1086,10 +1086,16 @@ The sideways walking hitch came from `pilot.e.walk_1` being drawn 18 source
 pixels left of its sibling frames. West mirrors east, so both directions
 hitched. The source, processed PNG, bundle and manifest hash are corrected;
 the character frame contract now checks horizontal drift within each facing.
-Wei's review requested a natural alternating stride as well: the four side
-poses now alternate near/far contact and passing, with 24 px travel per phase
-(a 0.6 s cycle). West mirrors the same authored east frames. The transparent
-source sheet, prompt and shared-origin importer live in `assets/authoring/`
-and `crates/content/src/bin/pilot_stride_import.rs`; canvas and baseline
-contracts still apply. `--autoplay --shots DIR --clip` captures both sideways
-strides as real-window frame sequences (`11c-stride-e-*` / `11c-stride-w-*`) and the populated start.
+Wei's review requested natural alternating steps in every direction without
+lengthening the original tiny legs. Runtime frames now retain the original
+upper-body pixels and animate two stable boot identities within the original
+19 px foot band (rows 162–180). Opposite projected foot paths swap front/back
+positions, including diagonal depth. Five authored views cover all eight
+facings through the existing west-side mirroring. Every facing advances per
+24 px travelled (0.6 s full cycle), with unchanged scale and movement speed.
+Source sheets, exact prompts, original-body bases and import instructions are
+in `assets/authoring/`; `pilot_stride_import` composites feet below the original
+rounded waist and tail. Regression checks enforce the original body pixels,
+foot baseline and distinct poses in each authored view. `--autoplay --shots
+DIR --clip` captures all eight strides in real-window frame sequences
+(`11c-stride-<dir>-*`) and the populated start.

@@ -1,17 +1,32 @@
-## Pilot side walk v2 (TAKOAI-130)
+## Pilot walk: original proportions, all eight directions (TAKOAI-130)
 
-`pilot-side-walk-v2.png` is the transparent four-column sheet generated with
-the built-in imagegen tool using the previous east-facing `walk_1.png` as
-the edit reference (`781acf3:assets/source/core/carrier/pilot/e/walk_1.png`). Wei requested legs that swing alternately forward and
-backward instead of holding the same split stance. Left-facing movement
-mirrors these east-facing frames in the client.
+Wei requested alternating legs in every direction while retaining the original
+short-legged body ratio. Runtime sprites keep the original upper-body pixels;
+only a 19 px foot band below row 162 can animate, ending at the original row
+181 baseline. No generated head, torso or longer thigh is imported.
 
-The four phases are near-leg forward contact, near-leg planted/far-leg
-passing, far-leg forward contact, and far-leg planted/near-leg passing.
-The planted boot baseline, head and hip origins share one transform across
-all four cells; the importer never independently recentres each pose.
+`pilot-walk-bases/` contains the original idle frames from commit `781acf3`.
+The N view uses that commit's `walk_1` head above row 96, since the legacy N
+idle ears sit lower; its original idle torso remains unchanged. This retains
+the existing character-height contract without resizing any body part.
 
-Regenerate the runtime files from the repository root:
+The five transparent `pilot-short-walk-<dir>.png` sheets were produced with
+the built-in imagegen tool, referencing the original idle sprite for that
+view. Exact prompts are saved beside them as `*-prompt.txt`. The importer
+extracts a stable pair of tiny boots from the first cell's bottom nine
+percent. Each boot keeps its identity throughout the cycle; the importer
+moves them in opposite projected directions, rather than relying on the
+generator to keep left/right identities consistent across four new bodies.
+
+Phases: first foot forward / second back; first planted / second passing;
+first back / second forward; first passing / second planted. Diagonals use
+both horizontal travel and depth; N/S swap foot depth. Original rounded
+waist/belly and the back-view tail remain in front of the feet. E, SE, S,
+NE and N are authored; W, SW and NW mirror E, SE and NE in the client.
+All eight facings advance one pose per 24 px travelled: a 0.6 s cycle at
+160 px/s. Character scale and movement speed are unchanged.
+
+Rebuild from the repository root:
 
 ```sh
 export CARGO_TARGET_DIR=/Users/chenwei/.cache/oni-spacewar-target
@@ -20,31 +35,9 @@ cargo run -p oni-content --bin content-pipeline
 cargo test -p oni-content --test character_frames
 ```
 
-The runtime frames remain `assets/source/core/carrier/pilot/e/walk_1.png`
-through `walk_4.png`, on the existing 165×192 canvas. The client uses 24 px
-travel per phase for these sideways poses: 0.6 seconds per full cycle at
-the unchanged 160 px/s walking speed. Other facing timings are unchanged.
-
-### Generation prompt
-
-Edit target: the attached game sprite. Create ONE production sprite sheet,
-4 equal-width columns in one horizontal row on a genuinely transparent
-background, no labels. Same orange cat pilot in teal flight suit, goggles,
-backpack and orange tail, facing RIGHT in exact side profile, same style,
-scale, head, face, torso and hip position in every column. ONLY change the
-leg and arm walking poses. The current image has static split legs;
-replace with a readable natural alternating bipedal WALK cycle, NOT
-running/hopping. Four phases left to right: (1) near leg extends
-FORWARD/right with heel touching ground, far leg extends BACK/left with
-toe touching; (2) near foot passes directly BELOW hip planted, far knee
-bent lifting to pass forward; (3) near leg extends BACK/left, far leg
-extends FORWARD/right heel planted, the exact opposite of phase1; (4) far
-foot planted BELOW hip, near knee bent lifting forward. Both distinct
-teal boots must visibly exchange front/back positions between columns 1
-and 3; do not keep the same foot in front across frames. Opposite arm
-swings subtly. Keep upper body and head absolutely consistent in position,
-proportions and size, no head turning, no changing costume or expression,
-no dramatic bob, all planted feet on the exact same horizontal baseline.
-Full body each cell, generous transparent margins, no cropping, no ground,
-no shadow, no text, no checkerboard. Crisp illustrated sprite matching
-the reference.
+The source frames remain `assets/source/core/carrier/pilot/<dir>/walk_1.png`
+through `walk_4.png`; processed copies, compressed bundles and manifest hashes
+are rebuilt together. Tests enforce the original upper pixels, canvas,
+feet baseline, per-view distinct poses and packaged-source consistency.
+`--autoplay --shots DIR --clip` records every facing in the real game window
+as `11c-stride-<dir>-00.png` through `10.png`.

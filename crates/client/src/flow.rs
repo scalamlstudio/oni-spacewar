@@ -1690,9 +1690,9 @@ fn autoplay_flow(
                             None => println!("autoplay: WARNING no path for walk {name}"),
                         }
                     }
-                    // Capture a full sideways stride in the real window, not
-                    // just one pose, for the animation regression (TAKOAI-130).
-                    if autoplay.clip && matches!(name, "e" | "w") {
+                    // Capture the full gait in every facing, including
+                    // diagonals and mirrored views (TAKOAI-130).
+                    if autoplay.clip {
                         for k in 0..11 {
                             if at(start + 0.04 + k as f32 * 0.08) {
                                 autoplay.shoot(&mut commands, &format!("11c-stride-{name}-{k:02}"));

@@ -44,7 +44,6 @@ const KNOWN_BAD: &[(&str, &str)] = &[
     // facing: 141 px tall against 150 px, so the head reads smaller facing
     // away. Waits for an Art follow-up.
     ("core.carrier.pilot.n.idle", "N ears 9 px low"),
-    ("core.carrier.pilot.n.walk_4", "N ears 9 px low"),
 ];
 
 fn assets_root() -> PathBuf {
@@ -329,4 +328,47 @@ fn processed_images_match_their_source() {
         "processed images are stale, re-run `cargo run --bin content-pipeline`:\n  {}",
         stale.join("\n  ")
     );
+}
+
+/// Wei's proportion regression: generated art must never resize the head,
+/// torso or thighs. Every authored view keeps the original upper pixels,
+/// while all four foot poses must differ below that fixed boundary.
+#[test]
+fn pilot_walk_preserves_original_body_and_animates_every_view() {
+    let root = assets_root();
+    for dir in ["e", "se", "s", "ne", "n"] {
+        let mut original = image::open(root.join(format!("authoring/pilot-walk-bases/{dir}.png")))
+            .unwrap()
+            .into_rgba8();
+        if dir == "n" {
+            let head = image::open(root.join("authoring/pilot-walk-bases/n-head.png"))
+                .unwrap()
+                .into_rgba8();
+            for y in 0..96 {
+                for x in 0..165 {
+                    original.put_pixel(x, y, *head.get_pixel(x, y));
+                }
+            }
+        }
+        let mut poses = Vec::new();
+        for phase in 1..=4 {
+            let frame =
+                image::open(root.join(format!("source/core/carrier/pilot/{dir}/walk_{phase}.png")))
+                    .unwrap()
+                    .into_rgba8();
+            assert_eq!(frame.dimensions(), original.dimensions());
+            assert_eq!(
+                image::imageops::crop_imm(&frame, 0, 0, 165, 162).to_image(),
+                image::imageops::crop_imm(&original, 0, 0, 165, 162).to_image(),
+                "{dir} phase {phase}: original body changed"
+            );
+            assert!(
+                (181..192).all(|y| (0..165).all(|x| frame.get_pixel(x, y)[3] <= 8)),
+                "{dir} phase {phase}: feet extended below original baseline"
+            );
+            let feet = image::imageops::crop_imm(&frame, 0, 162, 165, 19).to_image();
+            assert!(!poses.contains(&feet), "{dir}: repeated foot pose {phase}");
+            poses.push(feet);
+        }
+    }
 }
