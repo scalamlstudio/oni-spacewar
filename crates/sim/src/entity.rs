@@ -338,6 +338,10 @@ pub struct Enemy {
     pub elite: Option<Elite>,
     /// Set on the Fissure Guardian.
     pub boss: Option<Boss>,
+    /// Placed at the start (TAKOAI-130): it waits where it stands until a
+    /// ship comes near or a fight breaks out beside it
+    /// (`SimState::wake_dormant`).
+    pub dormant: bool,
 }
 
 impl Enemy {
@@ -362,6 +366,7 @@ impl Enemy {
             ward: 0,
             elite: None,
             boss: None,
+            dormant: false,
         }
     }
 

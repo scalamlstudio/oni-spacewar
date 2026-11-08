@@ -8,7 +8,11 @@
 //!   [`BASELINE_PX`];
 //! - the same visible height (head top to feet) within [`HEIGHT_SHARE`], so
 //!   the head isn't bigger or smaller facing away than facing the camera;
-//! - a transparent margin at every edge (nothing clipped).
+//! - a transparent margin at every edge (nothing clipped);
+//! - within one direction, the body at the same column, within
+//!   [`DRIFT_PX`]: a frame drawn off to one side makes the character jump
+//!   sideways once per walk cycle (TAKOAI-130: E `walk_1` sat 18 px left,
+//!   so walking left or right hitched backwards every stride).
 //!
 //! Characters are found in the manifest, so a new 8-direction character is
 //! checked as soon as it ships.
@@ -26,6 +30,9 @@ const BASELINE_PX: u32 = 2;
 /// How far a frame's visible height may stray from the character's median,
 /// as a share of that median.
 const HEIGHT_SHARE: f32 = 0.04;
+/// How far a frame's horizontal centre (middle of its opaque columns) may
+/// sit from the median of its direction's frames.
+const DRIFT_PX: u32 = 6;
 
 const DIRECTIONS: [&str; 8] = ["n", "ne", "e", "se", "s", "sw", "w", "nw"];
 
@@ -75,6 +82,16 @@ impl Frame {
 
     fn height(&self) -> u32 {
         self.feet - self.top
+    }
+
+    /// Twice the middle of the opaque columns (twice, to stay integer).
+    fn centre2(&self) -> u32 {
+        self.left + self.right
+    }
+
+    /// The facing part of `<character>.<dir>.<frame>`.
+    fn dir(&self) -> &str {
+        self.id.rsplit('.').nth(1).unwrap_or("")
     }
 
     fn clipped(&self) -> bool {
@@ -145,6 +162,20 @@ fn violations(frames: &[Frame]) -> BTreeMap<String, Vec<String>> {
         }
         if f.clipped() {
             add("opaque pixels touch the canvas edge".into());
+        }
+        let centre2 = median(
+            frames
+                .iter()
+                .filter(|o| o.dir() == f.dir())
+                .map(Frame::centre2)
+                .collect(),
+        );
+        if f.centre2().abs_diff(centre2) > 2 * DRIFT_PX {
+            add(format!(
+                "body centred at column {}, its direction's median {}",
+                f.centre2() / 2,
+                centre2 / 2
+            ));
         }
     }
     out
@@ -247,6 +278,30 @@ fn contract_flags_baseline_height_and_clipping() {
         "{why:?}"
     );
     assert!(why.iter().any(|m| m.contains("touch")), "{why:?}");
+}
+
+#[test]
+fn contract_flags_a_frame_drawn_off_to_one_side() {
+    let ink = image::Rgba([255, 255, 255, 255]);
+    let body = |x0: u32| {
+        let mut image = image::RgbaImage::new(40, 20);
+        for y in 2..18 {
+            image.put_pixel(x0, y, ink);
+            image.put_pixel(x0 + 9, y, ink);
+        }
+        image
+    };
+    let mut frames: Vec<Frame> = (0..3)
+        .map(|i| Frame::measure(&format!("t.e.{i}"), &body(15)).unwrap())
+        .collect();
+    // Another direction elsewhere on the canvas is fine.
+    frames.push(Frame::measure("t.s.0", &body(25)).unwrap());
+    assert!(violations(&frames).is_empty());
+    // Seven px left of its siblings: flagged.
+    frames.push(Frame::measure("t.e.3", &body(8)).unwrap());
+    let found = violations(&frames);
+    assert_eq!(found.keys().collect::<Vec<_>>(), ["t.e.3"]);
+    assert!(found["t.e.3"][0].starts_with("body centred at column 13"));
 }
 
 /// The pipeline copies PNGs byte for byte, so source, processed file and

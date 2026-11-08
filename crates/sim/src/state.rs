@@ -86,6 +86,55 @@ fn chill(ship: &mut Ship) {
     ship.chill = CHILL_DURATION;
 }
 
+/// The scattered start (TAKOAI-130): `START_GROUPS_MIN..=START_GROUPS_MAX`
+/// dormant groups of Swarmers (and sometimes a Spitter) on a ring round the
+/// ships' start, apart from each other. Its own RNG stream (seed mixed with
+/// a constant), so the mission's `SimRng` sequence, and with it the
+/// fissures and every pack, is the same as without it. Rejection sampling
+/// with a bounded number of tries; a group that finds no spot is skipped.
+fn place_scattered(seed: u64) -> Vec<Enemy> {
+    let mut rng = SimRng::new(seed ^ 0x5CA7_7E2E_D000_0130);
+    let groups = rng.range(START_GROUPS_MIN, START_GROUPS_MAX);
+    let gap = px(START_GROUP_GAP) as i64;
+    let mut centres: Vec<FxVec2> = Vec::new();
+    let mut enemies = Vec::new();
+    for _ in 0..groups {
+        let Some(at) = (0..64).find_map(|_| {
+            let angle = rng.range(0, ANGLE_STEPS - 1);
+            let r = px(rng.range(START_RING_MIN, START_RING_MAX));
+            let p = FxVec2::new(mul_q16(r, cos_q16(angle)), mul_q16(r, sin_q16(angle)));
+            centres
+                .iter()
+                .all(|c| (*c - p).length_squared() >= gap * gap)
+                .then_some(p)
+        }) else {
+            continue;
+        };
+        centres.push(at);
+        let swarmers = rng.range(START_SWARMERS_MIN, START_SWARMERS_MAX);
+        let spitter = rng.range(0, 99) < START_SPITTER_PCT;
+        let n = swarmers + spitter as i32;
+        let start = rng.range(0, ANGLE_STEPS - 1);
+        let r = px(START_GROUP_RING);
+        for k in 0..n {
+            let kind = if spitter && k == 0 {
+                EnemyKind::Spitter
+            } else {
+                EnemyKind::Swarmer
+            };
+            let angle = (start + k * ANGLE_STEPS / n) % ANGLE_STEPS;
+            let pos = at + FxVec2::new(mul_q16(r, cos_q16(angle)), mul_q16(r, sin_q16(angle)));
+            let mut e = Enemy::new(kind, pos);
+            e.dormant = true;
+            if kind == EnemyKind::Spitter && rng.range(0, 1) == 0 {
+                e.orbit = -1;
+            }
+            enemies.push(e);
+        }
+    }
+    enemies
+}
+
 fn ship_spawn(handle: usize, n: usize) -> FxVec2 {
     let x = (2 * handle as i32 - (n as i32 - 1)) * px(SHIP_SPAWN_GAP) / 2;
     FxVec2::new(x, 0)
@@ -208,6 +257,14 @@ impl SimState {
             .collect();
         let mut rng = SimRng::new(seed);
         let fissures = place_fissures(&mut rng);
+        let mut next_id = 1;
+        let enemies: Vec<Enemy> = place_scattered(seed)
+            .into_iter()
+            .map(|mut e| {
+                e.id = new_id(&mut next_id);
+                e
+            })
+            .collect();
         Self {
             params: SimParams {
                 num_players: n,
@@ -216,18 +273,19 @@ impl SimState {
             frame: 0,
             rng,
             ships,
-            enemies: Vec::new(),
+            mission: Mission {
+                kill_target: rolled_kill_target(seed),
+                spawned: enemies.len() as u32,
+                ..Mission::default()
+            },
+            enemies,
             projectiles: Vec::new(),
             enemy_projectiles: Vec::new(),
             pickups: Vec::new(),
             blasts: Vec::new(),
             patches: Vec::new(),
             fissures,
-            mission: Mission {
-                kill_target: rolled_kill_target(seed),
-                ..Mission::default()
-            },
-            next_id: 1,
+            next_id,
             events: Vec::new(),
         }
     }
@@ -265,6 +323,7 @@ impl SimState {
             self.update_blasts();
             self.update_patches();
             self.kill_and_drop();
+            self.wake_dormant();
             self.update_pickups();
             self.check_end();
         }
@@ -641,6 +700,9 @@ impl SimState {
                 })
                 .flatten();
             let e = &mut self.enemies[i];
+            if e.dormant {
+                continue;
+            }
             e.cooldown = e.cooldown.saturating_sub(1);
             let Some(h) = nearest_ship(&self.ships, e.pos) else {
                 continue;
@@ -1433,6 +1495,54 @@ impl SimState {
         });
     }
 
+    /// Dormant enemies (the scattered start) wake when a living ship is
+    /// within `START_WAKE_RANGE`, when they were hit, or when an enemy was
+    /// hit or killed this tick within `START_ALERT_RANGE`; each one that
+    /// wakes alerts the dormant ones within `START_ALERT_RANGE` of it in
+    /// turn, so a group wakes together. Runs after `kill_and_drop`, so this
+    /// tick's hits and kills are in `events`.
+    fn wake_dormant(&mut self) {
+        if self.enemies.iter().all(|e| !e.dormant) {
+            return;
+        }
+        let near =
+            |a: FxVec2, b: FxVec2, r: i32| (a - b).length_squared() <= px(r) as i64 * px(r) as i64;
+        let mut alerts: Vec<FxVec2> = self
+            .events
+            .iter()
+            .filter_map(|ev| match ev {
+                SimEvent::Hit { pos, .. } | SimEvent::Killed { pos, .. } => Some(*pos),
+                _ => None,
+            })
+            .collect();
+        for e in self.enemies.iter_mut().filter(|e| e.dormant) {
+            let ship_near = self
+                .ships
+                .iter()
+                .any(|s| s.alive() && near(s.pos, e.pos, START_WAKE_RANGE));
+            let alerted = alerts.iter().any(|a| near(*a, e.pos, START_ALERT_RANGE));
+            if ship_near || alerted || e.hp < e.kind.hp() {
+                e.dormant = false;
+                alerts.push(e.pos);
+            }
+        }
+        // Pass the alarm along until it settles (each pass wakes at least
+        // one, so this ends within one pass per dormant enemy).
+        loop {
+            let mut woke = false;
+            for e in self.enemies.iter_mut().filter(|e| e.dormant) {
+                if alerts.iter().any(|a| near(*a, e.pos, START_ALERT_RANGE)) {
+                    e.dormant = false;
+                    alerts.push(e.pos);
+                    woke = true;
+                }
+            }
+            if !woke {
+                break;
+            }
+        }
+    }
+
     /// The fissures go quiet and the Guardian comes out of the fissure
     /// nearest a living ship (lowest index on ties), with HP for the
     /// mission's ship count. The packs still out are drawn back into the
@@ -1577,9 +1687,12 @@ mod tests {
         }
     }
 
-    /// Ships only: the spawn director is held off so nothing spawns.
+    /// Ships only: the scattered start is cleared and the spawn director
+    /// is held off so nothing spawns.
     fn quiet(loadouts: &[Loadout]) -> SimState {
         let mut s = SimState::with_loadouts(7, loadouts);
+        s.enemies.clear();
+        s.mission.spawned = 0;
         s.mission.spawn_timer = u32::MAX;
         s
     }
@@ -1864,6 +1977,105 @@ mod tests {
         let before = s.enemies[0].pos;
         s.step(&idle(2));
         assert!(s.enemies[0].pos.x < before.x, "now chases ship 0");
+    }
+
+    #[test]
+    fn missions_start_with_dormant_groups_scattered_clear_of_the_ships() {
+        let mut seen = 0;
+        for seed in 0..200u64 {
+            for n in 1..=MAX_PLAYERS {
+                let s = SimState::with_loadouts(seed, &mixed(n));
+                let start = &s.enemies;
+                assert!(start.len() >= START_GROUPS_MIN as usize * START_SWARMERS_MIN as usize);
+                assert!(
+                    start.len() <= START_GROUPS_MAX as usize * (START_SWARMERS_MAX as usize + 1)
+                );
+                assert_eq!(s.mission.spawned, start.len() as u32);
+                for e in start {
+                    assert!(e.dormant && e.id != 0 && e.elite.is_none());
+                    assert!(matches!(e.kind, EnemyKind::Swarmer | EnemyKind::Spitter));
+                    for ship in &s.ships {
+                        let d = (e.pos - ship.pos).length();
+                        // Clear of every spawn, and out of wake range.
+                        assert!(d > px(START_WAKE_RANGE + 40) as i64, "{e:?} vs {ship:?}");
+                    }
+                }
+                // Same seed, same start; IDs unique and before any pack's.
+                assert_eq!(start, &SimState::with_loadouts(seed, &mixed(n)).enemies);
+                let mut ids: Vec<u32> = start.iter().map(|e| e.id).collect();
+                ids.dedup();
+                assert_eq!(ids.len(), start.len());
+                assert_eq!(s.next_id, start.len() as u32 + 1);
+                seen += start.len();
+            }
+        }
+        assert!(seen > 0);
+        // Seeded: different seeds scatter differently.
+        let at = |seed| SimState::with_loadouts(seed, &[KITE]).enemies;
+        assert_ne!(at(1), at(2));
+        // Its own RNG stream: fissures and the kill target don't change.
+        for seed in 0..50u64 {
+            let s = SimState::with_loadouts(seed, &[KITE]);
+            let mut rng = SimRng::new(seed);
+            assert_eq!(s.fissures, place_fissures(&mut rng));
+            assert_eq!(s.rng, rng);
+            assert_eq!(s.mission.kill_target, rolled_kill_target(seed));
+            assert!((KILL_TARGET_MIN..=KILL_TARGET_MAX).contains(&s.mission.kill_target));
+        }
+    }
+
+    #[test]
+    fn dormant_groups_wait_until_a_ship_comes_near() {
+        let mut s = quiet(&[BULWARK]);
+        s.ships[0].basic_cooldown = u32::MAX;
+        let mut a = enemy(EnemyKind::Swarmer, 600, 0);
+        a.dormant = true;
+        let mut b = enemy(EnemyKind::Spitter, 640, 0);
+        b.dormant = true;
+        let mut far = enemy(EnemyKind::Swarmer, -900, 0);
+        far.dormant = true;
+        s.enemies.extend([a.clone(), b.clone(), far.clone()]);
+        for _ in 0..ticks(5, 1) {
+            s.step(&idle(1));
+        }
+        // Nobody moved, nobody fired.
+        assert_eq!(s.enemies[0].pos, a.pos);
+        assert_eq!(s.enemies[1].pos, b.pos);
+        assert!(s.enemy_projectiles.is_empty());
+        // The ship flies within wake range of the Swarmer: its group wakes
+        // with it and gives chase; the far one keeps waiting.
+        s.ships[0].pos = FxVec2::from_px(600 - START_WAKE_RANGE + 10, 0);
+        s.ships[0].target = s.ships[0].pos;
+        s.step(&idle(1));
+        assert!(!s.enemies[0].dormant && !s.enemies[1].dormant);
+        assert!(s.enemies[2].dormant);
+        s.step(&idle(1));
+        assert!(s.enemies[0].pos.x < a.pos.x, "chases the ship");
+        assert_eq!(s.enemies[2].pos, far.pos);
+    }
+
+    #[test]
+    fn a_hit_wakes_the_dormant_group_round_it() {
+        let mut s = quiet(&[KITE]);
+        s.ships[0].basic_cooldown = u32::MAX;
+        let mut group = Vec::new();
+        for (x, y) in [(700, 0), (730, 30), (730, -30)] {
+            let mut e = enemy(EnemyKind::Swarmer, x, y);
+            e.dormant = true;
+            group.push(e);
+        }
+        let mut other = enemy(EnemyKind::Swarmer, 700, 600);
+        other.dormant = true;
+        group.push(other);
+        s.enemies.extend(group);
+        // A long shot kills the first: the rest of its group wakes.
+        s.enemies[0].hp = 0;
+        s.events.clear();
+        s.kill_and_drop();
+        s.wake_dormant();
+        assert_eq!(s.mission.kills, 1);
+        assert!(s.enemies[..2].iter().all(|e| !e.dormant));
+        assert!(s.enemies[2].dormant, "the other group sleeps on");
     }
 
     #[test]
@@ -2836,6 +3048,7 @@ mod tests {
         assert!(s.enemies.iter().all(|e| !e.is_elite()));
         // At the unlock the next pack is always led by one: its first enemy.
         let mut s = SimState::with_loadouts(3, &[KITE]).with_kill_target(100);
+        s.enemies.clear();
         s.mission.kills = ELITE_UNLOCK_PCT;
         s.mission.spawn_timer = 1;
         s.step(&idle(1));
@@ -3058,6 +3271,10 @@ mod tests {
         // A short kill target unlocks elites early in a scripted run.
         let go = |frames: u32| {
             let mut s = SimState::with_loadouts(5, &mixed(2)).with_kill_target(60);
+            // Keep this elite-director fixture independent of the optional
+            // opening groups; populated-start determinism is checked above.
+            s.enemies.clear();
+            s.mission.spawned = 0;
             for f in 0..frames {
                 for sh in &mut s.ships {
                     sh.hull = sh.hull.max(1000);

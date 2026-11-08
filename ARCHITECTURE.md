@@ -675,8 +675,8 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   Sorter at (19,11) with a few Art batch B pieces around it
   (`flow::EXAMPLE_FURNISHING`: sofa, wall screen, rug, cat tree), and
   waits again; else it buys the first affordable
-  Workshop upgrade. Then it click-to-moves to the ship's berth and boards
-  it on arrival; return to the Carrier after the last
+  Workshop upgrade. Then it click-to-moves to the Command Console and opens mission selection
+  on arrival; selects the requested hull, runs the briefing and launches; return to the Carrier after the last
   one, quit to the Title, reload the save from disk and Continue (a restart
   inside the same process), then quit (saving). `--abandon` quits the last mission from the pause menu 20 s in;
   `--shots` saves a screenshot of every scene (including the Settings
@@ -1066,3 +1066,25 @@ than one slow system. `--no-vsync` removes nearly all of them;
 `--frame-latency 3` on Metal lets frames run uncapped and is not a fix.
 Nothing needs fixing on the game side at current content. Re-measure on an
 idle machine and with real content before optimising.
+
+### Playtest #2 flow follow-up (TAKOAI-130)
+
+The Command Console on the Bridge opens mission selection; the Berth opens
+ship inspection/selection and is reserved for the TAKOAI-122 component refit.
+Mission selection offers the existing Elimination and both hulls, then the
+Pilot briefing launches. Threat controls remain with TAKOAI-124.
+
+`place_scattered` uses a separate seed-derived RNG stream and integer geometry
+to place 3–5 groups (2–3 Swarmers, sometimes a Spitter) 480–1000 px from the
+origin, with at least 280 px between group centres. Groups wait until a ship
+comes within 320 px, a member takes damage, or a hit/kill alerts neighbours
+within 160 px. The serialized `Enemy::dormant` flag belongs to rollback state.
+These kills count toward the unchanged 40–100 normal target and Guardian flow;
+fissure placements and the director's RNG stream are unchanged.
+
+The sideways walking hitch came from `pilot.e.walk_1` being drawn 18 source
+pixels left of its sibling frames. West mirrors east, so both directions
+hitched. The source, processed PNG, bundle and manifest hash are corrected;
+the character frame contract now checks horizontal drift within each facing.
+`--autoplay --shots DIR --clip` captures both sideways strides as real-window
+frame sequences (`11c-stride-e-*` / `11c-stride-w-*`) and the populated start.

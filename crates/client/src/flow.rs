@@ -1690,6 +1690,15 @@ fn autoplay_flow(
                             None => println!("autoplay: WARNING no path for walk {name}"),
                         }
                     }
+                    // Capture a full sideways stride in the real window, not
+                    // just one pose, for the animation regression (TAKOAI-130).
+                    if autoplay.clip && matches!(name, "e" | "w") {
+                        for k in 0..11 {
+                            if at(start + 0.04 + k as f32 * 0.08) {
+                                autoplay.shoot(&mut commands, &format!("11c-stride-{name}-{k:02}"));
+                            }
+                        }
+                    }
                     if at(start + 0.45) {
                         if let Ok((tf, p)) = pilot.single() {
                             println!(
@@ -1845,8 +1854,8 @@ fn autoplay_flow(
                 7.5
             };
             if at(dock) {
-                // Click the ship: the Pilot walks to its Dock and boards it
-                // on arrival (selects it and starts the briefing).
+                // Click the Command Console: the Pilot walks to the mission
+                // station and opens mission select on arrival (TAKOAI-130).
                 autoplay.boarded = None;
                 let order = pilot.single().ok().and_then(|(tf, _)| {
                     carrier::order_walk(
@@ -1854,19 +1863,18 @@ fn autoplay_flow(
                         &scene.hotspots,
                         carrier::grid(tf.translation.truncate()),
                         Vec2::ZERO,
-                        Some(Hotspot::Berth(berth)),
+                        Some(Hotspot::CommandConsole),
                     )
                 });
                 match order {
                     Some(o) => {
                         println!(
-                            "autoplay: click {}: walk {} waypoints",
-                            carrier::SHIPS[berth].name,
+                            "autoplay: click the Command Console: walk {} waypoints",
                             o.path.len()
                         );
                         *walk = o;
                     }
-                    None => println!("autoplay: no path to berth {berth}"),
+                    None => println!("autoplay: no path to the Command Console"),
                 }
             }
             if at(dock + 0.5) {
@@ -1882,20 +1890,21 @@ fn autoplay_flow(
                 );
             }
             if *since >= dock && autoplay.boarded.is_none() {
-                if matches!(
-                    *overlay,
-                    Overlay::Dialogue {
-                        launch: Some(_),
-                        ..
-                    }
-                ) {
-                    println!("autoplay: boarded after a {:.1} s walk", *since - dock);
+                if matches!(*overlay, Overlay::Missions { .. }) {
+                    println!(
+                        "autoplay: mission select after a {:.1} s walk",
+                        *since - dock
+                    );
                     autoplay.boarded = Some(*since);
                 } else if *since >= dock + 20.0 {
-                    // Never arrived: board in place so the run goes on.
-                    println!("autoplay: WARNING walk to berth {berth} timed out");
+                    // Never arrived: open it in place so the run goes on.
+                    println!("autoplay: WARNING walk to the Command Console timed out");
                     *walk = WalkOrder::default();
-                    carrier::interact_with(Hotspot::Berth(berth), save.game.as_mut(), &mut overlay);
+                    carrier::interact_with(
+                        Hotspot::CommandConsole,
+                        save.game.as_mut(),
+                        &mut overlay,
+                    );
                     autoplay.boarded = Some(*since);
                 }
             }
@@ -1904,19 +1913,23 @@ fn autoplay_flow(
             };
             let after = |t: f32| before < boarded + t && *since >= boarded + t;
             if after(0.4) {
-                autoplay.shoot(&mut commands, &format!("{:02}a-dock-briefing", 13 + n * 10));
+                // Pick this run's ship, as 1 / 2 would.
+                *overlay = Overlay::Missions { ship: berth };
             }
             if after(0.8) {
-                *overlay = Overlay::None;
+                autoplay.shoot(&mut commands, &format!("{:02}-mission-select", 13 + n * 10));
             }
             if after(1.3) {
-                autoplay.shoot(&mut commands, &format!("{:02}-dock-berths", 13 + n * 10));
+                *overlay = carrier::launch_prep(berth, save.game.as_mut());
             }
             if after(1.8) {
-                *overlay = Overlay::Launch { index: berth };
+                autoplay.shoot(&mut commands, &format!("{:02}a-briefing", 14 + n * 10));
             }
-            if after(2.3) {
-                autoplay.shoot(&mut commands, &format!("{:02}-dock-launch", 14 + n * 10));
+            if after(2.2) {
+                *overlay = Overlay::None;
+            }
+            if after(2.5) {
+                autoplay.shoot(&mut commands, &format!("{:02}-dock-berths", 14 + n * 10));
             }
             if after(2.8) {
                 launch.write(MissionRequest {
@@ -1937,6 +1950,17 @@ fn autoplay_flow(
         GameScreen::Battle => {
             if before == 0.0 {
                 println!("autoplay: battle {} started", n + 1);
+            }
+            if at(0.05) {
+                if let Some(w) = world.as_deref() {
+                    println!(
+                        "autoplay: populated start: {} enemies, {} dormant, target {}",
+                        w.enemies.len(),
+                        w.enemies.iter().filter(|e| e.dormant).count(),
+                        w.mission.kill_target
+                    );
+                }
+                autoplay.shoot(&mut commands, "15a-populated-start");
             }
             for (i, t) in [1.0, 6.0, 20.0, 35.0].into_iter().enumerate() {
                 if at(t) {
@@ -2101,13 +2125,22 @@ mod tests {
     }
 
     /// Demo Spec § Workshop upgrades: one successful mission buys about one
-    /// upgrade. Checked on the autoplay pilot's runs with both battleships.
+    /// upgrade. Checked on the autoplay pilot's won runs with both
+    /// battleships. The autopilot is no player: it flies at the nearest
+    /// enemy, so it wakes every dormant group of the scattered start
+    /// (TAKOAI-130) and loses some 100-kill runs (over 40 seeds before the
+    /// scattered start: Kite 35, Bulwark 36 won; after: 37 and 28). Most of
+    /// these runs must still be won.
     #[test]
     fn one_successful_mission_buys_an_upgrade() {
         for ship in [mission::KITE_ID, mission::BULWARK_ID] {
+            let mut won = 0;
             for seed in 10_000..10_008 {
                 let (r, _) = autoplayed(ship, &[], seed);
-                assert!(r.outcome.success(), "{ship} {seed} lost");
+                if !r.outcome.success() {
+                    continue;
+                }
+                won += 1;
                 let mut save = SaveGame::default();
                 save.record_mission_return(true, r.credits, &r.resources);
                 assert!(
@@ -2117,6 +2150,7 @@ mod tests {
                     r.resources
                 );
             }
+            assert!(won >= 5, "{ship}: won {won} of 8");
         }
     }
 

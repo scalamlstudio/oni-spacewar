@@ -6,7 +6,7 @@
       "id": "core",
       "version": "0.2.0",
       "gameplay_affecting": false,
-      "content_hash": "b4535d6ba9877eee7908965056fb3d929acb11b9e24e0ddcf798108e2ac0d654",
+      "content_hash": "27be444238af8f46e105a0bd8f1cd7881bba8c27a51d324087edd14b5250bcdd",
       "assets": [
         {
           "id": "core.audio.music.battle",
@@ -887,7 +887,7 @@
           "source": "source/core/carrier/pilot/e/walk_1.png",
           "processed": "packs/core/processed/carrier/pilot/e/walk_1.png",
           "compressed": "packs/core/bundles/carrier/pilot/e/walk_1.png.zst",
-          "hash": "308691b5125e57c70eb84fd79a1d0291b0772eb0d25202c5481e0c3646ccc1b1",
+          "hash": "72e20f43b6030991e5f0adf35138128a92a92076fea582edbbd5de5720d0b3b0",
           "gameplay_affecting": false
         },
         {
