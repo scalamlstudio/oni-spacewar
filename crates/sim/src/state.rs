@@ -5,6 +5,8 @@
 //! monster packs pouring out of void fissures (Swarmers and Spitters, and from
 //! TAKOAI-116 the Lancer, Bloater, Brood and Warden roles; from TAKOAI-117
 //! elite pack leaders with affixes), loot drops, and a win/lose result.
+//! From TAKOAI-118 the kill target brings out the Fissure Guardian, and its
+//! death wins the mission.
 //!
 //! - All state is plain data in [`SimState`] (entities in `Vec`s, see
 //!   [`crate::entity`]).
@@ -21,7 +23,7 @@ use crate::entity::*;
 use crate::event::{Attack, SimEvent, Skill};
 use crate::fixed::{mul_q16, FxVec2, SUB};
 use crate::input::{NetInput, INPUT_MOVE, INPUT_SKILL_Q, INPUT_SKILL_W};
-use crate::mission::{rolled_kill_target, Mission, MissionOutcome, MissionStatus};
+use crate::mission::{rolled_kill_target, Mission, MissionOutcome, MissionStage, MissionStatus};
 use crate::rng::SimRng;
 use crate::trig::{cos_q16, sin_q16, ANGLE_STEPS};
 use crate::tuning::*;
@@ -276,8 +278,13 @@ impl SimState {
     /// new roles (`ROLES`), a pack can be a role pack instead (`role_pack`).
     /// A pack brings only what fits under `MAX_LIVE_ENEMIES`, its role
     /// enemies and Spitters first; with the field full the director waits.
+    /// Nothing comes out once the kill target brought out the Guardian.
     fn direct_spawns(&mut self) {
         let m = &mut self.mission;
+        // The fissures go quiet once the Guardian is out.
+        if m.stage != MissionStage::Kills {
+            return;
+        }
         if m.spawn_timer > 0 {
             m.spawn_timer -= 1;
             if m.spawn_timer > 0 {
@@ -523,6 +530,10 @@ impl SimState {
                         amount: dealt,
                         pos: e.pos,
                     });
+                    if e.boss.is_some() {
+                        // The Guardian doesn't budge.
+                        continue;
+                    }
                     let d = e.pos - centre;
                     let push = if d == FxVec2::ZERO {
                         FxVec2::new(px(SHOCKWAVE_PUSH), 0)
@@ -611,8 +622,12 @@ impl SimState {
     /// - Broods hold near their fissure, toward the ship, and every
     ///   `BROOD_INTERVAL` pulse for `BROOD_WINDUP` and release Swarmers.
     /// - Wardens stay by the nearest ally but out of the ship's reach.
+    /// - The Fissure Guardian closes to `GUARDIAN_HOLD` and runs its phase's
+    ///   attack cycle (`BOSS_CYCLE_P1` / `_P2`), each attack after a wind-up:
+    ///   shot rings with two gaps, summons, and in phase 2 a charge.
     fn enemy_behaviour(&mut self) {
-        let mut releases: Vec<FxVec2> = Vec::new();
+        // Summons after the loop: (kind, where, how many, ring px).
+        let mut releases: Vec<(EnemyKind, FxVec2, i32, i32)> = Vec::new();
         for i in 0..self.enemies.len() {
             // A Warden's ally, read before `e` borrows the list.
             let ally = (self.enemies[i].kind == EnemyKind::Warden)
@@ -760,7 +775,12 @@ impl SimState {
                     if e.windup > 0 {
                         e.windup -= 1;
                         if e.windup == 0 {
-                            releases.push(e.pos);
+                            releases.push((
+                                EnemyKind::Swarmer,
+                                e.pos,
+                                BROOD_SWARMERS,
+                                BROOD_RELEASE_RING,
+                            ));
                             e.cooldown = BROOD_INTERVAL - BROOD_WINDUP;
                         }
                         continue;
@@ -800,16 +820,144 @@ impl SimState {
                     };
                     e.pos = e.pos + step;
                 }
+                EnemyKind::Guardian => {
+                    let Some(mut b) = e.boss else {
+                        continue;
+                    };
+                    let (id, at) = (e.id, e.pos);
+                    if b.phase == 1 && e.hp * 2 <= b.max_hp {
+                        // Phase 2: it roars, dropping whatever it was winding up.
+                        b.phase = 2;
+                        b.step = 0;
+                        b.phase_frame = self.frame;
+                        e.windup = 0;
+                        e.dash = 0;
+                        e.cooldown = GUARDIAN_ROAR;
+                        self.events
+                            .push(SimEvent::GuardianEnraged { enemy: id, pos: at });
+                    }
+                    let rest = if b.phase >= 2 {
+                        GUARDIAN_REST_P2
+                    } else {
+                        GUARDIAN_REST_P1
+                    };
+                    if e.dash > 0 {
+                        e.pos = e.pos + e.aim;
+                        e.dash -= 1;
+                        for s in self.ships.iter_mut().filter(|s| s.alive()) {
+                            let bit = 1 << s.handle;
+                            let reach = px(s.stats.radius + CONTACT_REACH);
+                            if e.struck & bit != 0 || !overlaps(e.pos, px(e.radius()), s.pos, reach)
+                            {
+                                continue;
+                            }
+                            e.struck |= bit;
+                            let hull_lost = s.take_damage(GUARDIAN_CHARGE_DAMAGE);
+                            self.events.push(SimEvent::ShipDamaged {
+                                ship: s.handle,
+                                source: id,
+                                amount: GUARDIAN_CHARGE_DAMAGE,
+                                hull_lost,
+                                pos: s.pos,
+                            });
+                        }
+                        if e.dash == 0 {
+                            e.cooldown = rest;
+                        }
+                    } else if e.windup > 0 {
+                        e.windup -= 1;
+                        if e.windup == 0 {
+                            match b.attack {
+                                BossAttack::Ring => {
+                                    let (n, speed, _) = b.ring();
+                                    let v = px_per_tick(speed);
+                                    let rim = px(e.radius());
+                                    for k in (0..n).filter(|&k| !Boss::in_gap(k, n)) {
+                                        let a = (b.gap + k * ANGLE_STEPS / n) % ANGLE_STEPS;
+                                        let (c, sn) = (cos_q16(a), sin_q16(a));
+                                        self.enemy_projectiles.push(Projectile {
+                                            id: new_id(&mut self.next_id),
+                                            owner: 0,
+                                            pos: at
+                                                + FxVec2::new(mul_q16(rim, c), mul_q16(rim, sn)),
+                                            vel: FxVec2::new(mul_q16(v, c), mul_q16(v, sn)),
+                                            ttl: GUARDIAN_SHOT_LIFETIME,
+                                            damage: GUARDIAN_SHOT_DAMAGE,
+                                            radius: GUARDIAN_SHOT_RADIUS,
+                                            attack: Attack::Bolt,
+                                            chill: false,
+                                        });
+                                    }
+                                    self.events
+                                        .push(SimEvent::GuardianRing { enemy: id, pos: at });
+                                    e.cooldown = rest;
+                                }
+                                BossAttack::Summon => {
+                                    releases.push(if b.phase >= 2 {
+                                        (
+                                            EnemyKind::Bloater,
+                                            at,
+                                            GUARDIAN_BLOATERS,
+                                            GUARDIAN_SUMMON_RING,
+                                        )
+                                    } else {
+                                        (
+                                            EnemyKind::Swarmer,
+                                            at,
+                                            GUARDIAN_SWARMERS,
+                                            GUARDIAN_SUMMON_RING,
+                                        )
+                                    });
+                                    e.cooldown = rest;
+                                }
+                                BossAttack::Charge => {
+                                    e.dash = GUARDIAN_CHARGE_TICKS;
+                                    e.struck = 0;
+                                }
+                            }
+                        }
+                    } else {
+                        let d = to_ship.length();
+                        let speed = if d > px(GUARDIAN_ATTACK_RANGE) as i64 {
+                            px_per_tick(GUARDIAN_RUSH_SPEED)
+                        } else {
+                            speed
+                        };
+                        if d > px(GUARDIAN_HOLD) as i64 {
+                            e.pos = e.pos + to_ship.scale_to(speed);
+                        }
+                        if e.cooldown == 0 && d <= px(GUARDIAN_ATTACK_RANGE) as i64 {
+                            let cycle: &[BossAttack] = if b.phase >= 2 {
+                                &BOSS_CYCLE_P2
+                            } else {
+                                &BOSS_CYCLE_P1
+                            };
+                            b.attack = cycle[b.step as usize % cycle.len()];
+                            b.step = ((b.step as usize + 1) % cycle.len()) as u8;
+                            let charge = to_ship.scale_to(
+                                px(GUARDIAN_CHARGE_DISTANCE) / GUARDIAN_CHARGE_TICKS as i32,
+                            );
+                            match b.attack {
+                                BossAttack::Ring => {
+                                    b.gap = self.rng.range(0, ANGLE_STEPS - 1);
+                                    e.windup = b.ring().2;
+                                }
+                                BossAttack::Summon => e.windup = GUARDIAN_SUMMON_WINDUP,
+                                // On top of the ship: nothing to aim at, skip it.
+                                BossAttack::Charge if charge == FxVec2::ZERO => e.cooldown = rest,
+                                BossAttack::Charge => {
+                                    e.aim = charge;
+                                    e.windup = GUARDIAN_CHARGE_WINDUP;
+                                }
+                            }
+                        }
+                    }
+                    e.boss = Some(b);
+                }
             }
         }
-        for at in releases {
-            self.spawn_ring(
-                EnemyKind::Swarmer,
-                at,
-                at,
-                BROOD_SWARMERS,
-                BROOD_RELEASE_RING,
-            );
+        for (kind, at, count, ring) in releases {
+            self.spawn_ring(kind, at, at, count, ring);
         }
     }
 
@@ -936,7 +1084,9 @@ impl SimState {
                     Attack::Scatter => SCATTER_KNOCKBACK,
                     _ => BOLT_KNOCKBACK,
                 };
-                e.pos = e.pos + p.vel.scale_to(px(knockback));
+                if e.boss.is_none() {
+                    e.pos = e.pos + p.vel.scale_to(px(knockback));
+                }
                 self.events.push(SimEvent::Hit {
                     enemy: e.id,
                     ship: p.owner,
@@ -972,7 +1122,8 @@ impl SimState {
     }
 
     /// Ships and enemies push apart, split by mass (the lighter one moves
-    /// more); enemies push each other apart evenly. Ships never collide with
+    /// more); enemies push each other apart evenly. Nothing moves the
+    /// Guardian. Ships never collide with
     /// each other, and a dashing Lancer runs straight through ships.
     fn separate(&mut self) {
         let total = SHIP_MASS + ENEMY_MASS;
@@ -982,8 +1133,12 @@ impl SimState {
                 else {
                     continue;
                 };
-                let ship_share =
-                    FxVec2::new(push.x * ENEMY_MASS / total, push.y * ENEMY_MASS / total);
+                // Ships slide off the Guardian; it doesn't move.
+                let ship_share = if e.boss.is_some() {
+                    push
+                } else {
+                    FxVec2::new(push.x * ENEMY_MASS / total, push.y * ENEMY_MASS / total)
+                };
                 ship.pos = ship.pos + ship_share;
                 e.pos = e.pos - (push - ship_share);
             }
@@ -994,7 +1149,12 @@ impl SimState {
                 let Some(push) = separation(a.pos, px(a.radius()), b.pos, px(b.radius())) else {
                     continue;
                 };
-                let half = FxVec2::new(push.x / 2, push.y / 2);
+                // Even split, except that the Guardian doesn't move.
+                let half = match (a.boss.is_some(), b.boss.is_some()) {
+                    (true, false) => push,
+                    (false, true) => FxVec2::ZERO,
+                    _ => FxVec2::new(push.x / 2, push.y / 2),
+                };
                 self.enemies[i].pos = self.enemies[i].pos + half;
                 self.enemies[j].pos = self.enemies[j].pos - (push - half);
             }
@@ -1081,9 +1241,11 @@ impl SimState {
     /// Dead enemies count as kills and drop loot rolled with the sim RNG.
     /// An elite drops `ELITE_CREDITS_MULT`× credits and `ELITE_CRYSTALS`
     /// Void Crystal (flagged `Pickup::elite`); a Volatile one leaves a
-    /// Bloater burst and a Splitting one `SPLIT_COPIES` normal copies.
+    /// Bloater burst and a Splitting one `SPLIT_COPIES` normal copies. The
+    /// Guardian drops its loot burst and starts the outro.
     fn kill_and_drop(&mut self) {
         let mut splits: Vec<(EnemyKind, FxVec2, FxVec2)> = Vec::new();
+        let mut guardian_down = false;
         for e in self.enemies.iter().filter(|e| e.hp <= 0) {
             self.mission.kills += 1;
             self.events.push(SimEvent::Killed {
@@ -1092,6 +1254,29 @@ impl SimState {
                 elite: e.is_elite(),
                 pos: e.pos,
             });
+            if e.kind == EnemyKind::Guardian {
+                // The loot burst: piles flung round where it fell.
+                guardian_down = true;
+                let n = GUARDIAN_LOOT_PILES + GUARDIAN_LOOT_CRYSTALS;
+                for k in 0..n {
+                    let a = (k as i32 * ANGLE_STEPS / n as i32) % ANGLE_STEPS;
+                    let r = px(40 + 30 * (k as i32 % 3));
+                    let (kind, amount) = if k < GUARDIAN_LOOT_PILES {
+                        (LootKind::Credits, GUARDIAN_LOOT_CREDITS)
+                    } else {
+                        (LootKind::VoidCrystal, 1)
+                    };
+                    self.pickups.push(Pickup {
+                        id: new_id(&mut self.next_id),
+                        kind,
+                        amount,
+                        pos: e.pos + FxVec2::new(mul_q16(r, cos_q16(a)), mul_q16(r, sin_q16(a))),
+                        ttl: PICKUP_LIFETIME,
+                        elite: true,
+                    });
+                }
+                continue;
+            }
             if e.has(Affix::Volatile) {
                 self.blasts.push(Blast {
                     id: new_id(&mut self.next_id),
@@ -1154,6 +1339,18 @@ impl SimState {
                 });
             }
         }
+        if guardian_down {
+            // The big kill moment: everything else vanishes and the loot is
+            // pulled in over the outro (`update_pickups`, `check_end`).
+            let m = &mut self.mission;
+            m.stage = MissionStage::Outro;
+            m.outro = GUARDIAN_OUTRO;
+            self.enemies.clear();
+            self.blasts.clear();
+            self.patches.clear();
+            self.enemy_projectiles.clear();
+            return;
+        }
         self.enemies.retain(|e| e.hp > 0);
         for (kind, at, home) in splits {
             self.spawn_ring(kind, at, home, SPLIT_COPIES, SPLIT_OFFSET);
@@ -1161,9 +1358,17 @@ impl SimState {
     }
 
     /// Pickups drift toward a nearby ship, are collected on contact, and
-    /// expire.
+    /// expire. In the outro every pickup is pulled to its nearest ship.
     fn update_pickups(&mut self) {
-        let drift = px_per_tick(PICKUP_DRIFT_SPEED);
+        let outro = self.mission.stage == MissionStage::Outro;
+        let (drift, range) = if outro {
+            (px_per_tick(GUARDIAN_OUTRO_PULL), i64::MAX)
+        } else {
+            (
+                px_per_tick(PICKUP_DRIFT_SPEED),
+                px(PICKUP_DRIFT_RANGE) as i64,
+            )
+        };
         for p in &mut self.pickups {
             p.ttl = p.ttl.saturating_sub(1);
             let Some(h) = nearest_ship(&self.ships, p.pos) else {
@@ -1171,7 +1376,7 @@ impl SimState {
             };
             let to_ship = self.ships[h].pos - p.pos;
             let d = to_ship.length();
-            if d <= px(PICKUP_DRIFT_RANGE) as i64 {
+            if d <= range {
                 p.pos = p.pos
                     + if d <= drift as i64 {
                         to_ship
@@ -1193,11 +1398,21 @@ impl SimState {
         self.pickups.retain(|p| p.ttl > 0);
     }
 
-    /// Success at the kill target (the field is cleared and every pickup
-    /// left is collected); failure when every ship is destroyed.
+    /// The kill target brings out the Guardian; success when the outro
+    /// after its death runs out (every pickup left is collected); failure
+    /// when every ship is destroyed.
     fn check_end(&mut self) {
+        if self.mission.stage == MissionStage::Kills
+            && self.mission.kills >= self.mission.kill_target
+        {
+            self.spawn_guardian();
+        }
         let m = &mut self.mission;
-        if m.kills >= m.kill_target {
+        let won = m.stage == MissionStage::Outro && {
+            m.outro = m.outro.saturating_sub(1);
+            m.outro == 0
+        };
+        if won {
             m.status = MissionStatus::Success;
             for p in self.pickups.drain(..) {
                 m.collected.add(p.kind, p.amount);
@@ -1216,6 +1431,51 @@ impl SimState {
         self.events.push(SimEvent::MissionEnded {
             success: m.status == MissionStatus::Success,
         });
+    }
+
+    /// The fissures go quiet and the Guardian comes out of the fissure
+    /// nearest a living ship (lowest index on ties), with HP for the
+    /// mission's ship count. The packs still out are drawn back into the
+    /// fissures (no kill, no loot) and their shots fade, so the fight
+    /// starts clean: the chaff -> elites -> boss beat.
+    fn spawn_guardian(&mut self) {
+        for e in self.enemies.drain(..) {
+            self.events.push(SimEvent::Recalled {
+                enemy: e.id,
+                pos: e.pos,
+            });
+        }
+        self.enemy_projectiles.clear();
+        let near = |f: &Fissure| {
+            self.ships
+                .iter()
+                .filter(|s| s.alive())
+                .map(|s| (s.pos - f.pos).length_squared())
+                .min()
+                .unwrap_or(i64::MAX)
+        };
+        let f = (0..self.fissures.len())
+            .min_by_key(|&i| (near(&self.fissures[i]), i))
+            .unwrap_or(0);
+        let pos = self.fissures[f].pos;
+        let mut g = Enemy::guardian(pos, self.ships.len());
+        g.id = new_id(&mut self.next_id);
+        let m = &mut self.mission;
+        m.stage = MissionStage::Guardian;
+        m.guardian = g.id;
+        m.guardian_frame = self.frame;
+        m.spawned += 1;
+        self.events
+            .push(SimEvent::GuardianEmerged { enemy: g.id, pos });
+        self.enemies.push(g);
+    }
+
+    /// The Guardian while it is out (`None` before and after).
+    pub fn guardian(&self) -> Option<&Enemy> {
+        let id = self.mission.guardian;
+        (id != 0)
+            .then(|| self.enemies.iter().find(|e| e.id == id))
+            .flatten()
     }
 
     /// Platform- and toolchain-independent checksum (FNV-1a over `Hash`), for
@@ -1834,12 +2094,19 @@ mod tests {
         assert!(s.enemies[0].pos.y.abs() > px(100) || s.enemies[0].pos.x < 0);
     }
 
+    /// Kill whatever is left of the Guardian this tick.
+    fn fell_guardian(s: &mut SimState) {
+        let id = s.mission.guardian;
+        s.enemies.iter_mut().find(|e| e.id == id).expect("out").hp = 0;
+    }
+
     #[test]
-    fn kill_target_wins_and_collects_the_field() {
+    fn kill_target_brings_the_guardian_whose_death_wins_and_collects_the_field() {
         let mut s = quiet(&[KITE]);
         let target = s.mission.kill_target;
         assert_eq!(target, rolled_kill_target(7));
         s.mission.kills = target - 1;
+        s.mission.spawn_timer = 1;
         s.pickups.push(Pickup {
             id: 0,
             kind: LootKind::Credits,
@@ -1852,12 +2119,70 @@ mod tests {
         last.hp = 0;
         s.enemies.push(last);
         s.enemies.push(enemy(EnemyKind::Swarmer, -400, 0));
+        s.ships[0].basic_cooldown = u32::MAX;
         s.step(&idle(1));
+        // The kill target brings out the Guardian at the nearest fissure,
+        // alone: the Swarmer still out is drawn back. The mission goes on.
+        assert_eq!(s.outcome(), None);
+        assert_eq!(s.enemies.len(), 1);
+        assert!(s
+            .events
+            .iter()
+            .any(|e| matches!(e, SimEvent::Recalled { .. })));
+        assert_eq!(s.mission.stage, MissionStage::Guardian);
+        let g = s.guardian().expect("guardian out").clone();
+        assert_eq!(g.kind, EnemyKind::Guardian);
+        assert_eq!(g.hp, GUARDIAN_HP);
+        assert!(s.fissures.iter().any(|f| f.pos == g.pos));
+        assert!(s.events.contains(&SimEvent::GuardianEmerged {
+            enemy: g.id,
+            pos: g.pos
+        }));
+        // The fissures are quiet: no more packs, however long it takes.
+        let spawned = s.mission.spawned;
+        for _ in 0..ticks(20, 1) {
+            s.ships[0].hull = KITE_HULL;
+            s.step(&idle(1));
+        }
+        assert!(s.enemies.iter().all(|e| e.kind != EnemyKind::Spitter));
+        let summoned = s.mission.spawned - spawned;
+        assert!(
+            summoned as usize <= s.enemies.len() + GUARDIAN_SWARMERS as usize * 10,
+            "{summoned}"
+        );
+        // Its death: a loot burst under the beam, the rest vanishes, and the
+        // mission succeeds after the outro with every pickup collected.
+        s.enemies.retain(|e| e.kind == EnemyKind::Guardian);
+        s.enemy_projectiles.clear();
+        s.pickups.clear();
+        let credits = s.mission.collected.credits;
+        let kills = s.mission.kills;
+        fell_guardian(&mut s);
+        s.step(&idle(1));
+        assert_eq!(s.mission.stage, MissionStage::Outro);
+        assert!(s.enemies.is_empty());
+        // (Piles that land on the ship are collected at once.)
+        let picked = s
+            .events
+            .iter()
+            .filter(|e| matches!(e, SimEvent::Collected { .. }))
+            .count();
+        assert_eq!(
+            s.pickups.iter().filter(|p| p.elite).count() + picked,
+            (GUARDIAN_LOOT_PILES + GUARDIAN_LOOT_CRYSTALS) as usize
+        );
+        assert_eq!(s.outcome(), None);
+        for _ in 1..GUARDIAN_OUTRO {
+            s.step(&idle(1));
+        }
         let out = s.outcome().expect("mission over");
         assert!(out.success);
-        assert_eq!(out.kills, target);
-        // 7 on the field + the Spitter's 15 (+ maybe a crystal).
-        assert_eq!(out.collected.credits, 7 + SPITTER_CREDITS);
+        assert_eq!(out.kills, kills + 1);
+        assert!(out.kills > target);
+        assert_eq!(
+            out.collected.credits - credits,
+            GUARDIAN_LOOT_PILES * GUARDIAN_LOOT_CREDITS
+        );
         assert_eq!(out.bonus.credits, SUCCESS_BONUS_CREDITS);
         assert_eq!(out.bonus.void_crystal, SUCCESS_BONUS_CRYSTAL);
         assert!(s.enemies.is_empty() && s.pickups.is_empty());
@@ -1876,7 +2201,9 @@ mod tests {
             let mut f = 0;
             while s.outcome().is_none() && f < 60 * 300 {
                 s.ships[0].hull = 10_000;
-                assert!(s.mission.kills < AUTOPLAY_KILL_TARGET);
+                if s.mission.stage == MissionStage::Kills {
+                    assert!(s.mission.kills < AUTOPLAY_KILL_TARGET);
+                }
                 let e = s.enemies.first().map(|e| e.pos).unwrap_or_default();
                 let buttons = if f % 30 == 0 { INPUT_SKILL_W } else { 0 };
                 s.step(&[input(buttons, e.x / SUB, e.y / SUB)]);
@@ -2221,6 +2548,11 @@ mod tests {
         e.hp = 0;
         s.enemies.push(e);
         s.step(&idle(1));
+        fell_guardian(&mut s);
+        for _ in 0..GUARDIAN_OUTRO {
+            assert!(!s.events.contains(&SimEvent::MissionEnded { success: true }));
+            s.step(&idle(1));
+        }
         assert!(s.events.contains(&SimEvent::MissionEnded { success: true }));
         s.step(&idle(1));
         assert!(s.events.is_empty());
@@ -2745,6 +3077,206 @@ mod tests {
         let ahead = s.checksum();
         let mut s = snapshot;
         for f in 1800..2000 {
+            s.step(&scripted_inputs(f, 2));
+        }
+        assert_eq!(s.checksum(), ahead);
+    }
+
+    /// A quiet mission with the Guardian out at `(x, y)`, ready to attack.
+    fn guardian_fight(loadouts: &[Loadout], x: i32, y: i32) -> SimState {
+        let mut s = quiet(loadouts);
+        s.mission.kill_target = 1;
+        s.mission.kills = 1;
+        s.step(&idle(loadouts.len()));
+        let g = s.enemies.iter_mut().find(|e| e.boss.is_some()).unwrap();
+        g.pos = FxVec2::from_px(x, y);
+        g.cooldown = 0;
+        for sh in &mut s.ships {
+            sh.basic_cooldown = u32::MAX;
+        }
+        s
+    }
+
+    fn guardian_of(s: &SimState) -> &Enemy {
+        s.guardian().expect("guardian out")
+    }
+
+    /// Step until the Guardian's current wind-up lands; returns the ticks.
+    fn until_attack(s: &mut SimState) -> u32 {
+        let n = s.ships.len();
+        let mut t = 0;
+        while guardian_of(s).windup == 0 {
+            s.step(&idle(n));
+            t += 1;
+            assert!(t < 600, "no wind-up");
+        }
+        while guardian_of(s).windup > 0 {
+            s.step(&idle(n));
+            t += 1;
+        }
+        t
+    }
+
+    #[test]
+    fn guardian_hp_scales_with_the_ship_count() {
+        for (n, hp) in [(1, 400), (2, 640), (4, 1120)] {
+            let g = Enemy::guardian(FxVec2::ZERO, n);
+            assert_eq!((g.hp, g.max_hp()), (hp, hp), "{n} ships");
+        }
+    }
+
+    #[test]
+    fn guardian_phase_1_rings_with_two_gaps_then_summons_swarmers() {
+        let mut s = guardian_fight(&[KITE], 0, 300);
+        assert_eq!(s.enemies.len(), 1);
+        // Ring: a flash first (gap locked at its start), then the shots.
+        s.step(&idle(1));
+        let g = guardian_of(&s);
+        let b = g.boss.unwrap();
+        assert_eq!(
+            (b.attack, g.windup),
+            (BossAttack::Ring, GUARDIAN_RING_WINDUP_P1)
+        );
+        assert!(s.enemy_projectiles.is_empty());
+        until_attack(&mut s);
+        let n = GUARDIAN_RING_SHOTS_P1;
+        assert_eq!(s.enemy_projectiles.len() as i32, n - 2 * GUARDIAN_RING_GAP);
+        assert!(s
+            .events
+            .iter()
+            .any(|e| matches!(e, SimEvent::GuardianRing { .. })));
+        // No shot flies within ~26° of either gap's centre line (its
+        // nearest neighbours leave 30° off it).
+        let at = guardian_of(&s).pos;
+        for gap in [b.gap, (b.gap + ANGLE_STEPS / 2) % ANGLE_STEPS] {
+            let dir = FxVec2::new(cos_q16(gap), sin_q16(gap));
+            for p in &s.enemy_projectiles {
+                let d = p.pos - at;
+                let along = (d.x as i64 * dir.x as i64 + d.y as i64 * dir.y as i64) >> 16;
+                let across = (d.x as i64 * dir.y as i64 - d.y as i64 * dir.x as i64) >> 16;
+                assert!(along <= 0 || across.abs() * 2 > along, "{along} {across}");
+            }
+        }
+        // Ring, ring, then a Swarmer pack round it.
+        until_attack(&mut s);
+        let before = s.enemies.len();
+        until_attack(&mut s);
+        assert_eq!(guardian_of(&s).boss.unwrap().attack, BossAttack::Summon);
+        let swarmers = s
+            .enemies
+            .iter()
+            .filter(|e| e.kind == EnemyKind::Swarmer)
+            .count();
+        assert_eq!(swarmers, GUARDIAN_SWARMERS as usize);
+        assert_eq!(s.enemies.len(), before + GUARDIAN_SWARMERS as usize);
+    }
+
+    #[test]
+    fn guardian_enrages_at_half_hp_then_charges_and_summons_bloaters() {
+        let mut s = guardian_fight(&[BULWARK], 0, 300);
+        s.ships[0].hull = 10_000;
+        let id = s.mission.guardian;
+        let g = s.enemies.iter_mut().find(|e| e.id == id).unwrap();
+        g.hp = g.max_hp() / 2;
+        s.step(&idle(1));
+        let g = guardian_of(&s);
+        let b = g.boss.unwrap();
+        assert_eq!((b.phase, b.step), (2, 0));
+        assert_eq!(g.cooldown, GUARDIAN_ROAR);
+        assert!(s
+            .events
+            .iter()
+            .any(|e| matches!(*e, SimEvent::GuardianEnraged { enemy, .. } if enemy == id)));
+        // Ring (denser, faster), charge, ring, Bloaters.
+        until_attack(&mut s);
+        assert_eq!(
+            s.enemy_projectiles.len() as i32,
+            GUARDIAN_RING_SHOTS_P2 - 2 * GUARDIAN_RING_GAP
+        );
+        let v = s.enemy_projectiles[0].vel.length();
+        assert!(v > px_per_tick(GUARDIAN_RING_SPEED_P2) as i64 - 4);
+        s.enemy_projectiles.clear();
+        let hull = s.ships[0].hull;
+        until_attack(&mut s);
+        assert_eq!(guardian_of(&s).boss.unwrap().attack, BossAttack::Charge);
+        assert!(guardian_of(&s).dash > 0);
+        for _ in 0..GUARDIAN_CHARGE_TICKS {
+            s.step(&idle(1));
+        }
+        assert_eq!(hull - s.ships[0].hull, GUARDIAN_CHARGE_DAMAGE);
+        until_attack(&mut s);
+        until_attack(&mut s);
+        let bloaters = s
+            .enemies
+            .iter()
+            .filter(|e| e.kind == EnemyKind::Bloater)
+            .count();
+        assert_eq!(bloaters, GUARDIAN_BLOATERS as usize);
+    }
+
+    #[test]
+    fn the_slowest_ship_can_sidestep_the_guardian_charge() {
+        let mut s = guardian_fight(&[BULWARK], 0, 300);
+        let id = s.mission.guardian;
+        let g = s.enemies.iter_mut().find(|e| e.id == id).unwrap();
+        let b = g.boss.as_mut().unwrap();
+        b.phase = 2;
+        b.step = 1;
+        s.step(&idle(1));
+        assert!(guardian_of(&s).windup > 0);
+        // Sidestep as soon as the line shows.
+        s.step(&[input(INPUT_MOVE, 120, 0)]);
+        for _ in 0..GUARDIAN_CHARGE_WINDUP + GUARDIAN_CHARGE_TICKS {
+            s.step(&idle(1));
+        }
+        assert_eq!(s.ships[0].hull, BULWARK_HULL);
+    }
+
+    #[test]
+    fn nothing_pushes_the_guardian() {
+        let mut s = guardian_fight(&[BULWARK], 0, 100);
+        let id = s.mission.guardian;
+        s.enemies.iter_mut().find(|e| e.id == id).unwrap().cooldown = u32::MAX;
+        let at = guardian_of(&s).pos;
+        s.ships[0].basic_cooldown = 0;
+        s.step(&[input(INPUT_SKILL_W, 0, 0)]);
+        s.step(&idle(1));
+        assert_eq!(guardian_of(&s).pos, at);
+        assert!(guardian_of(&s).hp < guardian_of(&s).max_hp());
+        // Flying into it: the ship slides off, the Guardian stays.
+        s.step(&[input(INPUT_MOVE, 0, 100)]);
+        for _ in 0..60 {
+            s.step(&idle(1));
+        }
+        assert_eq!(guardian_of(&s).pos, at);
+        let gap = (s.ships[0].pos - at).length();
+        assert!(gap >= px(GUARDIAN_RADIUS + BULWARK_RADIUS) as i64 - px(2) as i64);
+    }
+
+    #[test]
+    fn guardian_fights_stay_deterministic_under_rollback() {
+        let go = |frames: u32| {
+            let mut s = SimState::with_loadouts(9, &mixed(2)).with_kill_target(3);
+            for f in 0..frames {
+                for sh in &mut s.ships {
+                    sh.hull = sh.hull.max(1000);
+                }
+                s.step(&scripted_inputs(f, 2));
+            }
+            s
+        };
+        let a = go(3000);
+        assert_eq!(a.checksum(), go(3000).checksum());
+        assert_ne!(a.mission.stage, MissionStage::Kills);
+        let mut s = go(2000);
+        assert!(s.guardian().is_some() || s.mission.stage != MissionStage::Guardian);
+        let snapshot = s.clone();
+        for f in 2000..2300 {
+            s.step(&scripted_inputs(f, 2));
+        }
+        let ahead = s.checksum();
+        let mut s = snapshot;
+        for f in 2000..2300 {
             s.step(&scripted_inputs(f, 2));
         }
         assert_eq!(s.checksum(), ahead);

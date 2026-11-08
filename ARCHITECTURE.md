@@ -23,8 +23,8 @@ crates/
     src/lib.rs          crate docs + determinism rules
     src/state.rs        SimState (all rolled-back state), step() and its phases
     src/event.rs        SimEvent: hits, kills, ship damage, Bloater bursts, shots, skills, pickups, mission end (last step only; client feedback)
-    src/entity.rs       plain-data entities: Ship (+ ShipKind, Loadout, ShipSheet, ShipStats), Enemy (+ EnemyKind: Swarmer, Spitter, Lancer, Bloater, Brood, Warden; Elite + Affix, elite_name), Blast, Patch, Projectile, Pickup, Fissure
-    src/mission.rs      Elimination bookkeeping: spawn-director (pack pulse) timer, roles introduced, kills, loot totals, MissionStatus/MissionOutcome
+    src/entity.rs       plain-data entities: Ship (+ ShipKind, Loadout, ShipSheet, ShipStats), Enemy (+ EnemyKind: Swarmer, Spitter, Lancer, Bloater, Brood, Warden, Guardian; Elite + Affix, elite_name; Boss + BossAttack cycles), Blast, Patch, Projectile, Pickup, Fissure
+    src/mission.rs      Elimination bookkeeping: spawn-director (pack pulse) timer, roles introduced, kills, MissionStage (kills → Fissure Guardian → outro), loot totals, MissionStatus/MissionOutcome
     src/tuning.rs       Demo Spec numbers (design/READINESS.md) + unit conversion (px/s -> sub-px/tick)
     src/collision.rs    integer circle overlap + separation
     src/fixed.rs        fixed-point: SUB (1 px = 256), FxVec2 (+ scale_to), mul_q16
@@ -38,10 +38,10 @@ crates/
     tests/carrier_tiles.rs     Revision 3 carrier art: batch A IDs resolve, tiles are one cell, mask-picked walls join seamlessly
     src/bin/content_pipeline.rs        source -> processed asset + zstd bundle + manifest
     src/bin/content_manifest_diff.rs   compare manifests and list packs/assets a patch needs
-    src/cutouts.rs                     background keying, sheet slicing, single-sprite crop, row-of-items cutout (extract_row_items), resize
+    src/cutouts.rs                     background keying, sheet slicing, single-sprite crop, row-of-items cutout (extract_row_items, or at given columns: extract_row_items_at), resize
     src/bin/sprite_sheet_cutouts.rs    expression sheets -> portraits
     src/bin/demo_art_import.rs         design/art/demo (+ demo-v2 battle art and backdrops, Art's battle feedback strips incl. the Spitter wind-up and aim line) -> battle / title / result / icon / fx sources
-    src/bin/enemy_art_import.rs        design/art/enemies (TAKOAI-114 Lancer / Bloater / Brood / Warden and elite affix / effect source sheets) -> battle/enemy, battle/pose, battle/fx, battle/elite sources
+    src/bin/enemy_art_import.rs        design/art/enemies (TAKOAI-114 Lancer / Bloater / Brood / Warden / Fissure Guardian and elite affix / effect source sheets) -> battle/enemy, battle/pose, battle/fx, battle/elite sources
     src/bin/carrier_tile_import.rs     design/art/carrier-furniture catalogues (batches A/B, patches, hull edge, berth floor) -> carrier/tile, carrier/item, carrier/berth, scaffold, front marker sources
     hull-wall/build-hull-wall-extra.py every reachable hull-edge case Art's catalogue lacks, drawn by Art's generator -> hull-wall/extra-v1/ (PNGs + catalogue)
   client/             package `oni-client`, bin `oni-spacewar` — everything else
@@ -58,13 +58,13 @@ crates/
     src/codex.rs        the Codex (from the Sample Analyzer station, or Settings): content browser built from `core.codex` (assets/source/core/codex.json) — category tabs, scrolling thumbnail grid, detail panel; stats read from the catalogue / sim tuning; `discovered` hook
     src/mission.rs      typed client mission config/result handoff into `sim::SimState`; reward rules (survives_failure)
     src/rollback.rs     SimWorld resource, rollback/checksum registration, GgrsSchedule (+ hands each step's events to fx::BattleEvents)
-    src/fx.rs           battle hit / kill feedback from sim events: BattleEvents (dedupe by frame + key), hit flash, Art's spark / burst / impact strips and the role death / Bloater explosion key poses, damage numbers, screen shake, render-only hit-stop
+    src/fx.rs           battle hit / kill feedback from sim events: BattleEvents (dedupe by frame + key), hit flash, Art's spark / burst / impact strips and the role death / Bloater explosion key poses, damage numbers, screen shake, render-only hit-stop, full-screen flash (Guardian phase change / death)
     src/audio.rs        placeholder CC0 battle sound: effects from sim events, looping battle music, volumes from settings
     src/input.rs        mouse + keyboard / bot → NetInput (ReadInputs)
     src/net.rs          matchbox ↔ ggrs socket adapter + latency/loss emulator (from the spike)
     src/stats.rs        rollback / frame-time / desync measurement + report (from the spike)
     src/pacing.rs       frame-pacing profiler (windowed): main / render / swapchain-acquire split + OS-stall probe
-    src/render.rs       battle sprites keyed by stable content IDs + gizmo FX, enemy poses (`enemy_pose`), Spitter wind-up telegraph (glow frame + stretched aim line, read from the sim's `Enemy::windup` / `aim`), role telegraphs (Lancer charge line, Bloater warning ring, Warden tether + shield), elites (aura, name / affix label + icons, Warding shimmer, Blink mark, burning patches, loot beam, chilled ship tint), fissure pointers, camera follow, battle HUD (Update, outside rollback)
+    src/render.rs       battle sprites keyed by stable content IDs + gizmo FX, enemy poses (`enemy_pose`), Spitter wind-up telegraph (glow frame + stretched aim line, read from the sim's `Enemy::windup` / `aim`), role telegraphs (Lancer charge line, Bloater warning ring, Warden tether + shield), elites (aura, name / affix label + icons, Warding shimmer, Blink mark, burning patches, loot beam, chilled ship tint), Fissure Guardian (phase poses, ring flash + slot preview, charge line, boss bar, banners), fissure pointers, camera follow, battle HUD (Update, outside rollback)
     src/zoom.rs         mouse-wheel zoom for the local camera (Carrier and battle): 0.5×–2× target, eased, about the cursor; follow offset kept on screen; picking maths (`world_at`)
     src/sky.rs          procedural nebula sky: SkyMaterial (Material2d, `sky.wgsl`) on a quad that follows the camera; one sky behind every scene
 ```
@@ -280,7 +280,14 @@ wind-up pose instead). The elite sheets (TAKOAI-117) go to `battle/elite/`:
 the seven affix icons on 64² canvases, the first ("plain") of Art's three
 aura options as the elite ring (the other two stay in `design/` until one
 is picked), the burning patch and the teleport mark. The Fissure Guardian
-waits for its own step. A review contact sheet goes to `$CARGO_TARGET_DIR/enemy-art-contact-sheet.png`.
+(TAKOAI-118) gives `battle/enemy/fissure_guardian` (phase 1) and
+`battle/pose/fissure_guardian_phase2` on 512² canvases, the ring flash
+(256²), its charge line (512 × 64) and its 512² death burst. Its sheet is
+the one the empty-column split gets wrong (the hollow ring flash has gaps
+between its arcs, and its left spike reaches under phase 2's paw), so it is
+listed in the tool's `SPLIT_AT` with the source columns to cut at
+(`cutouts::extract_row_items_at`: each piece goes to the item its bounding
+box's centre falls in). A review contact sheet goes to `$CARGO_TARGET_DIR/enemy-art-contact-sheet.png`.
 
 ### Carrier Revision 3 art import
 
@@ -780,8 +787,9 @@ The gameplay in `sim` is the First Playable's Elimination mission
 Bulwark, from a per-player `Loadout` with Workshop upgrade levels) with an
 auto-firing basic attack and Q/W skills, packs of void monsters (Swarmers,
 Spitters and, from TAKOAI-116, Lancers, Bloaters, Broods and Wardens)
-spawned continuously from 1–2 void fissures in open space (no arena edge), loot pickups, and a win (kill target) /
-lose (every ship destroyed) result. The structure is what new gameplay should
+spawned continuously from 1–2 void fissures in open space (no arena edge), loot pickups, and a win (the kill target
+brings out the Fissure Guardian, TAKOAI-118; its death wins) / lose (every
+ship destroyed) result. The structure is what new gameplay should
 follow:
 
 - **Entities are plain data** (`entity.rs`), one `Vec` per kind inside
@@ -790,7 +798,8 @@ follow:
 - **`step()` is a fixed list of phases** (`state.rs`): spawn director → apply
   inputs (move target, Q/W skills) → move ships → basic attacks → enemy
   behaviour (chase / strafe in range band, contact damage, shots, Lancer
-  dash, Bloater fuse, Brood release, Warden positioning) → elite affixes
+  dash, Bloater fuse, Brood release, Warden positioning, the Guardian's
+  attack cycle) → elite affixes
   (Warding pulse, Blinking mark / landing, Scorching patches) → move
   projectiles → hits → separation → Bloater bursts → burning patches →
   kills + loot drops (a dying Bloater or Volatile elite leaves a `Blast`,
@@ -911,6 +920,41 @@ follow:
   (`render::elite_labels`) that follow each elite. `--autoplay` shoots
   `15e-battle-elite`, `-elite-blink` and `-elite-loot` the first time each
   is on screen.
+- **Fissure Guardian** (TAKOAI-118, design/BATTLE.md #7, decision B5).
+  `Mission::stage` (`MissionStage`) runs Kills → Guardian → Outro. When
+  `check_end` sees the kill target, `spawn_guardian` draws the packs still
+  out back into the fissures (`SimEvent::Recalled`: no kill, no loot; their
+  shots go too), puts the Guardian on the fissure nearest a living ship and
+  records its ID and frame (`Mission::guardian`, `guardian_frame`);
+  `direct_spawns` stays quiet from then on. The Guardian is an ordinary
+  `Enemy` of `EnemyKind::Guardian` with `boss: Some(Boss)` (max HP scaled by
+  ship count, phase, attack cycle step, the attack being wound up, the
+  ring's gap angle, the phase-2 frame), so hits, Warden shields, Bloater
+  bursts and kills all work on it unchanged; only knock-back, Shockwave
+  push and separation leave it where it is. Its behaviour (in
+  `enemy_behaviour`) reuses the Lancer's fields: `cooldown` until the next
+  wind-up, `windup` for the wind-up (the client draws every warning from
+  it), `aim` / `dash` / `struck` for the phase-2 charge. Each phase cycles
+  a fixed list (`BOSS_CYCLE_P1`: Ring, Ring, Summon; `BOSS_CYCLE_P2`: Ring,
+  Charge, Ring, Summon). A ring fires `n` table-trig directions from a gap
+  angle drawn from the sim RNG when its wind-up starts, skipping the
+  `Boss::in_gap` slots (two opposite gaps); the client draws its preview
+  from the same function. At half HP it enters phase 2 (`GuardianEnraged`,
+  a `GUARDIAN_ROAR` pause; it never becomes invulnerable). Its death drops
+  a ring of `elite` pickups (the loot burst), clears the field and starts
+  the outro (`Mission::outro`), which pulls every pickup to the nearest ship;
+  success comes when it runs out. The client (`render.rs`) draws the
+  Guardian from Art's two phase poses, the ring flash with faint shots in
+  every slot of the coming ring, its charge line and a throb before a
+  summon, a boss bar with its name bottom centre (`render::boss_bar`), banners
+  for its arrival, phase change and death (`render::banner_text`), dims the
+  quiet fissures and points the edge arrow at it. `fx.rs` gives its phase
+  change and death a full-screen flash (`ScreenFlash`), heavy shake, and
+  the death a `GUARDIAN_HIT_STOP` freeze and Art's 512 px burst
+  (`FxArt::cell`). The `--autoplay` pilot fights it as a player would
+  (`flow::guardian_pilot`: into the nearer gap through a ring, sideways off
+  a charge line) and shoots `15f-battle-guardian`, `-ring`, `-enraged`,
+  `-charge` and `-kill`.
 - **Collision** is integer circle overlap; pairs are checked brute-force in
   `Vec` order, which is fine at current entity counts. A deterministic broad
   phase can be added when counts grow.
@@ -920,7 +964,8 @@ follow:
 - **Fixed-point integers, no floats in the simulation.** Positions and
   velocities are `i32` sub-pixels (`SUB = 256`). Aiming at a point rescales
   the integer delta vector (`FxVec2::scale_to`); angle-based directions come from the
-  committed Q16 sine table in `sim::trig`; lengths use `i64::isqrt`. This is
+  committed Q16 sine table in `sim::trig` (fissure placement, Scatter, spawn
+  rings, the Fissure Guardian's shot rings); lengths use `i64::isqrt`. This is
   bit-identical across platforms and compilers without depending on libm or FMA
   behaviour. Floats appear only in the client when converting a sim position to
   a `Transform`.

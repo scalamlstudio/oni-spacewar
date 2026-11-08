@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use bevy::audio::Volume;
 use bevy::prelude::*;
 use bevy_ggrs::LocalPlayers;
-use sim::{Attack, LootKind, SimEvent, Skill};
+use sim::{Attack, EnemyKind, LootKind, SimEvent, Skill};
 
 use crate::art::ContentImages;
 use crate::fx::{local_handle, BattleEvents};
@@ -88,6 +88,15 @@ pub fn sound_for(ev: &SimEvent, me: usize) -> Option<Sfx> {
         SimEvent::Hit { attack, .. } if !matches!(attack, Attack::Shockwave | Attack::Blast) => HIT,
         // Placeholder: the Bloater's burst borrows the Shockwave's boom.
         SimEvent::Burst { .. } => BULWARK_SHOCKWAVE,
+        // Placeholders until real boss audio (TAKOAI-118): the kill borrows
+        // the Shockwave's boom, its coming out and its phase change the
+        // low failure sting, its rings the Scatter's blast.
+        SimEvent::Killed {
+            kind: EnemyKind::Guardian,
+            ..
+        } => BULWARK_SHOCKWAVE,
+        SimEvent::GuardianEmerged { .. } | SimEvent::GuardianEnraged { .. } => MISSION_FAILURE,
+        SimEvent::GuardianRing { .. } => KITE_SCATTER,
         SimEvent::Killed { elite: true, .. } => RARE_DROP,
         SimEvent::Killed { .. } => ENEMY_DEATH,
         SimEvent::ShipDamaged { ship, .. } if ship == me => SHIP_HIT,
@@ -297,5 +306,17 @@ mod tests {
         };
         assert_eq!(sound_for(&killed(false), 0), Some(ENEMY_DEATH));
         assert_eq!(sound_for(&killed(true), 0), Some(RARE_DROP));
+        let guardian = SimEvent::Killed {
+            enemy: 1,
+            kind: EnemyKind::Guardian,
+            elite: false,
+            pos: FxVec2::ZERO,
+        };
+        assert_eq!(sound_for(&guardian, 0), Some(BULWARK_SHOCKWAVE));
+        let enraged = SimEvent::GuardianEnraged {
+            enemy: 1,
+            pos: FxVec2::ZERO,
+        };
+        assert!(sound_for(&enraged, 0).is_some());
     }
 }

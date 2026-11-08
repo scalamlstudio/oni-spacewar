@@ -174,14 +174,24 @@ segment (see § Missions, § Ship Modules).
 The first mission type, and the only one in the First Playable Demo.
 
 - **Objective:** kill N enemies, N rolled per mission, 1–100, never above
-  100. The HUD shows "Kills x/N".
+  100, then the Fissure Guardian. The HUD shows "Kills x/N", then "destroy
+  the Fissure Guardian".
   Kills by any battleship in the instance count toward the shared total.
 - **Waves:** enemies arrive in a fixed sequence of waves. The next wave comes
   once the current one is cleared or a timeout passes, after a short pause with
   a "Wave N" banner. More enemies spawn in total than N, so the player never
   has to hunt down the last one.
-- **Success:** the kill count reaches N. Remaining enemies vanish and any loot
-  still on the field is collected.
+- **Fissure Guardian:** when the kill count reaches N the fissures go quiet,
+  the monsters still out are drawn back into them, and a **Fissure
+  Guardian** comes out (design/BATTLE.md B5). Phase 1: rings of slow shots
+  with gaps to fly through, plus Swarmer packs. Phase 2 (below half HP):
+  faster rings, a Lancer-style charge, and Bloaters. Every attack has a
+  warning (the ring flashes and shows its gaps; the charge draws its line).
+  A boss bar shows its name and HP; its phase change and death get a flash,
+  shake and sound, and it dies in a loot burst. Numbers: design/READINESS.md
+  § Elimination mission.
+- **Success:** the Fissure Guardian dies. Remaining enemies vanish and any
+  loot still on the field is pulled in and collected.
 - **Failed:** every battleship in the instance is destroyed (solo: the
   player's), or the player quits the mission. Mission loot is then lost unless
   its reward type's "survives failure" flag is on.
@@ -191,9 +201,6 @@ The first mission type, and the only one in the First Playable Demo.
   collects by flying over them.
 
 Numbers (wave plan, kill target, drop rates): design/READINESS.md § Demo Spec.
-
-Planned (design/BATTLE.md § Decisions, B5): once the kill count is reached,
-a Fissure Guardian comes out and the mission succeeds when it dies.
 
 ## Ship Modules
 
