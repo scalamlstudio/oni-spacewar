@@ -6,7 +6,7 @@
       "id": "core",
       "version": "0.2.0",
       "gameplay_affecting": false,
-      "content_hash": "efffd319ba4c1e039af1deb73641c3cadbd4534099e9e30a6915dc9c6a4f32a0",
+      "content_hash": "d9ed182910c0eea71307953263c277b683cfb75eecc952a1e0fcccad8f8621b2",
       "assets": [
         {
           "id": "core.audio.music.battle",
@@ -132,6 +132,96 @@
           "processed": "packs/core/processed/audio/sfx/ship_hit.ogg",
           "compressed": "packs/core/bundles/audio/sfx/ship_hit.ogg.zst",
           "hash": "112d4f93ddcc370b410630f971c0f5d991856102da9c76bc5c5540d388e75aaa",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.elite.affix_blinking",
+          "kind": "image/png",
+          "source": "source/core/battle/elite/affix_blinking.png",
+          "processed": "packs/core/processed/battle/elite/affix_blinking.png",
+          "compressed": "packs/core/bundles/battle/elite/affix_blinking.png.zst",
+          "hash": "9d73fadcb721f6f7fdd321ccc9664caac5c1aef53afb07a72e13edf61667c147",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.elite.affix_chilling",
+          "kind": "image/png",
+          "source": "source/core/battle/elite/affix_chilling.png",
+          "processed": "packs/core/processed/battle/elite/affix_chilling.png",
+          "compressed": "packs/core/bundles/battle/elite/affix_chilling.png.zst",
+          "hash": "7212d64bda4c650f455d323ec2c2b382c4b8d999c42a0b875064a8372fd6e95d",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.elite.affix_scorching",
+          "kind": "image/png",
+          "source": "source/core/battle/elite/affix_scorching.png",
+          "processed": "packs/core/processed/battle/elite/affix_scorching.png",
+          "compressed": "packs/core/bundles/battle/elite/affix_scorching.png.zst",
+          "hash": "6b8249d617a4605a8188868e331f8e68fb32b0262829b8706fada47c1f819c3e",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.elite.affix_splitting",
+          "kind": "image/png",
+          "source": "source/core/battle/elite/affix_splitting.png",
+          "processed": "packs/core/processed/battle/elite/affix_splitting.png",
+          "compressed": "packs/core/bundles/battle/elite/affix_splitting.png.zst",
+          "hash": "b77abb05582a686ebff15ff9b380ff5a96426d9017c61d5cc7360a6adf7bc58e",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.elite.affix_swift",
+          "kind": "image/png",
+          "source": "source/core/battle/elite/affix_swift.png",
+          "processed": "packs/core/processed/battle/elite/affix_swift.png",
+          "compressed": "packs/core/bundles/battle/elite/affix_swift.png.zst",
+          "hash": "6d93e4a6cd3d9f697e5dd7785fdc1b5c96b2f0faf225f8ab59a35058c61e66bb",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.elite.affix_volatile",
+          "kind": "image/png",
+          "source": "source/core/battle/elite/affix_volatile.png",
+          "processed": "packs/core/processed/battle/elite/affix_volatile.png",
+          "compressed": "packs/core/bundles/battle/elite/affix_volatile.png.zst",
+          "hash": "f0ae04e50a64b63c82d4ded5cf79371382b6d1464a50f8e54f462878fa41399a",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.elite.affix_warding",
+          "kind": "image/png",
+          "source": "source/core/battle/elite/affix_warding.png",
+          "processed": "packs/core/processed/battle/elite/affix_warding.png",
+          "compressed": "packs/core/bundles/battle/elite/affix_warding.png.zst",
+          "hash": "95adfb1a380b8065decd5791978ca7569b6914c20b29bcfad48d93a8d19ebe26",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.elite.aura",
+          "kind": "image/png",
+          "source": "source/core/battle/elite/aura.png",
+          "processed": "packs/core/processed/battle/elite/aura.png",
+          "compressed": "packs/core/bundles/battle/elite/aura.png.zst",
+          "hash": "deaaa7543d69276b25802ee789e10438ea00b1a0cd60b8ba94df3ffbce838123",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.elite.burning_patch",
+          "kind": "image/png",
+          "source": "source/core/battle/elite/burning_patch.png",
+          "processed": "packs/core/processed/battle/elite/burning_patch.png",
+          "compressed": "packs/core/bundles/battle/elite/burning_patch.png.zst",
+          "hash": "ce5340b1d69615a579d843c7206f5f5381df70058f425df4719786efbbd6ce82",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.elite.teleport_mark",
+          "kind": "image/png",
+          "source": "source/core/battle/elite/teleport_mark.png",
+          "processed": "packs/core/processed/battle/elite/teleport_mark.png",
+          "compressed": "packs/core/bundles/battle/elite/teleport_mark.png.zst",
+          "hash": "ee90c8b58536e61df3c2fb30702d82feaaeea8d4c3757ac698f395b520ecc6ed",
           "gameplay_affecting": false
         },
         {

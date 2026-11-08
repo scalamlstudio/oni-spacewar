@@ -6,6 +6,11 @@
 //! the procedural nebula sky (`crate::sky`). Player bolts use a generated
 //! glow tinted per player; shields, the shockwave, hull bars, the move
 //! marker and the off-screen fissure pointers are gizmo effects.
+//!
+//! Elite leaders (TAKOAI-117) are drawn bigger (their sim radius), ringed by
+//! Art's aura, with their name, affix label and icon above them; their
+//! affixes' telegraphs (Warding shimmer, Blinking mark, Scorching patches,
+//! a chilled ship's tint) and the light beam on elite loot all read sim state.
 
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::input::mouse::AccumulatedMouseScroll;
@@ -17,7 +22,10 @@ use sim::tuning::{
     BLOATER_BLAST_RADIUS, BLOATER_FUSE, BROOD_WINDUP, FISSURE_RADIUS, LANCER_DASH_DISTANCE,
     LANCER_WINDUP, SHOCKWAVE_RADIUS, SPITTER_FIRE_RANGE, SPITTER_WINDUP, TICKS_PER_SEC,
 };
-use sim::{Enemy, EnemyKind, FxVec2, LootKind, MissionStatus, Ship, ShipKind, SimState, SUB};
+use sim::{
+    elite_name, Affix, Enemy, EnemyKind, FxVec2, LootKind, MissionStatus, Ship, ShipKind, SimState,
+    SUB,
+};
 
 use crate::art::ContentImages;
 use crate::flow::PauseMenu;
@@ -47,6 +55,7 @@ impl Plugin for RenderPlugin {
                     follow_camera,
                     update_hud,
                     update_banner,
+                    elite_labels,
                 ),
             );
     }
@@ -76,6 +85,16 @@ pub mod ids {
     pub const FX_BLOATER_WARNING_RING: &str = "core.battle.fx.bloater_warning_ring";
     pub const FX_WARDEN_TETHER: &str = "core.battle.fx.warden_tether";
     pub const FX_WARDEN_SHIELD: &str = "core.battle.fx.warden_shield";
+    pub const ELITE_AURA: &str = "core.battle.elite.aura";
+    pub const ELITE_BURNING_PATCH: &str = "core.battle.elite.burning_patch";
+    pub const ELITE_TELEPORT_MARK: &str = "core.battle.elite.teleport_mark";
+    pub const AFFIX_SWIFT: &str = "core.battle.elite.affix_swift";
+    pub const AFFIX_VOLATILE: &str = "core.battle.elite.affix_volatile";
+    pub const AFFIX_WARDING: &str = "core.battle.elite.affix_warding";
+    pub const AFFIX_BLINKING: &str = "core.battle.elite.affix_blinking";
+    pub const AFFIX_SPLITTING: &str = "core.battle.elite.affix_splitting";
+    pub const AFFIX_SCORCHING: &str = "core.battle.elite.affix_scorching";
+    pub const AFFIX_CHILLING: &str = "core.battle.elite.affix_chilling";
     pub const LOOT_CREDITS: &str = crate::art::ids::ICON_CREDITS;
     pub const LOOT_VOID_CRYSTAL: &str = crate::art::ids::ICON_VOID_CRYSTAL;
     pub const FX_SPIT: &str = "core.battle.fx.spit";
@@ -186,8 +205,32 @@ pub fn battle_image_ids() -> Vec<&'static str> {
             ids::FX_BLOATER_WARNING_RING,
             ids::FX_WARDEN_TETHER,
             ids::FX_WARDEN_SHIELD,
+            ids::ELITE_AURA,
+            ids::ELITE_BURNING_PATCH,
+            ids::ELITE_TELEPORT_MARK,
         ])
+        .chain(Affix::ALL.map(affix_icon))
         .collect()
+}
+
+/// An affix's icon (Art's TAKOAI-114 elite sheet).
+pub fn affix_icon(affix: Affix) -> &'static str {
+    match affix {
+        Affix::Swift => ids::AFFIX_SWIFT,
+        Affix::Volatile => ids::AFFIX_VOLATILE,
+        Affix::Warding => ids::AFFIX_WARDING,
+        Affix::Blinking => ids::AFFIX_BLINKING,
+        Affix::Splitting => ids::AFFIX_SPLITTING,
+        Affix::Scorching => ids::AFFIX_SCORCHING,
+        Affix::Chilling => ids::AFFIX_CHILLING,
+    }
+}
+
+/// The text over an elite: its name, then its affixes.
+pub fn elite_label(e: &Enemy) -> Option<(String, String)> {
+    let el = e.elite?;
+    let affixes: Vec<_> = Affix::in_mask(el.affixes).map(Affix::name).collect();
+    Some((elite_name(el.name), affixes.join(" · ")))
 }
 
 /// The Spitter's wind-up telegraph (TAKOAI-113, Art's
@@ -404,15 +447,21 @@ pub fn move_marker(gizmos: &mut Gizmos, t: Vec2, color: Color) {
 fn draw_world(mut gizmos: Gizmos, world: Option<Res<SimWorld>>, local: Option<Res<LocalPlayers>>) {
     let Some(world) = world else { return };
     for e in &world.enemies {
-        if e.hp < e.kind.hp() {
+        // An elite always shows its bar, in gold.
+        if e.hp < e.max_hp() || e.is_elite() {
             let c = to_world(e.pos);
-            let r = e.kind.radius() as f32;
+            let r = e.radius() as f32;
+            let color = if e.is_elite() {
+                ELITE_GOLD
+            } else {
+                Color::srgb(1.0, 0.4, 0.4)
+            };
             bar(
                 &mut gizmos,
                 c + Vec2::new(0.0, r * SPRITE_SCALE + 6.0),
                 2.0 * r,
-                e.hp as f32 / e.kind.hp() as f32,
-                Color::srgb(1.0, 0.4, 0.4),
+                e.hp as f32 / e.max_hp() as f32,
+                color,
             );
         }
     }
@@ -553,7 +602,7 @@ fn draw_sprites(
             let drawn = push(
                 enemy_pose(e),
                 to_world(e.pos),
-                e.kind.radius() as f32,
+                e.radius() as f32,
                 0.0,
                 hit_tint(flash.amount(e.id, t)),
                 0.2,
@@ -582,7 +631,9 @@ fn draw_sprites(
             if moving.length_squared() > 1.0 {
                 state.facing[i] = heading(moving);
             }
-            let color = if ship.alive() {
+            let color = if ship.alive() && ship.chill > 0 {
+                CHILL_TINT
+            } else if ship.alive() {
                 Color::WHITE
             } else {
                 Color::srgba(0.35, 0.35, 0.35, 0.6)
@@ -620,6 +671,23 @@ fn draw_sprites(
             .glow
             .get_or_insert_with(|| images.add(glow_image()))
             .clone();
+        for p in world.pickups.iter().filter(|p| p.elite) {
+            // A light beam over elite loot (rarity colours come with Step 7).
+            let at = to_world(p.pos);
+            let flicker = 0.75 + 0.25 * (t * 5.0 + p.id as f32).sin();
+            for (w, a) in [(30.0, 0.35), (10.0, 0.9)] {
+                draws.push(Draw {
+                    image: glow.clone(),
+                    pos: at + Vec2::Y * BEAM_HEIGHT / 2.0,
+                    size: 0.0,
+                    angle: 0.0,
+                    color: ELITE_GOLD.with_alpha(a * flicker),
+                    z: 0.08,
+                    rect: Some((Rect::new(0.0, 0.0, 0.0, 0.0), Vec2::new(w, BEAM_HEIGHT))),
+                    flip: false,
+                });
+            }
+        }
         for p in &world.projectiles {
             draws.push(Draw {
                 image: glow.clone(),
@@ -674,6 +742,13 @@ fn draw_sprites(
     }
 
     if let Some(world) = world.as_deref() {
+        elite_visuals(
+            world,
+            time.elapsed_secs(),
+            &mut art,
+            &mut images,
+            &mut draws,
+        );
         role_telegraphs(
             world,
             time.elapsed_secs(),
@@ -789,8 +864,7 @@ fn role_telegraphs(
                 ));
             }
             if let Some(image) = shield.clone() {
-                let size =
-                    2.0 * e.kind.radius() as f32 * SHIELD_SCALE * (1.0 + 0.05 * (t * 4.0).sin());
+                let size = 2.0 * e.radius() as f32 * SHIELD_SCALE * (1.0 + 0.05 * (t * 4.0).sin());
                 draws.push(exact(
                     image,
                     at,
@@ -817,6 +891,205 @@ fn role_telegraphs(
                 0.16,
             ));
         }
+    }
+}
+
+/// A whole image drawn at exactly `size`.
+fn exact_draw(
+    image: Handle<Image>,
+    pos: Vec2,
+    size: Vec2,
+    angle: f32,
+    color: Color,
+    z: f32,
+) -> Draw {
+    Draw {
+        image,
+        pos,
+        size: 0.0,
+        angle,
+        color,
+        z,
+        rect: Some((Rect::new(0.0, 0.0, 0.0, 0.0), size)),
+        flip: false,
+    }
+}
+
+/// Elite colour: health bar, loot beam.
+const ELITE_GOLD: Color = Color::srgb(1.0, 0.82, 0.35);
+/// A ship slowed by a Chilling elite.
+const CHILL_TINT: Color = Color::srgb(0.55, 0.8, 1.0);
+/// Elite loot beam height (px).
+const BEAM_HEIGHT: f32 = 140.0;
+/// The aura ring is this many times the elite's diameter.
+const AURA_SCALE: f32 = 2.1;
+/// Affix icon size (px; Art suggests ~24, a little bigger reads better).
+const AFFIX_ICON: f32 = 30.0;
+/// Where the label's bottom sits above the elite's top edge (px).
+const LABEL_GAP: f32 = 14.0;
+/// The label is two lines; the icons sit above it.
+const LABEL_HEIGHT: f32 = 30.0;
+
+/// Where an elite's label starts (bottom centre), above its health bar.
+fn label_pos(e: &Enemy) -> Vec2 {
+    to_world(e.pos) + Vec2::Y * (e.radius() as f32 * SPRITE_SCALE + LABEL_GAP)
+}
+
+/// Elite leaders and their affixes (TAKOAI-117), from sim state:
+/// - every elite: Art's aura ring under it (slowly turning) and its affix
+///   icons above its label;
+/// - Warding: the Warden's shimmer on each enemy it shields (`Enemy::ward`);
+/// - Blinking: the teleport mark where it will land, closing in over the
+///   0.5 s mark;
+/// - Scorching: the burning patches, fading as they burn out.
+fn elite_visuals(
+    world: &SimState,
+    t: f32,
+    art: &mut ContentImages,
+    images: &mut Assets<Image>,
+    draws: &mut Vec<Draw>,
+) {
+    use sim::tuning::{BLINK_MARK, SCORCH_LIFETIME, SCORCH_RADIUS};
+    if let Some(image) = art.get(images, ids::ELITE_BURNING_PATCH) {
+        for p in &world.patches {
+            let left = p.ttl as f32 / SCORCH_LIFETIME as f32;
+            let flicker = 0.85 + 0.15 * (t * 9.0 + p.id as f32).sin();
+            draws.push(exact_draw(
+                image.clone(),
+                to_world(p.pos),
+                Vec2::splat(2.0 * SCORCH_RADIUS as f32 * 1.3),
+                0.0,
+                Color::srgba(1.0, 1.0, 1.0, (left * 3.0).min(1.0) * flicker),
+                0.04,
+            ));
+        }
+    }
+    let aura = art.get(images, ids::ELITE_AURA);
+    let mark = art.get(images, ids::ELITE_TELEPORT_MARK);
+    let shield = art.get(images, ids::FX_WARDEN_SHIELD);
+    for e in &world.enemies {
+        let at = to_world(e.pos);
+        let d = 2.0 * e.radius() as f32;
+        if e.ward > 0 {
+            if let Some(image) = shield.clone() {
+                let size = d * SHIELD_SCALE * (1.0 + 0.06 * (t * 6.0).sin());
+                draws.push(exact_draw(
+                    image,
+                    at,
+                    Vec2::splat(size),
+                    0.0,
+                    Color::srgba(1.0, 0.95, 0.7, 0.7),
+                    0.21,
+                ));
+            }
+        }
+        let Some(el) = e.elite else { continue };
+        if let Some(image) = aura.clone() {
+            let pulse = 1.0 + 0.04 * (t * 3.0).sin();
+            draws.push(exact_draw(
+                image,
+                at,
+                Vec2::splat(d * AURA_SCALE * pulse),
+                t * 0.6,
+                Color::WHITE,
+                0.18,
+            ));
+        }
+        if el.blink > 0 {
+            if let Some(image) = mark.clone() {
+                let done = telegraph_done(el.blink, BLINK_MARK);
+                draws.push(exact_draw(
+                    image,
+                    to_world(el.mark),
+                    Vec2::splat(d * (2.4 - 0.9 * done)),
+                    -t * 2.0,
+                    Color::srgba(1.0, 1.0, 1.0, 0.5 + 0.5 * done),
+                    0.17,
+                ));
+            }
+        }
+        let icons: Vec<_> = Affix::in_mask(el.affixes).collect();
+        let top = label_pos(e) + Vec2::Y * (LABEL_HEIGHT + AFFIX_ICON / 2.0);
+        let n = icons.len() as f32;
+        for (k, a) in icons.into_iter().enumerate() {
+            let Some(image) = art.get(images, affix_icon(a)) else {
+                continue;
+            };
+            let x = (k as f32 - (n - 1.0) / 2.0) * (AFFIX_ICON + 4.0);
+            draws.push(exact_draw(
+                image,
+                top + Vec2::X * x,
+                Vec2::splat(AFFIX_ICON),
+                0.0,
+                Color::WHITE,
+                0.85,
+            ));
+        }
+    }
+}
+
+/// An elite's name and affix label, following it (`Text2d`, world space).
+#[derive(Component)]
+struct EliteLabel(u32);
+
+/// One label per living elite: spawned when it appears, moved with it,
+/// despawned when it dies (after any hit-stop) or the battle ends.
+fn elite_labels(
+    mut commands: Commands,
+    world: Option<Res<SimWorld>>,
+    time: Res<Time>,
+    hit_stop: Res<HitStop>,
+    mut art: ResMut<ContentImages>,
+    mut fonts: ResMut<Assets<Font>>,
+    mut labels: Query<(Entity, &EliteLabel, &mut Transform)>,
+) {
+    // Hold with the sprites through a hit-stop (an elite kill's freeze).
+    if hit_stop.active(time.elapsed_secs()) && world.is_some() {
+        return;
+    }
+    let elites: Vec<&Enemy> = world
+        .as_deref()
+        .map(|w| w.enemies.iter().filter(|e| e.is_elite()).collect())
+        .unwrap_or_default();
+    let mut shown = Vec::new();
+    for (entity, label, mut tf) in &mut labels {
+        match elites.iter().find(|e| e.id == label.0) {
+            Some(e) => {
+                tf.translation = label_pos(e).extend(0.85);
+                shown.push(label.0);
+            }
+            None => commands.entity(entity).despawn(),
+        }
+    }
+    let font = art.font(&mut fonts, crate::art::ids::FONT_DISPLAY);
+    let font = |size: f32| TextFont {
+        font: font.clone().map(Into::into).unwrap_or_default(),
+        font_size: FontSize::Px(size),
+        ..default()
+    };
+    for e in elites.into_iter().filter(|e| !shown.contains(&e.id)) {
+        let Some((name, affixes)) = elite_label(e) else {
+            continue;
+        };
+        commands
+            .spawn((
+                EliteLabel(e.id),
+                Text2d::new(name),
+                font(15.0),
+                TextColor(ELITE_GOLD),
+                TextLayout::justify(Justify::Center),
+                bevy::sprite::Anchor::BOTTOM_CENTER,
+                bevy::sprite::Text2dShadow {
+                    offset: Vec2::new(1.5, -1.5),
+                    color: Color::srgb_u8(0x24, 0x10, 0x32),
+                },
+                Transform::from_translation(label_pos(e).extend(0.85)),
+            ))
+            .with_child((
+                TextSpan::new(format!("\n{affixes}")),
+                font(12.0),
+                TextColor(Color::srgb(0.9, 0.85, 1.0)),
+            ));
     }
 }
 
@@ -1142,6 +1415,24 @@ mod tests {
         for id in battle_image_ids() {
             assert!(art.get(&mut images, id).is_some(), "{id} not shipped");
         }
+    }
+
+    #[test]
+    fn elites_show_their_name_affixes_and_icons() {
+        let mut e = sim::Enemy::new(EnemyKind::Lancer, FxVec2::ZERO);
+        assert_eq!(elite_label(&e), None);
+        e.make_elite(Affix::Scorching.bit(), 0);
+        assert_eq!(
+            elite_label(&e),
+            Some(("Gloomwhisker the Hollow".into(), "Scorching".into()))
+        );
+        e.make_elite(Affix::Swift.bit() | Affix::Chilling.bit(), 0);
+        assert_eq!(elite_label(&e).unwrap().1, "Swift · Chilling");
+        let ids = battle_image_ids();
+        for a in Affix::ALL {
+            assert!(ids.contains(&affix_icon(a)), "{a:?}");
+        }
+        assert!(ids.contains(&ids::ELITE_AURA));
     }
 
     #[test]

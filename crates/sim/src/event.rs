@@ -48,10 +48,11 @@ pub enum SimEvent {
         amount: i32,
         pos: FxVec2,
     },
-    /// An enemy died this tick.
+    /// An enemy died this tick (`elite`: it was an elite leader).
     Killed {
         enemy: u32,
         kind: EnemyKind,
+        elite: bool,
         pos: FxVec2,
     },
     /// A ship took damage. `source` is the enemy (contact) or shot (spit)
@@ -80,6 +81,12 @@ pub enum SimEvent {
         kind: LootKind,
         amount: u32,
     },
+    /// A Warding elite pulsed its shield at `pos`.
+    Warded { enemy: u32, pos: FxVec2 },
+    /// A Blinking elite marked `pos`; it lands there `BLINK_MARK` later.
+    BlinkMarked { enemy: u32, pos: FxVec2 },
+    /// A Blinking elite landed on its mark.
+    Blinked { enemy: u32, pos: FxVec2 },
     /// The mission ended this tick.
     MissionEnded { success: bool },
 }
@@ -104,6 +111,9 @@ impl SimEvent {
             Self::Collected { ship, pickup, .. } => (5, ship as u32, pickup),
             Self::MissionEnded { .. } => (6, 0, 0),
             Self::Burst { blast, .. } => (8, blast, 0),
+            Self::Warded { enemy, .. } => (9, enemy, 0),
+            Self::BlinkMarked { enemy, .. } => (10, enemy, 0),
+            Self::Blinked { enemy, .. } => (11, enemy, 0),
         }
     }
 }

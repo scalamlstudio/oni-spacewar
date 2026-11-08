@@ -30,8 +30,8 @@ pub mod trig;
 pub mod tuning;
 
 pub use entity::{
-    Blast, Enemy, EnemyKind, Fissure, Loadout, Loot, LootKind, Pickup, Projectile, Ship, ShipKind,
-    ShipSheet, ShipStats, Upgrades,
+    elite_name, Affix, Blast, Elite, Enemy, EnemyKind, Fissure, Loadout, Loot, LootKind, Patch,
+    Pickup, Projectile, Ship, ShipKind, ShipSheet, ShipStats, Upgrades,
 };
 pub use event::{Attack, SimEvent, Skill};
 pub use fixed::{FxVec2, SUB};

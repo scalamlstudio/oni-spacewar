@@ -166,9 +166,13 @@ pub struct Autoplay {
 /// The first time each new role's warning is on screen, the autoplay shoots
 /// it (`15d-battle-<name>`): a Lancer halfway through its wind-up, an armed
 /// Bloater or a pending burst, a Warden shielding an ally, a Brood about to
-/// release. Index = bit in `Autoplay::role_shots`.
+/// release; then the elites (TAKOAI-117, `15e-battle-<name>`): an elite on
+/// the field, a Blinking elite's mark halfway, elite loot's light beam.
+/// Index = bit in `Autoplay::role_shots`.
 fn role_shot(world: &SimState, done: u8) -> Option<(usize, &'static str)> {
-    use sim::tuning::{BLOATER_FUSE, BROOD_WINDUP, LANCER_WINDUP};
+    use sim::tuning::{
+        BLINK_MARK, BLOATER_FUSE, BROOD_WINDUP, LANCER_WINDUP, PICKUP_LIFETIME, TICKS_PER_SEC,
+    };
     use sim::EnemyKind;
     let enemies = &world.enemies;
     let checks = [
@@ -183,9 +187,35 @@ fn role_shot(world: &SimState, done: u8) -> Option<(usize, &'static str)> {
         enemies
             .iter()
             .any(|e| e.kind == EnemyKind::Brood && e.windup == BROOD_WINDUP / 2),
+        // Once it is close enough to be well inside the view.
+        enemies.iter().any(|e| {
+            let near = (350 * sim::SUB) as i64;
+            e.is_elite()
+                && world
+                    .ships
+                    .iter()
+                    .any(|s| (s.pos - e.pos).length_squared() <= near * near)
+        }),
+        enemies
+            .iter()
+            .any(|e| e.elite.is_some_and(|el| el.blink == BLINK_MARK / 2)),
+        // 0.2 s after the drop: past the kill's hit-stop, before the ship
+        // has pulled it in.
+        world
+            .pickups
+            .iter()
+            .any(|p| p.elite && p.ttl == PICKUP_LIFETIME - TICKS_PER_SEC as u32 / 5),
     ];
-    let names = ["lancer", "bloater", "warden", "brood"];
-    (0..4)
+    let names = [
+        "lancer",
+        "bloater",
+        "warden",
+        "brood",
+        "e-elite",
+        "e-elite-blink",
+        "e-elite-loot",
+    ];
+    (0..names.len())
         .find(|&i| checks[i] && done & (1 << i) == 0)
         .map(|i| (i, names[i]))
 }
@@ -1836,7 +1866,11 @@ fn autoplay_flow(
             let done = autoplay.role_shots;
             if let Some((i, name)) = world.as_deref().and_then(|w| role_shot(w, done)) {
                 autoplay.role_shots |= 1 << i;
-                autoplay.shoot(&mut commands, &format!("15d-battle-{name}"));
+                let name = match name.strip_prefix("e-") {
+                    Some(elite) => format!("15e-battle-{elite}"),
+                    None => format!("15d-battle-{name}"),
+                };
+                autoplay.shoot(&mut commands, &name);
             }
             if autoplay.clip && n == 0 {
                 for k in 0..30 {

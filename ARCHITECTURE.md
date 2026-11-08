@@ -23,7 +23,7 @@ crates/
     src/lib.rs          crate docs + determinism rules
     src/state.rs        SimState (all rolled-back state), step() and its phases
     src/event.rs        SimEvent: hits, kills, ship damage, Bloater bursts, shots, skills, pickups, mission end (last step only; client feedback)
-    src/entity.rs       plain-data entities: Ship (+ ShipKind, Loadout, ShipSheet, ShipStats), Enemy (+ EnemyKind: Swarmer, Spitter, Lancer, Bloater, Brood, Warden), Blast, Projectile, Pickup, Fissure
+    src/entity.rs       plain-data entities: Ship (+ ShipKind, Loadout, ShipSheet, ShipStats), Enemy (+ EnemyKind: Swarmer, Spitter, Lancer, Bloater, Brood, Warden; Elite + Affix, elite_name), Blast, Patch, Projectile, Pickup, Fissure
     src/mission.rs      Elimination bookkeeping: spawn-director (pack pulse) timer, roles introduced, kills, loot totals, MissionStatus/MissionOutcome
     src/tuning.rs       Demo Spec numbers (design/READINESS.md) + unit conversion (px/s -> sub-px/tick)
     src/collision.rs    integer circle overlap + separation
@@ -41,7 +41,7 @@ crates/
     src/cutouts.rs                     background keying, sheet slicing, single-sprite crop, row-of-items cutout (extract_row_items), resize
     src/bin/sprite_sheet_cutouts.rs    expression sheets -> portraits
     src/bin/demo_art_import.rs         design/art/demo (+ demo-v2 battle art and backdrops, Art's battle feedback strips incl. the Spitter wind-up and aim line) -> battle / title / result / icon / fx sources
-    src/bin/enemy_art_import.rs        design/art/enemies (TAKOAI-114 Lancer / Bloater / Brood / Warden source sheets) -> battle/enemy, battle/pose, battle/fx sources
+    src/bin/enemy_art_import.rs        design/art/enemies (TAKOAI-114 Lancer / Bloater / Brood / Warden and elite affix / effect source sheets) -> battle/enemy, battle/pose, battle/fx, battle/elite sources
     src/bin/carrier_tile_import.rs     design/art/carrier-furniture catalogues (batches A/B, patches, hull edge, berth floor) -> carrier/tile, carrier/item, carrier/berth, scaffold, front marker sources
     hull-wall/build-hull-wall-extra.py every reachable hull-edge case Art's catalogue lacks, drawn by Art's generator -> hull-wall/extra-v1/ (PNGs + catalogue)
   client/             package `oni-client`, bin `oni-spacewar` — everything else
@@ -64,7 +64,7 @@ crates/
     src/net.rs          matchbox ↔ ggrs socket adapter + latency/loss emulator (from the spike)
     src/stats.rs        rollback / frame-time / desync measurement + report (from the spike)
     src/pacing.rs       frame-pacing profiler (windowed): main / render / swapchain-acquire split + OS-stall probe
-    src/render.rs       battle sprites keyed by stable content IDs + gizmo FX, enemy poses (`enemy_pose`), Spitter wind-up telegraph (glow frame + stretched aim line, read from the sim's `Enemy::windup` / `aim`), role telegraphs (Lancer charge line, Bloater warning ring, Warden tether + shield), fissure pointers, camera follow, battle HUD (Update, outside rollback)
+    src/render.rs       battle sprites keyed by stable content IDs + gizmo FX, enemy poses (`enemy_pose`), Spitter wind-up telegraph (glow frame + stretched aim line, read from the sim's `Enemy::windup` / `aim`), role telegraphs (Lancer charge line, Bloater warning ring, Warden tether + shield), elites (aura, name / affix label + icons, Warding shimmer, Blink mark, burning patches, loot beam, chilled ship tint), fissure pointers, camera follow, battle HUD (Update, outside rollback)
     src/zoom.rs         mouse-wheel zoom for the local camera (Carrier and battle): 0.5×–2× target, eased, about the cursor; follow offset kept on screen; picking maths (`world_at`)
     src/sky.rs          procedural nebula sky: SkyMaterial (Material2d, `sky.wgsl`) on a quad that follows the camera; one sky behind every scene
 ```
@@ -276,8 +276,11 @@ Resting bodies go to `battle/enemy/` (each has a Codex entry); the other
 poses (Lancer wind-up / dash, Bloater swelling, Brood wind-up) to
 `battle/pose/`; rings, lines, tether, shield, explosion and death bursts to
 `battle/fx/`. The Brood's standalone sac is skipped (the client throbs the
-wind-up pose instead); the Fissure Guardian and elite sheets wait for their
-own steps. A review contact sheet goes to `$CARGO_TARGET_DIR/enemy-art-contact-sheet.png`.
+wind-up pose instead). The elite sheets (TAKOAI-117) go to `battle/elite/`:
+the seven affix icons on 64² canvases, the first ("plain") of Art's three
+aura options as the elite ring (the other two stay in `design/` until one
+is picked), the burning patch and the teleport mark. The Fissure Guardian
+waits for its own step. A review contact sheet goes to `$CARGO_TARGET_DIR/enemy-art-contact-sheet.png`.
 
 ### Carrier Revision 3 art import
 
@@ -787,9 +790,11 @@ follow:
 - **`step()` is a fixed list of phases** (`state.rs`): spawn director → apply
   inputs (move target, Q/W skills) → move ships → basic attacks → enemy
   behaviour (chase / strafe in range band, contact damage, shots, Lancer
-  dash, Bloater fuse, Brood release, Warden positioning) → move projectiles
-  → hits → separation → Bloater bursts → kills + loot drops (a dying
-  Bloater leaves a `Blast`) → pickups → win/lose check. Each
+  dash, Bloater fuse, Brood release, Warden positioning) → elite affixes
+  (Warding pulse, Blinking mark / landing, Scorching patches) → move
+  projectiles → hits → separation → Bloater bursts → burning patches →
+  kills + loot drops (a dying Bloater or Volatile elite leaves a `Blast`,
+  a Splitting elite its copies) → pickups → win/lose check. Each
   phase is a method over whole collections, so the order of effects is
   explicit and identical on every peer. New mechanics add a phase (or a new
   module with one) rather than hooking into Bevy schedules. Once the mission
@@ -852,8 +857,8 @@ follow:
   ship lost, blue when the shield took it all), capped at 60. Screen
   shake is trauma (our ship hit, our Shockwave / Scatter) added on top of
   the follow camera. `HitStop` freezes the battle sprites only while the
-  sim runs on; `fx::hit_stop_secs` gives none for current enemies (it is
-  for elites and bosses). Sounds play from the same events, each with a
+  sim runs on; `fx::hit_stop_secs` gives it to elite kills only (bosses
+  later). Sounds play from the same events, each with a
   minimum gap so volleys don't stack; the battle track loops while a
   battle runs. Settings (`settings.json`, `battle` and `audio` sections):
   damage numbers and shake on / off, mute, master / effects / music
@@ -877,6 +882,35 @@ follow:
   Before the first unlock it draws exactly the RNG it did before, so
   pre-role tests and seeds are unchanged. `--autoplay` shoots
   `15d-battle-<role>` the first time each role's warning is on screen.
+- **Elite packs** (TAKOAI-117, design/BATTLE.md #6 and § Elite affixes).
+  An elite is an ordinary `Enemy` with `elite: Some(Elite)`: the affixes
+  as a bitmask over `Affix` (one today, `ELITE_AFFIXES`; room for a second
+  at higher Threat), a name seed drawn from the sim RNG (`elite_name` turns
+  it into "Hexfang the Hollow" on every peer alike) and the affix timers.
+  `Enemy::radius()` / `speed()` / `max_hp()` fold in the elite size, Swift
+  and `ELITE_HP_MULT`, and every sim phase uses them. The spawn director
+  promotes a pack's first enemy (its role enemy or Spitter, else a Swarmer)
+  once kills reach `ELITE_UNLOCK_PCT` of the target: always the first pack
+  after that, then `ELITE_PACK_PCT` of packs (`Mission::elites`). Like the
+  roles, nothing is drawn from the RNG before the unlock. Affixes:
+  Swift (speed), Volatile (a Bloater `Blast` on death), Warding (every
+  `WARDING_INTERVAL` sets `Enemy::ward` on itself and allies in range,
+  which `damage_to` halves like a Warden, not stacking), Blinking (marks
+  `Elite::mark` beside the nearest ship, lands there `BLINK_MARK` later),
+  Splitting (two normal copies on death, through the same `spawn_ring` as a
+  Brood's release), Scorching (`Patch`es in `SimState::patches`; a ship in
+  any patch takes `SCORCH_DAMAGE` once per `SCORCH_TICK`) and Chilling
+  (contact, dash or shots, via `Projectile::chill`, set `Ship::chill`,
+  which slows its walk; Afterburn is unaffected). `Affix::fits` keeps
+  Volatile off Bloaters and Blinking off Broods and Wardens. An elite kill
+  drops `ELITE_CREDITS_MULT`× credits and `ELITE_CRYSTALS` Void Crystal as
+  pickups with `elite: true`; `Killed` carries `elite`. The client gives an
+  elite kill a `ELITE_HIT_STOP` render-only freeze, a death burst
+  `ELITE_BURST_SCALE`× bigger, shake and the rare-drop sound, and draws a
+  light beam over elite loot. Names and affixes are `Text2d` labels
+  (`render::elite_labels`) that follow each elite. `--autoplay` shoots
+  `15e-battle-elite`, `-elite-blink` and `-elite-loot` the first time each
+  is on screen.
 - **Collision** is integer circle overlap; pairs are checked brute-force in
   `Vec` order, which is fine at current entity counts. A deterministic broad
   phase can be added when counts grow.
