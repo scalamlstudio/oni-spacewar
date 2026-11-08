@@ -53,8 +53,9 @@ segment (see § Missions, § Ship Modules).
   character around the carrier interior — a 3/4 top-down (2.5D) view of
   rooms furnished with work stations and furniture — talks to crew and
   walks up to a station to use it (click, press-and-hold or WASD to walk, E
-  or a click to use). Launching a mission is one of those stations: a ship's
-  Berth, from the Docking Module (see § Missions). The player shapes the
+  or a click to use). The existing battleship Berth opens component customization; a separate
+  mission-selection station selects and launches missions (Wei, playtest #2,
+  TAKOAI-120/130; see § Missions). The player shapes the
   carrier by building rooms and placing stations and furniture freely in
   Build mode (see § Carrier). The ability scheme above is only for piloting the
   battleship in a mission. Manufacturing stations will go through the same
@@ -290,7 +291,8 @@ what makes it a bunk room or a lab is what the player puts in it.
   station or cut it off is refused with a reason.
 - **Stations** keep every function the demo has. The Command Console
   (where the Pilot starts), the Upgrade Bench (Workshop upgrades), one
-  Berth per battleship (board, briefing, launch) and the Sample Analyzer
+  Berth per battleship (component customization), plus a separate mission-selection
+  station (briefing and launch; TAKOAI-130) and the Sample Analyzer
   (the Researcher's post; using it opens the Codex, which closes back to
   the Carrier; Settings › Codex stays a second way in) are in the starting
   carrier: they can be moved
@@ -354,6 +356,20 @@ what makes it a bunk room or a lab is what the player puts in it.
   role packs: Swarmers with Lancers, Swarmers with Bloaters among them, a
   Warden over Swarmers (sometimes with a Spitter), or a Brood behind
   Spitters and a few Swarmers.
+
+## Battleship components
+
+Wei's accepted playtest #2 direction (2026-11-08): replace engine, armor, main
+gun, automatic side gun, targeting system and extra equipment at the existing
+battleship Berth. Mission selection/launch is at a separate station. These
+combat components are distinct from carrier Ship Modules.
+
+The concrete six-socket mapping (engine → Q, extra equipment → W, main gun →
+basic attack), catalogue, stock migration, rarity, salvage/crafting and Threat
+1–5 tables are **proposed** in BATTLE.md § Ship modules. They preserve the
+existing two skills per hull; E/R remain deferred. Confirmation is tracked only
+in OPEN_QUESTIONS.md § Component and loot proposal. Downstream implementation
+uses the accepted interaction separation, with proposed balance awaiting Wei.
 
 ## Battle Direction
 

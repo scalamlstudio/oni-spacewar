@@ -2,6 +2,20 @@
 
 _Running log of what's decided and what's built. Newest entries on top._
 
+## 2026-11-08 — Playtest #2 component direction (TAKOAI-120)
+
+- Recorded Wei's accepted six replaceable component categories at the existing
+  battleship interaction point and separate mission selection/launch station;
+  boss fight accepted. Updates BATTLE.md B3/B7 location and DESIGN.md station
+  responsibilities; TAKOAI-130 implements the station separation.
+- Drafted the component mapping, 31 templates (12 skill variants, four basic
+  gun variants, shared utility components and four uniques), rarity/drop
+  tables, VC salvage/craft loop and Threat 1–5 balance in BATTLE.md. These
+  are proposals, not new decisions by an agent. Canonical confirmation items
+  C1–C3 live only in OPEN_QUESTIONS.md; no accepted question remains there.
+- Added downstream ownership, deterministic loadout/drop contracts, stock-save
+  migration and verification examples. No gameplay code changed.
+
 ## 2026-09-20
 
 - Bootstrapped project from the `space-sandbox` architecture (Agent/Enemy/Object/Shape
