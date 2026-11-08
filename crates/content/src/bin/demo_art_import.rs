@@ -2,7 +2,8 @@
 //! the restyled battle art from `design/art/demo-v2/` replacing what it
 //! covers) into `assets/source/core/...`: keys out the flat backgrounds, cuts
 //! the walk and icon sheets into frames, and scales everything to its in-game
-//! size. Run `content-pipeline` afterwards to process, bundle and list the
+//! size; Art's battle feedback strips are copied as they are. Run
+//! `content-pipeline` afterwards to process, bundle and list the
 //! results. Design files are named relative to `design/art/`.
 
 use std::fs;
@@ -101,6 +102,32 @@ const SHEETS: [(&str, &str, &[&str], u32, u32); 2] = [
     ),
 ];
 
+/// Animation strips copied unchanged: design file stem, pack-relative
+/// output. Art's battle feedback pack (TAKOAI-111,
+/// `design/art/battle/feedback/README-v1.md`) is already transparent, one
+/// row of 256 x 256 frames with an 8 px margin; the client cuts the frames
+/// (`fx::FX`).
+const STRIPS: [(&str, &str); 6] = [
+    ("battle/feedback/hit-enemy-v1", "battle/fx/hit_enemy"),
+    ("battle/feedback/hit-ship-v1", "battle/fx/hit_ship"),
+    (
+        "battle/feedback/death-swarmer-v1",
+        "battle/fx/death_swarmer",
+    ),
+    (
+        "battle/feedback/death-spitter-v1",
+        "battle/fx/death_spitter",
+    ),
+    (
+        "battle/feedback/shockwave-impact-v1",
+        "battle/fx/shockwave_impact",
+    ),
+    (
+        "battle/feedback/scatter-impact-v1",
+        "battle/fx/scatter_impact",
+    ),
+];
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let root = PathBuf::from(std::env::args().nth(1).unwrap_or_else(|| ".".into()));
     let mut contact = Vec::new();
@@ -134,6 +161,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 &mut contact,
             )?;
         }
+    }
+
+    for (stem, out) in STRIPS {
+        write(&root, out, open(&root, stem)?, &mut contact)?;
     }
 
     let small: Vec<_> = contact

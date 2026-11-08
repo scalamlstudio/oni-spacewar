@@ -6,8 +6,134 @@
       "id": "core",
       "version": "0.2.0",
       "gameplay_affecting": false,
-      "content_hash": "f37ac472a5be22cc87c1bd73de2e83972c0719308f28f51a008fb0f4fab86b74",
+      "content_hash": "484dbb2793755d04864fffd3629ed6764dc4f25040f8ebebaab6dc2b176b3f75",
       "assets": [
+        {
+          "id": "core.audio.music.battle",
+          "kind": "audio/ogg",
+          "source": "source/core/audio/music/battle.ogg",
+          "processed": "packs/core/processed/audio/music/battle.ogg",
+          "compressed": "packs/core/bundles/audio/music/battle.ogg.zst",
+          "hash": "388a2fae3a79c7320b1080603b6d8d9caaa719f7d26f14e9eef30bd9f424026c",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.audio.sfx.basic_fire",
+          "kind": "audio/ogg",
+          "source": "source/core/audio/sfx/basic_fire.ogg",
+          "processed": "packs/core/processed/audio/sfx/basic_fire.ogg",
+          "compressed": "packs/core/bundles/audio/sfx/basic_fire.ogg.zst",
+          "hash": "72b589eadd41781257ac859e4f4d030222e623390e4a1a83f6d05329a6e026f1",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.audio.sfx.bulwark_bastion",
+          "kind": "audio/ogg",
+          "source": "source/core/audio/sfx/bulwark_bastion.ogg",
+          "processed": "packs/core/processed/audio/sfx/bulwark_bastion.ogg",
+          "compressed": "packs/core/bundles/audio/sfx/bulwark_bastion.ogg.zst",
+          "hash": "c2916f2a062c8ddd1aca2826d134fe90847037db31342726ffb0f9097afe339c",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.audio.sfx.bulwark_shockwave",
+          "kind": "audio/ogg",
+          "source": "source/core/audio/sfx/bulwark_shockwave.ogg",
+          "processed": "packs/core/processed/audio/sfx/bulwark_shockwave.ogg",
+          "compressed": "packs/core/bundles/audio/sfx/bulwark_shockwave.ogg.zst",
+          "hash": "3cb48d86dab63140cfb9aaeea4d4a6846abaca5831d157d8adbec0490da26343",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.audio.sfx.credit_pickup",
+          "kind": "audio/ogg",
+          "source": "source/core/audio/sfx/credit_pickup.ogg",
+          "processed": "packs/core/processed/audio/sfx/credit_pickup.ogg",
+          "compressed": "packs/core/bundles/audio/sfx/credit_pickup.ogg.zst",
+          "hash": "f2f44effce087e47683f0fea05a71002bd8dca78fb10bf93d9f0b38d49f9590e",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.audio.sfx.crystal_pickup",
+          "kind": "audio/ogg",
+          "source": "source/core/audio/sfx/crystal_pickup.ogg",
+          "processed": "packs/core/processed/audio/sfx/crystal_pickup.ogg",
+          "compressed": "packs/core/bundles/audio/sfx/crystal_pickup.ogg.zst",
+          "hash": "83786b43d828a399e14ac20604b63a60ca05385977f5477d00304c2adc696204",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.audio.sfx.enemy_death",
+          "kind": "audio/ogg",
+          "source": "source/core/audio/sfx/enemy_death.ogg",
+          "processed": "packs/core/processed/audio/sfx/enemy_death.ogg",
+          "compressed": "packs/core/bundles/audio/sfx/enemy_death.ogg.zst",
+          "hash": "4b597d658d0ae101f0a030fbeea5fc3a4292ab85f017470a8254a8e7959cbd69",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.audio.sfx.hit",
+          "kind": "audio/ogg",
+          "source": "source/core/audio/sfx/hit.ogg",
+          "processed": "packs/core/processed/audio/sfx/hit.ogg",
+          "compressed": "packs/core/bundles/audio/sfx/hit.ogg.zst",
+          "hash": "956c6612a256aa1a67a2327fffe2454f6b1d82e4c1c2be28fd66916335d5b1d6",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.audio.sfx.kite_afterburn",
+          "kind": "audio/ogg",
+          "source": "source/core/audio/sfx/kite_afterburn.ogg",
+          "processed": "packs/core/processed/audio/sfx/kite_afterburn.ogg",
+          "compressed": "packs/core/bundles/audio/sfx/kite_afterburn.ogg.zst",
+          "hash": "c60069ed7108678dd6a1306404d168a93cc2575cda37b06add9dd6c4d46352a3",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.audio.sfx.kite_scatter",
+          "kind": "audio/ogg",
+          "source": "source/core/audio/sfx/kite_scatter.ogg",
+          "processed": "packs/core/processed/audio/sfx/kite_scatter.ogg",
+          "compressed": "packs/core/bundles/audio/sfx/kite_scatter.ogg.zst",
+          "hash": "a56d95794cd732d6c2d66ce488c14cf557fe526c282897c9a77675c2bd9b77e6",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.audio.sfx.mission_failure",
+          "kind": "audio/ogg",
+          "source": "source/core/audio/sfx/mission_failure.ogg",
+          "processed": "packs/core/processed/audio/sfx/mission_failure.ogg",
+          "compressed": "packs/core/bundles/audio/sfx/mission_failure.ogg.zst",
+          "hash": "e0215fcfd8b9d7877f74d5c46b239a13d7db0d25998da97b80404931ef9eef5d",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.audio.sfx.mission_success",
+          "kind": "audio/ogg",
+          "source": "source/core/audio/sfx/mission_success.ogg",
+          "processed": "packs/core/processed/audio/sfx/mission_success.ogg",
+          "compressed": "packs/core/bundles/audio/sfx/mission_success.ogg.zst",
+          "hash": "52da0ff5e219179df4521b38276abde0ed6ba27e0cf030b0d1209b8857406eff",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.audio.sfx.rare_drop",
+          "kind": "audio/ogg",
+          "source": "source/core/audio/sfx/rare_drop.ogg",
+          "processed": "packs/core/processed/audio/sfx/rare_drop.ogg",
+          "compressed": "packs/core/bundles/audio/sfx/rare_drop.ogg.zst",
+          "hash": "9048d651b51f528099c384566b0d4c6c597bee8b56c48f3adab7a901feba0fa5",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.audio.sfx.ship_hit",
+          "kind": "audio/ogg",
+          "source": "source/core/audio/sfx/ship_hit.ogg",
+          "processed": "packs/core/processed/audio/sfx/ship_hit.ogg",
+          "compressed": "packs/core/bundles/audio/sfx/ship_hit.ogg.zst",
+          "hash": "112d4f93ddcc370b410630f971c0f5d991856102da9c76bc5c5540d388e75aaa",
+          "gameplay_affecting": false
+        },
         {
           "id": "core.battle.enemy.void_spitter",
           "kind": "image/png",
@@ -33,6 +159,60 @@
           "processed": "packs/core/processed/battle/env/void_fissure.png",
           "compressed": "packs/core/bundles/battle/env/void_fissure.png.zst",
           "hash": "31aaa4dc9a5a3cce48195c976f9633a280d2600966ec3ae534280945f7735874",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.fx.death_spitter",
+          "kind": "image/png",
+          "source": "source/core/battle/fx/death_spitter.png",
+          "processed": "packs/core/processed/battle/fx/death_spitter.png",
+          "compressed": "packs/core/bundles/battle/fx/death_spitter.png.zst",
+          "hash": "e5ab61b5f2b705b45691c250391414cefb5d39ce10f4f50a64fef830dfcdefd2",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.fx.death_swarmer",
+          "kind": "image/png",
+          "source": "source/core/battle/fx/death_swarmer.png",
+          "processed": "packs/core/processed/battle/fx/death_swarmer.png",
+          "compressed": "packs/core/bundles/battle/fx/death_swarmer.png.zst",
+          "hash": "64fc6939c7cd87168f523bf56a5b7c0a288fc7342c19bdcfcbd1e1be517a380b",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.fx.hit_enemy",
+          "kind": "image/png",
+          "source": "source/core/battle/fx/hit_enemy.png",
+          "processed": "packs/core/processed/battle/fx/hit_enemy.png",
+          "compressed": "packs/core/bundles/battle/fx/hit_enemy.png.zst",
+          "hash": "7d48e2259c4520d467e53b569d1c4b1c1bee76c35b442fc041cc1608e8d0ca07",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.fx.hit_ship",
+          "kind": "image/png",
+          "source": "source/core/battle/fx/hit_ship.png",
+          "processed": "packs/core/processed/battle/fx/hit_ship.png",
+          "compressed": "packs/core/bundles/battle/fx/hit_ship.png.zst",
+          "hash": "18df28364ffa6e253365b14256ae424a037e8b898efe72040975025e5ec9046a",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.fx.scatter_impact",
+          "kind": "image/png",
+          "source": "source/core/battle/fx/scatter_impact.png",
+          "processed": "packs/core/processed/battle/fx/scatter_impact.png",
+          "compressed": "packs/core/bundles/battle/fx/scatter_impact.png.zst",
+          "hash": "c95f690870b474af2886aa6abd2f8a964a13c52a6e44d5872273a2a633a5750b",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.fx.shockwave_impact",
+          "kind": "image/png",
+          "source": "source/core/battle/fx/shockwave_impact.png",
+          "processed": "packs/core/processed/battle/fx/shockwave_impact.png",
+          "compressed": "packs/core/bundles/battle/fx/shockwave_impact.png.zst",
+          "hash": "7432e57c6d4544f6e9223d67dab4aa0926fcee3b72375b06eebcaffd18e64c52",
           "gameplay_affecting": false
         },
         {

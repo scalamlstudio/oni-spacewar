@@ -35,6 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("png", "image/png"),
         ("ttf", "font/ttf"),
         ("json", "application/json"),
+        ("ogg", "audio/ogg"),
     ] {
         for file in discover(&assets_root.join("source/core"), extension)? {
             let source_path = assets_root.join(&file.source);
