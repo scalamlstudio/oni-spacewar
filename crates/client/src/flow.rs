@@ -153,6 +153,35 @@ pub struct Autoplay {
     pub boarded: Option<f32>,
     /// Already quit to the Title and Continued from the reloaded save.
     pub reloaded: bool,
+    /// Role telegraphs already shot this run (bit per `role_shot` index).
+    pub role_shots: u8,
+}
+
+/// The first time each new role's warning is on screen, the autoplay shoots
+/// it (`15d-battle-<name>`): a Lancer halfway through its wind-up, an armed
+/// Bloater or a pending burst, a Warden shielding an ally, a Brood about to
+/// release. Index = bit in `Autoplay::role_shots`.
+fn role_shot(world: &SimState, done: u8) -> Option<(usize, &'static str)> {
+    use sim::tuning::{BLOATER_FUSE, BROOD_WINDUP, LANCER_WINDUP};
+    use sim::EnemyKind;
+    let enemies = &world.enemies;
+    let checks = [
+        enemies
+            .iter()
+            .any(|e| e.kind == EnemyKind::Lancer && e.windup == LANCER_WINDUP / 2),
+        world.blasts.iter().any(|b| b.fuse == BLOATER_FUSE / 3)
+            || enemies.iter().any(|e| {
+                e.kind == EnemyKind::Bloater && e.struck != 0 && e.windup == BLOATER_FUSE / 3
+            }),
+        (0..enemies.len()).any(|i| sim::state::warden_of(enemies, i).is_some()),
+        enemies
+            .iter()
+            .any(|e| e.kind == EnemyKind::Brood && e.windup == BROOD_WINDUP / 2),
+    ];
+    let names = ["lancer", "bloater", "warden", "brood"];
+    (0..4)
+        .find(|&i| checks[i] && done & (1 << i) == 0)
+        .map(|i| (i, names[i]))
 }
 
 impl Autoplay {
@@ -1677,6 +1706,11 @@ fn autoplay_flow(
                         &format!("{:02}-battle-{}-{i}", 15 + n * 10, n + 1),
                     );
                 }
+            }
+            let done = autoplay.role_shots;
+            if let Some((i, name)) = world.as_deref().and_then(|w| role_shot(w, done)) {
+                autoplay.role_shots |= 1 << i;
+                autoplay.shoot(&mut commands, &format!("15d-battle-{name}"));
             }
             if autoplay.clip && n == 0 {
                 for k in 0..30 {

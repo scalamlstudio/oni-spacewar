@@ -321,6 +321,29 @@ what makes it a bunk room or a lab is what the player puts in it.
   - **Void Spitter:** fewer of them, and tougher. Keeps its distance from the
     nearest battleship and fires slow projectiles that can be dodged. Drops
     more Credits, and Void Crystal more often.
+- **Enemy roles** (TAKOAI-116, from design/BATTLE.md § Enemy roles; numbers
+  are starting points in `crates/sim/src/tuning.rs`). Each attack has a
+  readable warning first:
+  - **Void Lancer (charger):** walks in, stops and draws a charge line at a
+    battleship for 0.7 s, then dashes ~400 px along it, hitting each ship
+    it passes once. Sidestep the line.
+  - **Void Bloater (death-bomber):** slow. Bursts 1 s after it dies, or
+    after it touches a battleship (it stops and swells); a warning ring grows
+    to the burst's ~90 px reach. The burst hurts ships and monsters alike,
+    so it can be popped at range or chained into a pack.
+  - **Void Brood (summoner):** hangs back near the fissure it came from and
+    releases 3 Swarmers every ~6 s; its sac swells and throbs for 1 s first.
+    Dive it first.
+  - **Void Warden (buffer):** stays with its pack, away from the battleship,
+    and shields every other monster within ~120 px (they take half damage),
+    shown by a tether and a shimmer. Kill it first or pull the pack away.
+- **Packs mix the roles.** Plain packs are Swarmers with some Spitters. New
+  roles join as the mission's kills rise — Lancer at 10% of the kill
+  target, Bloater 25%, Warden 40%, Brood 55% — and the first pack after each
+  unlock always brings the new role. After that about half the packs are
+  role packs: Swarmers with Lancers, Swarmers with Bloaters among them, a
+  Warden over Swarmers (sometimes with a Spitter), or a Brood behind
+  Spitters and a few Swarmers.
 
 ## Battle Direction
 

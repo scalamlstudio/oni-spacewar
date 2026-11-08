@@ -6,7 +6,7 @@
       "id": "core",
       "version": "0.2.0",
       "gameplay_affecting": false,
-      "content_hash": "f809a471873d075a68091c021bb9ad859dc0638f3c53819c337b01a474bf95ab",
+      "content_hash": "efffd319ba4c1e039af1deb73641c3cadbd4534099e9e30a6915dc9c6a4f32a0",
       "assets": [
         {
           "id": "core.audio.music.battle",
@@ -135,6 +135,33 @@
           "gameplay_affecting": false
         },
         {
+          "id": "core.battle.enemy.void_bloater",
+          "kind": "image/png",
+          "source": "source/core/battle/enemy/void_bloater.png",
+          "processed": "packs/core/processed/battle/enemy/void_bloater.png",
+          "compressed": "packs/core/bundles/battle/enemy/void_bloater.png.zst",
+          "hash": "413114346681091eda1784ff9f75a3b9ebfd96415f111f83a92685f3052f13af",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.enemy.void_brood",
+          "kind": "image/png",
+          "source": "source/core/battle/enemy/void_brood.png",
+          "processed": "packs/core/processed/battle/enemy/void_brood.png",
+          "compressed": "packs/core/bundles/battle/enemy/void_brood.png.zst",
+          "hash": "d0c0037a503ebb3281135596b63b8933b893931a4cd7a71541aaf5a75e7eab74",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.enemy.void_lancer",
+          "kind": "image/png",
+          "source": "source/core/battle/enemy/void_lancer.png",
+          "processed": "packs/core/processed/battle/enemy/void_lancer.png",
+          "compressed": "packs/core/bundles/battle/enemy/void_lancer.png.zst",
+          "hash": "2e7a5ebdd6ac665c6f8fa8bfeac3826b83ace842e20ca47661130d8af0598c82",
+          "gameplay_affecting": false
+        },
+        {
           "id": "core.battle.enemy.void_spitter",
           "kind": "image/png",
           "source": "source/core/battle/enemy/void_spitter.png",
@@ -153,12 +180,66 @@
           "gameplay_affecting": false
         },
         {
+          "id": "core.battle.enemy.void_warden",
+          "kind": "image/png",
+          "source": "source/core/battle/enemy/void_warden.png",
+          "processed": "packs/core/processed/battle/enemy/void_warden.png",
+          "compressed": "packs/core/bundles/battle/enemy/void_warden.png.zst",
+          "hash": "832d0e98c09df632308286aab54d6efba5208378943c803a26dafa0b9402da3e",
+          "gameplay_affecting": false
+        },
+        {
           "id": "core.battle.env.void_fissure",
           "kind": "image/png",
           "source": "source/core/battle/env/void_fissure.png",
           "processed": "packs/core/processed/battle/env/void_fissure.png",
           "compressed": "packs/core/bundles/battle/env/void_fissure.png.zst",
           "hash": "31aaa4dc9a5a3cce48195c976f9633a280d2600966ec3ae534280945f7735874",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.fx.bloater_explosion",
+          "kind": "image/png",
+          "source": "source/core/battle/fx/bloater_explosion.png",
+          "processed": "packs/core/processed/battle/fx/bloater_explosion.png",
+          "compressed": "packs/core/bundles/battle/fx/bloater_explosion.png.zst",
+          "hash": "f2fbf6f3cdbed9c81d3af39a8609486327c7ccc9f99ca34d209e4c4576cec5b7",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.fx.bloater_warning_ring",
+          "kind": "image/png",
+          "source": "source/core/battle/fx/bloater_warning_ring.png",
+          "processed": "packs/core/processed/battle/fx/bloater_warning_ring.png",
+          "compressed": "packs/core/bundles/battle/fx/bloater_warning_ring.png.zst",
+          "hash": "ea71f2f591c65d19a76db1c035884c9d979201877a554bec757cf6f2eca9e113",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.fx.death_bloater",
+          "kind": "image/png",
+          "source": "source/core/battle/fx/death_bloater.png",
+          "processed": "packs/core/processed/battle/fx/death_bloater.png",
+          "compressed": "packs/core/bundles/battle/fx/death_bloater.png.zst",
+          "hash": "aa96e86c5d71872a874bfb5b9d6735540076cb2d6c73804193596daf49667ab3",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.fx.death_brood",
+          "kind": "image/png",
+          "source": "source/core/battle/fx/death_brood.png",
+          "processed": "packs/core/processed/battle/fx/death_brood.png",
+          "compressed": "packs/core/bundles/battle/fx/death_brood.png.zst",
+          "hash": "4e34e4d20d3f2fa66d56a65de0f435dbecc213726a4ce215b476e43a172a6217",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.fx.death_lancer",
+          "kind": "image/png",
+          "source": "source/core/battle/fx/death_lancer.png",
+          "processed": "packs/core/processed/battle/fx/death_lancer.png",
+          "compressed": "packs/core/bundles/battle/fx/death_lancer.png.zst",
+          "hash": "883d4769e1675e1b3437bd01b4fd5aba58c327b85e6580f06796e24b7976f840",
           "gameplay_affecting": false
         },
         {
@@ -180,6 +261,15 @@
           "gameplay_affecting": false
         },
         {
+          "id": "core.battle.fx.death_warden",
+          "kind": "image/png",
+          "source": "source/core/battle/fx/death_warden.png",
+          "processed": "packs/core/processed/battle/fx/death_warden.png",
+          "compressed": "packs/core/bundles/battle/fx/death_warden.png.zst",
+          "hash": "4d406d83ecc733d5ac68a79590c51423bd328ad352f67696e4abf866926c0ab2",
+          "gameplay_affecting": false
+        },
+        {
           "id": "core.battle.fx.hit_enemy",
           "kind": "image/png",
           "source": "source/core/battle/fx/hit_enemy.png",
@@ -195,6 +285,15 @@
           "processed": "packs/core/processed/battle/fx/hit_ship.png",
           "compressed": "packs/core/bundles/battle/fx/hit_ship.png.zst",
           "hash": "18df28364ffa6e253365b14256ae424a037e8b898efe72040975025e5ec9046a",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.fx.lancer_charge_line",
+          "kind": "image/png",
+          "source": "source/core/battle/fx/lancer_charge_line.png",
+          "processed": "packs/core/processed/battle/fx/lancer_charge_line.png",
+          "compressed": "packs/core/bundles/battle/fx/lancer_charge_line.png.zst",
+          "hash": "c8073f6d88e3d94cecf957345a30f75278c96e9133e089650feb2edac5e4c560",
           "gameplay_affecting": false
         },
         {
@@ -240,6 +339,60 @@
           "processed": "packs/core/processed/battle/fx/spitter_windup.png",
           "compressed": "packs/core/bundles/battle/fx/spitter_windup.png.zst",
           "hash": "a4aa98cdf92b98f9219c45b79dde82025f4e15bb5afcd3a8883d447ae615bc98",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.fx.warden_shield",
+          "kind": "image/png",
+          "source": "source/core/battle/fx/warden_shield.png",
+          "processed": "packs/core/processed/battle/fx/warden_shield.png",
+          "compressed": "packs/core/bundles/battle/fx/warden_shield.png.zst",
+          "hash": "553959e40056b2b78be8c0a64d587f4de8d0d59e6ec4f8a5143c2c88223a0b50",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.fx.warden_tether",
+          "kind": "image/png",
+          "source": "source/core/battle/fx/warden_tether.png",
+          "processed": "packs/core/processed/battle/fx/warden_tether.png",
+          "compressed": "packs/core/bundles/battle/fx/warden_tether.png.zst",
+          "hash": "5b241fe8514acd92e49cbdc91548a82844995ad57345840d9defbad189098e9f",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.pose.void_bloater_swelling",
+          "kind": "image/png",
+          "source": "source/core/battle/pose/void_bloater_swelling.png",
+          "processed": "packs/core/processed/battle/pose/void_bloater_swelling.png",
+          "compressed": "packs/core/bundles/battle/pose/void_bloater_swelling.png.zst",
+          "hash": "2449a69ac5f21ef606660cfb347071b5a5486041bb195beb68a74aaebbebc070",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.pose.void_brood_windup",
+          "kind": "image/png",
+          "source": "source/core/battle/pose/void_brood_windup.png",
+          "processed": "packs/core/processed/battle/pose/void_brood_windup.png",
+          "compressed": "packs/core/bundles/battle/pose/void_brood_windup.png.zst",
+          "hash": "dee483e654a5972ecc9e3d4a9eb19147c1ec129645f2d17f59373ff0103f69d9",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.pose.void_lancer_dash",
+          "kind": "image/png",
+          "source": "source/core/battle/pose/void_lancer_dash.png",
+          "processed": "packs/core/processed/battle/pose/void_lancer_dash.png",
+          "compressed": "packs/core/bundles/battle/pose/void_lancer_dash.png.zst",
+          "hash": "68e3f0ba1861ab417a5feba7e624233e281791531ca4683b379172ebba0a2599",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.pose.void_lancer_windup",
+          "kind": "image/png",
+          "source": "source/core/battle/pose/void_lancer_windup.png",
+          "processed": "packs/core/processed/battle/pose/void_lancer_windup.png",
+          "compressed": "packs/core/bundles/battle/pose/void_lancer_windup.png.zst",
+          "hash": "ccff53b2002e82d4a8b42a255b68aaf31f1a618b25ae498383a22a911d6ffa6b",
           "gameplay_affecting": false
         },
         {
@@ -1355,7 +1508,7 @@
           "source": "source/core/codex.json",
           "processed": "packs/core/processed/codex.json",
           "compressed": "packs/core/bundles/codex.json.zst",
-          "hash": "32fa9304eb56ac0ce366e66eee1e52334edf80e0e2156dd3a2164974a58255e4",
+          "hash": "ce6e36999a1e809e1c3aa3948f8c650f76dfe6326824f9a744c84e4b3b960b46",
           "gameplay_affecting": false
         },
         {

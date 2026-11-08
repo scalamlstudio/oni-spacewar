@@ -22,9 +22,9 @@ crates/
   sim/                package `oni-sim`, lib `sim` — deterministic mission simulation, NO Bevy
     src/lib.rs          crate docs + determinism rules
     src/state.rs        SimState (all rolled-back state), step() and its phases
-    src/event.rs        SimEvent: hits, kills, ship damage, shots, skills, pickups, mission end (last step only; client feedback)
-    src/entity.rs       plain-data entities: Ship (+ ShipKind, Loadout, ShipSheet, ShipStats), Enemy, Projectile, Pickup, Fissure
-    src/mission.rs      Elimination bookkeeping: spawn-director (pack pulse) timer, kills, loot totals, MissionStatus/MissionOutcome
+    src/event.rs        SimEvent: hits, kills, ship damage, Bloater bursts, shots, skills, pickups, mission end (last step only; client feedback)
+    src/entity.rs       plain-data entities: Ship (+ ShipKind, Loadout, ShipSheet, ShipStats), Enemy (+ EnemyKind: Swarmer, Spitter, Lancer, Bloater, Brood, Warden), Blast, Projectile, Pickup, Fissure
+    src/mission.rs      Elimination bookkeeping: spawn-director (pack pulse) timer, roles introduced, kills, loot totals, MissionStatus/MissionOutcome
     src/tuning.rs       Demo Spec numbers (design/READINESS.md) + unit conversion (px/s -> sub-px/tick)
     src/collision.rs    integer circle overlap + separation
     src/fixed.rs        fixed-point: SUB (1 px = 256), FxVec2 (+ scale_to), mul_q16
@@ -38,9 +38,10 @@ crates/
     tests/carrier_tiles.rs     Revision 3 carrier art: batch A IDs resolve, tiles are one cell, mask-picked walls join seamlessly
     src/bin/content_pipeline.rs        source -> processed asset + zstd bundle + manifest
     src/bin/content_manifest_diff.rs   compare manifests and list packs/assets a patch needs
-    src/cutouts.rs                     background keying, sheet slicing, single-sprite crop, resize
+    src/cutouts.rs                     background keying, sheet slicing, single-sprite crop, row-of-items cutout (extract_row_items), resize
     src/bin/sprite_sheet_cutouts.rs    expression sheets -> portraits
     src/bin/demo_art_import.rs         design/art/demo (+ demo-v2 battle art and backdrops, Art's battle feedback strips incl. the Spitter wind-up and aim line) -> battle / title / result / icon / fx sources
+    src/bin/enemy_art_import.rs        design/art/enemies (TAKOAI-114 Lancer / Bloater / Brood / Warden source sheets) -> battle/enemy, battle/pose, battle/fx sources
     src/bin/carrier_tile_import.rs     design/art/carrier-furniture catalogues (batches A/B, patches, hull edge, berth floor) -> carrier/tile, carrier/item, carrier/berth, scaffold, front marker sources
     hull-wall/build-hull-wall-extra.py every reachable hull-edge case Art's catalogue lacks, drawn by Art's generator -> hull-wall/extra-v1/ (PNGs + catalogue)
   client/             package `oni-client`, bin `oni-spacewar` — everything else
@@ -57,13 +58,13 @@ crates/
     src/codex.rs        the Codex (from Settings): content browser built from `core.codex` (assets/source/core/codex.json) — category tabs, scrolling thumbnail grid, detail panel; stats read from the catalogue / sim tuning; `discovered` hook
     src/mission.rs      typed client mission config/result handoff into `sim::SimState`; reward rules (survives_failure)
     src/rollback.rs     SimWorld resource, rollback/checksum registration, GgrsSchedule (+ hands each step's events to fx::BattleEvents)
-    src/fx.rs           battle hit / kill feedback from sim events: BattleEvents (dedupe by frame + key), hit flash, Art's spark / burst / impact strips, damage numbers, screen shake, render-only hit-stop
+    src/fx.rs           battle hit / kill feedback from sim events: BattleEvents (dedupe by frame + key), hit flash, Art's spark / burst / impact strips and the role death / Bloater explosion key poses, damage numbers, screen shake, render-only hit-stop
     src/audio.rs        placeholder CC0 battle sound: effects from sim events, looping battle music, volumes from settings
     src/input.rs        mouse + keyboard / bot → NetInput (ReadInputs)
     src/net.rs          matchbox ↔ ggrs socket adapter + latency/loss emulator (from the spike)
     src/stats.rs        rollback / frame-time / desync measurement + report (from the spike)
     src/pacing.rs       frame-pacing profiler (windowed): main / render / swapchain-acquire split + OS-stall probe
-    src/render.rs       battle sprites keyed by stable content IDs + gizmo FX, Spitter wind-up telegraph (glow frame + stretched aim line, read from the sim's `Enemy::windup` / `aim`), fissure pointers, camera follow, battle HUD (Update, outside rollback)
+    src/render.rs       battle sprites keyed by stable content IDs + gizmo FX, enemy poses (`enemy_pose`), Spitter wind-up telegraph (glow frame + stretched aim line, read from the sim's `Enemy::windup` / `aim`), role telegraphs (Lancer charge line, Bloater warning ring, Warden tether + shield), fissure pointers, camera follow, battle HUD (Update, outside rollback)
     src/zoom.rs         mouse-wheel zoom for the local camera (Carrier and battle): 0.5×–2× target, eased, about the cursor; follow offset kept on screen; picking maths (`world_at`)
     src/sky.rs          procedural nebula sky: SkyMaterial (Material2d, `sky.wgsl`) on a quad that follows the camera; one sky behind every scene
 ```
@@ -251,6 +252,32 @@ composition that leaves calm areas for UI text. The
 import also writes `target/demo-art-contact-sheet.png` for a visual check. The
 file names and target sizes are tables at the top of the tool; a new art file
 means a new table row.
+
+### Enemy role art import
+
+Art's TAKOAI-114 enemy sheets (`design/art/enemies/*-source-v1.png`, see its
+`README-v1.md`) are one row of loose key poses on white, not animation
+strips. `enemy-art-import` cuts them by what they show, never by equal
+widths (`cutouts::extract_row_items`): it keys out the white border
+background and every enclosed white patch of at least 6000 px (ring
+interiors) while keeping smaller enclosed white (highlights), splits the row
+at the widest runs of empty columns, and when two items overlap in columns
+(the Lancer's dash smear running into its charge line) splits that group
+around its two largest pieces, giving loose particles to the nearer one.
+Each item is centred on the README's padded canvas (bodies and effects
+256², charge line 512 × 64, tether 256 × 32):
+
+```sh
+cargo run --release --bin enemy-art-import -- .
+cargo run --release --bin content-pipeline -- .
+```
+
+Resting bodies go to `battle/enemy/` (each has a Codex entry); the other
+poses (Lancer wind-up / dash, Bloater swelling, Brood wind-up) to
+`battle/pose/`; rings, lines, tether, shield, explosion and death bursts to
+`battle/fx/`. The Brood's standalone sac is skipped (the client throbs the
+wind-up pose instead); the Fissure Guardian and elite sheets wait for their
+own steps. A review contact sheet goes to `$CARGO_TARGET_DIR/enemy-art-contact-sheet.png`.
 
 ### Carrier Revision 3 art import
 
@@ -727,8 +754,9 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
 The gameplay in `sim` is the First Playable's Elimination mission
 (design/READINESS.md § Demo Spec): click-to-move battleships (Kite or
 Bulwark, from a per-player `Loadout` with Workshop upgrade levels) with an
-auto-firing basic attack and Q/W skills, Void Swarmers and Void Spitters
-spawned continuously from 1–2 void fissures in open space (no arena edge), loot pickups, and a win (40 kills) /
+auto-firing basic attack and Q/W skills, packs of void monsters (Swarmers,
+Spitters and, from TAKOAI-116, Lancers, Bloaters, Broods and Wardens)
+spawned continuously from 1–2 void fissures in open space (no arena edge), loot pickups, and a win (kill target) /
 lose (every ship destroyed) result. The structure is what new gameplay should
 follow:
 
@@ -737,8 +765,10 @@ follow:
   components in the simulation.
 - **`step()` is a fixed list of phases** (`state.rs`): spawn director → apply
   inputs (move target, Q/W skills) → move ships → basic attacks → enemy
-  behaviour (chase / strafe in range band, contact damage, shots) → move projectiles
-  → hits → separation → kills + loot drops → pickups → win/lose check. Each
+  behaviour (chase / strafe in range band, contact damage, shots, Lancer
+  dash, Bloater fuse, Brood release, Warden positioning) → move projectiles
+  → hits → separation → Bloater bursts → kills + loot drops (a dying
+  Bloater leaves a `Blast`) → pickups → win/lose check. Each
   phase is a method over whole collections, so the order of effects is
   explicit and identical on every peer. New mechanics add a phase (or a new
   module with one) rather than hooking into Bevy schedules. Once the mission
@@ -807,6 +837,25 @@ follow:
   battle runs. Settings (`settings.json`, `battle` and `audio` sections):
   damage numbers and shake on / off, mute, master / effects / music
   volume; the battle's pause menu opens Settings with S.
+- **Enemy roles** (TAKOAI-116, design/BATTLE.md § Enemy roles). Every
+  telegraph is sim state the client only reads: `Enemy::windup` counts
+  down a Spitter's shot, a Lancer's charge (the dash velocity is locked in
+  `Enemy::aim` when it starts; `Enemy::dash` then counts the dash ticks and
+  `struck` the ships already hit), a Brood's release and an armed Bloater's
+  fuse (`struck` marks it armed). A dead Bloater becomes a `Blast` in
+  `SimState::blasts` with the fuse it had left (or the full second when
+  shot), so killing it never cancels the burst; `update_blasts` runs
+  before `kill_and_drop`, so blast kills drop loot and chain into more
+  Bloaters the same tick. Warden shielding is derived, not stored:
+  `state::warden_of(enemies, i)` (the lowest-index living Warden in range)
+  is used by every damage source in the sim (`damage_to`) and by the
+  client's tethers, so the two can't disagree. The spawn director unlocks
+  each role at a share of the mission's kill target (`ROLES`,
+  `*_UNLOCK_PCT`), guarantees the first pack after an unlock brings it
+  (`Mission::introduced`), then mixes role packs in at `ROLE_PACK_PCT`.
+  Before the first unlock it draws exactly the RNG it did before, so
+  pre-role tests and seeds are unchanged. `--autoplay` shoots
+  `15d-battle-<role>` the first time each role's warning is on screen.
 - **Collision** is integer circle overlap; pairs are checked brute-force in
   `Vec` order, which is fine at current entity counts. A deterministic broad
   phase can be added when counts grow.
