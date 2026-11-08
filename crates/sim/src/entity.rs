@@ -218,13 +218,35 @@ pub enum EnemyKind {
     Swarmer,
     /// Keeps its distance and fires slow projectiles.
     Spitter,
+    /// Charger: stops, shows a charge line for 0.7 s, then dashes along it.
+    Lancer,
+    /// Death-bomber: bursts 1 s after it dies or touches a ship.
+    Bloater,
+    /// Summoner: hangs back by its fissure and releases Swarmers.
+    Brood,
+    /// Buffer: allies near it take half damage.
+    Warden,
 }
 
 impl EnemyKind {
+    /// Every kind, in declaration order.
+    pub const ALL: [EnemyKind; 6] = [
+        Self::Swarmer,
+        Self::Spitter,
+        Self::Lancer,
+        Self::Bloater,
+        Self::Brood,
+        Self::Warden,
+    ];
+
     pub const fn hp(self) -> i32 {
         match self {
             Self::Swarmer => SWARMER_HP,
             Self::Spitter => SPITTER_HP,
+            Self::Lancer => LANCER_HP,
+            Self::Bloater => BLOATER_HP,
+            Self::Brood => BROOD_HP,
+            Self::Warden => WARDEN_HP,
         }
     }
 
@@ -233,14 +255,39 @@ impl EnemyKind {
         match self {
             Self::Swarmer => SWARMER_RADIUS,
             Self::Spitter => SPITTER_RADIUS,
+            Self::Lancer => LANCER_RADIUS,
+            Self::Bloater => BLOATER_RADIUS,
+            Self::Brood => BROOD_RADIUS,
+            Self::Warden => WARDEN_RADIUS,
+        }
+    }
+
+    /// px/s (codex, HUDs).
+    pub const fn speed_px(self) -> i32 {
+        match self {
+            Self::Swarmer => SWARMER_SPEED,
+            Self::Spitter => SPITTER_SPEED,
+            Self::Lancer => LANCER_SPEED,
+            Self::Bloater => BLOATER_SPEED,
+            Self::Brood => BROOD_SPEED,
+            Self::Warden => WARDEN_SPEED,
         }
     }
 
     /// Sub-pixels per tick.
     pub const fn speed(self) -> i32 {
+        px_per_tick(self.speed_px())
+    }
+
+    /// Credits dropped on death, and the Void Crystal chance (percent).
+    pub const fn loot(self) -> (u32, i32) {
         match self {
-            Self::Swarmer => px_per_tick(SWARMER_SPEED),
-            Self::Spitter => px_per_tick(SPITTER_SPEED),
+            Self::Swarmer => (SWARMER_CREDITS, SWARMER_CRYSTAL_PCT),
+            Self::Spitter => (SPITTER_CREDITS, SPITTER_CRYSTAL_PCT),
+            Self::Lancer => (LANCER_CREDITS, LANCER_CRYSTAL_PCT),
+            Self::Bloater => (BLOATER_CREDITS, BLOATER_CRYSTAL_PCT),
+            Self::Brood => (BROOD_CREDITS, BROOD_CRYSTAL_PCT),
+            Self::Warden => (WARDEN_CREDITS, WARDEN_CRYSTAL_PCT),
         }
     }
 }
@@ -252,16 +299,26 @@ pub struct Enemy {
     pub kind: EnemyKind,
     pub pos: FxVec2,
     pub hp: i32,
-    /// Ticks until it can attack again (contact, or a Spitter's next wind-up).
+    /// Ticks until it can attack again (contact, a Spitter's or Lancer's
+    /// next wind-up, a Brood's next release).
     pub cooldown: u32,
     /// Spitter strafing direction around its target: 1 counter-clockwise,
     /// -1 clockwise. Picked at spawn.
     pub orbit: i32,
-    /// Spitter wind-up: ticks left before it fires (0 = not winding up).
-    /// It holds still meanwhile; the client draws the glow and aim line.
+    /// Telegraph: ticks left before the attack lands (0 = none). Spitter
+    /// shot, Lancer dash, Brood release, Bloater burst (its fuse, once it
+    /// touched a ship). It holds still meanwhile; the client draws the
+    /// warning from it.
     pub windup: u32,
-    /// The shot's velocity (sub-px/tick), locked when the wind-up starts.
+    /// Spitter: the shot's velocity; Lancer: the dash's velocity (both
+    /// sub-px/tick, locked when the wind-up starts).
     pub aim: FxVec2,
+    /// Lancer: dash ticks left.
+    pub dash: u32,
+    /// Lancer: ships already hit by this dash (bit per handle).
+    pub struck: u8,
+    /// Brood: the fissure it hangs back by.
+    pub home: FxVec2,
 }
 
 impl Enemy {
@@ -272,14 +329,31 @@ impl Enemy {
             pos,
             hp: kind.hp(),
             cooldown: match kind {
-                EnemyKind::Swarmer => 0,
                 EnemyKind::Spitter => SPITTER_FIRST_SHOT,
+                EnemyKind::Lancer => LANCER_FIRST_CHARGE,
+                EnemyKind::Brood => BROOD_FIRST_RELEASE,
+                _ => 0,
             },
             orbit: 1,
             windup: 0,
             aim: FxVec2::ZERO,
+            dash: 0,
+            struck: 0,
+            home: pos,
         }
     }
+}
+
+/// A Bloater's burst waiting to go off: left behind when a Bloater dies, so
+/// killing it doesn't cancel the burst. Hurts ships and enemies within
+/// `BLOATER_BLAST_RADIUS` when `fuse` runs out.
+#[derive(Clone, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
+pub struct Blast {
+    /// Stable entity ID (unique within the mission).
+    pub id: u32,
+    pub pos: FxVec2,
+    /// Ticks left; it bursts on the tick this reaches 0.
+    pub fuse: u32,
 }
 
 /// A void fissure: enemies come out of it. Fixed for the whole mission and

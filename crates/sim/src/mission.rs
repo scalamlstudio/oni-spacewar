@@ -27,6 +27,9 @@ pub struct Mission {
     pub kill_target: u32,
     pub kills: u32,
     pub spawned: u32,
+    /// Role packs already introduced (bit per `ROLES` index in `state`):
+    /// the first pack after a role unlocks always brings it.
+    pub introduced: u8,
     /// Loot picked up so far (shared by every ship in the mission).
     pub collected: Loot,
     pub status: MissionStatus,
@@ -42,6 +45,7 @@ impl Default for Mission {
             kill_target: KILL_TARGET,
             kills: 0,
             spawned: 0,
+            introduced: 0,
             collected: Loot::default(),
             status: MissionStatus::InProgress,
             end_frame: 0,

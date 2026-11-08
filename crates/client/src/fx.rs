@@ -18,7 +18,7 @@ use std::collections::{HashMap, HashSet};
 use bevy::prelude::*;
 use bevy::sprite::Text2dShadow;
 use bevy_ggrs::LocalPlayers;
-use sim::tuning::SHOCKWAVE_RADIUS;
+use sim::tuning::{BLOATER_BLAST_RADIUS, SHOCKWAVE_RADIUS};
 use sim::{Attack, EnemyKind, FxVec2, SimEvent, SimState, Skill, SUB};
 
 use crate::art::ContentImages;
@@ -167,14 +167,40 @@ pub const SCATTER_IMPACT: FxArt = FxArt {
     size: 48.0,
 };
 
+/// The TAKOAI-114 role death bursts and the Bloater's explosion are single
+/// key poses, not strips: one 256 px frame that is shown and faded out.
+const fn key_pose(id: &'static str, frame_ms: u32, size: f32) -> FxArt {
+    FxArt {
+        id,
+        frames: 1,
+        frame_ms,
+        size,
+    }
+}
+pub const DEATH_LANCER: FxArt = key_pose("core.battle.fx.death_lancer", 320, 96.0);
+pub const DEATH_BLOATER: FxArt = key_pose("core.battle.fx.death_bloater", 320, 104.0);
+pub const DEATH_BROOD: FxArt = key_pose("core.battle.fx.death_brood", 360, 128.0);
+pub const DEATH_WARDEN: FxArt = key_pose("core.battle.fx.death_warden", 320, 112.0);
+/// Sized to the burst's real reach.
+pub const BLOATER_EXPLOSION: FxArt = key_pose(
+    "core.battle.fx.bloater_explosion",
+    260,
+    2.0 * BLOATER_BLAST_RADIUS as f32,
+);
+
 /// Every strip, for the transition screen's preload.
-pub const FX: [&FxArt; 6] = [
+pub const FX: [&FxArt; 11] = [
     &HIT_ENEMY,
     &HIT_SHIP,
     &DEATH_SWARMER,
     &DEATH_SPITTER,
     &SHOCKWAVE_IMPACT,
     &SCATTER_IMPACT,
+    &DEATH_LANCER,
+    &DEATH_BLOATER,
+    &DEATH_BROOD,
+    &DEATH_WARDEN,
+    &BLOATER_EXPLOSION,
 ];
 
 /// The frame size of every strip (README-v1: 256 x 256 cells, one row).
@@ -184,6 +210,10 @@ pub fn death_burst(kind: EnemyKind) -> &'static FxArt {
     match kind {
         EnemyKind::Swarmer => &DEATH_SWARMER,
         EnemyKind::Spitter => &DEATH_SPITTER,
+        EnemyKind::Lancer => &DEATH_LANCER,
+        EnemyKind::Bloater => &DEATH_BLOATER,
+        EnemyKind::Brood => &DEATH_BROOD,
+        EnemyKind::Warden => &DEATH_WARDEN,
     }
 }
 
@@ -229,7 +259,8 @@ struct DamageNumber {
 pub fn damage_number(ev: &SimEvent, me: usize) -> Option<(String, Color, f32)> {
     match *ev {
         SimEvent::Hit { amount, attack, .. } => {
-            let (c, s) = if attack == Attack::Shockwave || amount >= BIG_HIT {
+            let big = matches!(attack, Attack::Shockwave | Attack::Blast);
+            let (c, s) = if big || amount >= BIG_HIT {
                 NUMBER_BIG
             } else {
                 NUMBER_NORMAL
@@ -286,6 +317,8 @@ pub fn shake_for(ev: &SimEvent, me: usize) -> f32 {
             Skill::Scatter => 0.15,
             Skill::Afterburn | Skill::Bastion => 0.0,
         },
+        // A burst on screen rattles the camera a little even when it misses.
+        SimEvent::Burst { .. } => 0.2,
         _ => 0.0,
     }
 }
@@ -308,7 +341,12 @@ impl HitStop {
 /// (Steps 4 and 5); no current enemy has any.
 pub fn hit_stop_secs(kind: EnemyKind) -> Option<f32> {
     match kind {
-        EnemyKind::Swarmer | EnemyKind::Spitter => None,
+        EnemyKind::Swarmer
+        | EnemyKind::Spitter
+        | EnemyKind::Lancer
+        | EnemyKind::Bloater
+        | EnemyKind::Brood
+        | EnemyKind::Warden => None,
     }
 }
 
@@ -359,6 +397,7 @@ fn spawn_feedback(
                 }
             }
             SimEvent::ShipDamaged { pos, .. } => play(&HIT_SHIP, to_world(pos)),
+            SimEvent::Burst { pos, .. } => play(&BLOATER_EXPLOSION, to_world(pos)),
             SimEvent::SkillUsed {
                 skill: Skill::Shockwave,
                 pos,
@@ -657,7 +696,7 @@ mod tests {
 
     #[test]
     fn hit_stop_is_reserved_for_elites_and_bosses() {
-        for kind in [EnemyKind::Swarmer, EnemyKind::Spitter] {
+        for kind in EnemyKind::ALL {
             assert_eq!(hit_stop_secs(kind), None);
         }
         let stop = HitStop { until: 2.0 };

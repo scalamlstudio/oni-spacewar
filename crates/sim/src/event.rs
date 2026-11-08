@@ -22,6 +22,9 @@ pub enum Attack {
     Scatter,
     /// Bulwark's Shockwave.
     Shockwave,
+    /// A Bloater's burst (no ship fired it: `ship` is 0, `source` the
+    /// blast's ID).
+    Blast,
 }
 
 /// A ship skill, named per ship.
@@ -60,6 +63,8 @@ pub enum SimEvent {
         hull_lost: i32,
         pos: FxVec2,
     },
+    /// A Bloater's burst went off at `pos` (`blast` is the blast's ID).
+    Burst { blast: u32, pos: FxVec2 },
     /// A ship fired its basic attack; `shot` is the new bolt's ID.
     Fired { ship: usize, shot: u32 },
     /// A ship used a skill at `pos` (the ship's position).
@@ -98,6 +103,7 @@ impl SimEvent {
             Self::SkillUsed { ship, skill, .. } => (4, ship as u32, skill as u32),
             Self::Collected { ship, pickup, .. } => (5, ship as u32, pickup),
             Self::MissionEnded { .. } => (6, 0, 0),
+            Self::Burst { blast, .. } => (8, blast, 0),
         }
     }
 }

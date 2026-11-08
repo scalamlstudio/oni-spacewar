@@ -184,6 +184,159 @@ pub fn extract_sprite(image: &RgbaImage, padding: u32) -> Result<RgbaImage, Stri
     Ok(pad(&cropped, padding))
 }
 
+/// Cut a one-row source sheet of `count` loose items (poses, rings, lines,
+/// bursts) into one image each, by what the sheet shows rather than by
+/// equal widths: the flat background is keyed out, and so is every enclosed
+/// patch of background of at least `hole_min_area` px (the inside of a
+/// ring), while smaller enclosed patches (white highlights inside an
+/// outline) stay. Items are split at the `count - 1` widest runs of empty
+/// columns, so loose particles stay with the item they sit next to. Each
+/// item is cropped to its own pixels.
+pub fn extract_row_items(
+    sheet: &RgbaImage,
+    count: usize,
+    hole_min_area: usize,
+) -> Result<Vec<RgbaImage>, String> {
+    if count == 0 {
+        return Err("item count must be at least 1".into());
+    }
+    let key = AlphaKey {
+        bg: sample_background(sheet),
+        zero_alpha_distance: 10,
+        full_alpha_distance: 44,
+    };
+    let mut keyed = key_background(sheet, key);
+    let (width, height) = (sheet.width(), sheet.height());
+    // Enclosed background: background-like pixels the border key left opaque.
+    let enclosed: Vec<bool> = keyed
+        .pixels()
+        .zip(sheet.pixels())
+        .map(|(k, s)| k.0[3] == 255 && color_distance(s.0, key.bg) < key.full_alpha_distance)
+        .collect();
+    for hole in connected_regions(&enclosed, width, height) {
+        if hole.pixels.len() < hole_min_area {
+            continue;
+        }
+        for (x, y) in hole.pixels {
+            let d = color_distance(sheet.get_pixel(x, y).0, key.bg);
+            let alpha = if d <= key.zero_alpha_distance {
+                0
+            } else {
+                ((d - key.zero_alpha_distance) * 255
+                    / (key.full_alpha_distance - key.zero_alpha_distance)) as u8
+            };
+            keyed.get_pixel_mut(x, y).0[3] = alpha;
+        }
+    }
+    let mask = foreground_mask(&keyed);
+    let used: Vec<bool> = (0..width)
+        .map(|x| (0..height).any(|y| mask[idx(x, y, width)]))
+        .collect();
+    let first = used.iter().position(|&u| u).ok_or("no foreground found")? as u32;
+    let last = used.iter().rposition(|&u| u).unwrap() as u32;
+    // Runs of empty columns inside the occupied span: (start, length).
+    let mut gaps: Vec<(u32, u32)> = Vec::new();
+    let mut x = first;
+    while x <= last {
+        if used[x as usize] {
+            x += 1;
+            continue;
+        }
+        let start = x;
+        while !used[x as usize] {
+            x += 1;
+        }
+        gaps.push((start, x - start));
+    }
+    // The widest gaps separate items (leftmost first on ties).
+    gaps.sort_by_key(|&(start, len)| (std::cmp::Reverse(len), start));
+    let mut cuts: Vec<u32> = gaps
+        .into_iter()
+        .take(count - 1)
+        .map(|(start, _)| start)
+        .collect();
+    cuts.sort();
+    let mut items: Vec<Vec<Region>> = vec![Vec::new(); cuts.len() + 1];
+    for region in connected_regions(&mask, width, height) {
+        if region.pixels.len() < 12 {
+            continue;
+        }
+        let item = cuts.partition_point(|&c| c <= region.bbox.min_x);
+        items[item].push(region);
+    }
+    // Items that overlap in columns (a dash smear running into a charge
+    // line): split the widest group around its two largest pieces until
+    // there are enough.
+    while items.len() < count {
+        let Some(i) = (0..items.len())
+            .filter(|&i| items[i].len() >= 2)
+            .max_by_key(|&i| group_bbox(&items[i]).width())
+        else {
+            return Err(format!("expected {count} items, found {}", items.len()));
+        };
+        let mut group = items.remove(i);
+        group.sort_by_key(|r| std::cmp::Reverse(r.pixels.len()));
+        let rest = group.split_off(2);
+        let (mut a, mut b) = (vec![group.remove(0)], vec![group.remove(0)]);
+        if b[0].bbox.min_x < a[0].bbox.min_x {
+            std::mem::swap(&mut a, &mut b);
+        }
+        for region in rest {
+            if bbox_gap(region.bbox, a[0].bbox) <= bbox_gap(region.bbox, b[0].bbox) {
+                a.push(region);
+            } else {
+                b.push(region);
+            }
+        }
+        items.insert(i, b);
+        items.insert(i, a);
+    }
+    Ok(items
+        .iter()
+        .map(|group| {
+            let bbox = group_bbox(group);
+            let mut out = RgbaImage::new(bbox.width(), bbox.height());
+            for region in group {
+                blit_region(
+                    &mut out,
+                    &keyed,
+                    region,
+                    -(bbox.min_x as i32),
+                    -(bbox.min_y as i32),
+                );
+            }
+            out
+        })
+        .collect())
+}
+
+fn group_bbox(group: &[Region]) -> BBox {
+    group.iter().map(|r| r.bbox).reduce(BBox::union).unwrap()
+}
+
+/// Distance between two boxes (0 when they overlap), Chebyshev style.
+fn bbox_gap(a: BBox, b: BBox) -> u32 {
+    let dx = b
+        .min_x
+        .saturating_sub(a.max_x)
+        .max(a.min_x.saturating_sub(b.max_x));
+    let dy = b
+        .min_y
+        .saturating_sub(a.max_y)
+        .max(a.min_y.saturating_sub(b.max_y));
+    dx.max(dy)
+}
+
+/// `image` scaled down to fit `w` x `h` less `margin` on every side, then
+/// centred on a transparent `w` x `h` canvas.
+pub fn centre_on_canvas(image: &RgbaImage, w: u32, h: u32, margin: u32) -> RgbaImage {
+    let fit = fit_within(image, w - 2 * margin, h - 2 * margin);
+    let mut out = RgbaImage::new(w, h);
+    let (x, y) = ((w - fit.width()) / 2, (h - fit.height()) / 2);
+    image::imageops::replace(&mut out, &fit, x as i64, y as i64);
+    out
+}
+
 /// `image` on a canvas `margin` px larger on every side, the new border
 /// transparent.
 pub fn pad(image: &RgbaImage, margin: u32) -> RgbaImage {

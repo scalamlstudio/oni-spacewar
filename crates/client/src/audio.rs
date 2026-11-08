@@ -85,7 +85,9 @@ const MUSIC_VOLUME: f32 = 0.35;
 pub fn sound_for(ev: &SimEvent, me: usize) -> Option<Sfx> {
     Some(match *ev {
         SimEvent::Fired { .. } => BASIC_FIRE,
-        SimEvent::Hit { attack, .. } if attack != Attack::Shockwave => HIT,
+        SimEvent::Hit { attack, .. } if !matches!(attack, Attack::Shockwave | Attack::Blast) => HIT,
+        // Placeholder: the Bloater's burst borrows the Shockwave's boom.
+        SimEvent::Burst { .. } => BULWARK_SHOCKWAVE,
         SimEvent::Killed { .. } => ENEMY_DEATH,
         SimEvent::ShipDamaged { ship, .. } if ship == me => SHIP_HIT,
         SimEvent::SkillUsed { skill, .. } => match skill {

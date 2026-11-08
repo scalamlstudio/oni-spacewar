@@ -153,6 +153,71 @@ pub const SPIT_SPEED: i32 = 160;
 pub const SPIT_RADIUS: i32 = 5;
 pub const SPIT_LIFETIME: u32 = ticks(3, 1);
 
+// --- New enemy roles (TAKOAI-116, design/BATTLE.md § Enemy roles) ---------
+//
+// Behaviours, warning times and the numbers the design gives (Lancer dash
+// ~400 px after 0.7 s; Bloater burst 1 s, ~90 px; Brood 3 Swarmers every
+// ~6 s; Warden shield ~120 px, half the damage) are the design's starting
+// points. HP, speeds, damage, cooldowns and loot are engine defaults to tune
+// in playtests.
+
+/// Lancer (charger): walks in, stops, shows its charge line, then dashes
+/// along it. 6 Kite bolts / 3 Bulwark bolts.
+pub const LANCER_HP: i32 = 24;
+pub const LANCER_SPEED: i32 = 100;
+pub const LANCER_RADIUS: i32 = 12;
+/// It starts its wind-up once the ship is this close.
+pub const LANCER_CHARGE_RANGE: i32 = 340;
+/// The charge line shows this long before the dash: 0.7 s. The direction is
+/// locked when the wind-up starts.
+pub const LANCER_WINDUP: u32 = ticks(7, 10);
+/// The dash: `LANCER_DASH_DISTANCE` px over `LANCER_DASH_TICKS`.
+pub const LANCER_DASH_DISTANCE: i32 = 400;
+pub const LANCER_DASH_TICKS: u32 = ticks(2, 5);
+/// Damage to each ship it runs through (once per dash).
+pub const LANCER_DASH_DAMAGE: i32 = 12;
+/// Time after a dash before it can wind up again.
+pub const LANCER_RECOVER: u32 = ticks(5, 2);
+/// Delay before a fresh Lancer's first charge.
+pub const LANCER_FIRST_CHARGE: u32 = ticks(1, 1);
+
+/// Bloater (death-bomber): slow; bursts `BLOATER_FUSE` after it dies, or
+/// after it touches a ship (it stops and swells). The burst hurts ships
+/// and enemies alike, so it can be chained into packs.
+pub const BLOATER_HP: i32 = 30;
+pub const BLOATER_SPEED: i32 = 55;
+pub const BLOATER_RADIUS: i32 = 16;
+pub const BLOATER_FUSE: u32 = ticks(1, 1);
+pub const BLOATER_BLAST_RADIUS: i32 = 90;
+pub const BLOATER_BLAST_DAMAGE: i32 = 14;
+/// Enough to kill any Swarmer, Lancer or Bloater caught in it.
+pub const BLOATER_BLAST_ENEMY_DAMAGE: i32 = 30;
+
+/// Brood (summoner): hangs back by the fissure it came from and releases
+/// Swarmers; its sac pulses for `BROOD_WINDUP` first.
+pub const BROOD_HP: i32 = 48;
+pub const BROOD_SPEED: i32 = 40;
+pub const BROOD_RADIUS: i32 = 20;
+/// It holds this far out from its fissure, on the side of the nearest ship.
+pub const BROOD_HOLD: i32 = 160;
+pub const BROOD_SWARMERS: i32 = 3;
+pub const BROOD_INTERVAL: u32 = ticks(6, 1);
+pub const BROOD_WINDUP: u32 = ticks(1, 1);
+/// Delay before a fresh Brood's first release (wind-up included after it).
+pub const BROOD_FIRST_RELEASE: u32 = ticks(3, 1);
+/// Released Swarmers appear this far from the Brood's centre.
+pub const BROOD_RELEASE_RING: i32 = 30;
+
+/// Warden (buffer): stays with its pack, out of the ship's face, and
+/// shields every non-Warden ally within `WARDEN_RANGE`: they take half
+/// damage (rounded up), shown by a tether.
+pub const WARDEN_HP: i32 = 40;
+pub const WARDEN_SPEED: i32 = 90;
+pub const WARDEN_RADIUS: i32 = 15;
+pub const WARDEN_RANGE: i32 = 120;
+/// It backs off when a ship is closer than this.
+pub const WARDEN_KEEP_AWAY: i32 = 220;
+
 // --- Elimination: void fissures and the spawn director ----------------------
 
 /// Normal play's kill target. Raised from 40 with packs and one-hit
@@ -207,6 +272,29 @@ pub const SPAWN_RAMP: u32 = ticks(90, 1);
 /// packs (TAKOAI-113).
 pub const MAX_LIVE_ENEMIES: usize = 60;
 
+/// Role packs (TAKOAI-116). Each new role unlocks once the kills reach its
+/// share of the kill target (percent), so the roster grows over a mission
+/// at any target: Lancer, Bloater, Warden, Brood in that order. The first
+/// pack after an unlock always brings the new role; after that a pack is a
+/// role pack `ROLE_PACK_PCT`% of the time, picked evenly among the unlocked
+/// roles, and a plain Swarmer / Spitter pack otherwise.
+pub const LANCER_UNLOCK_PCT: u32 = 10;
+pub const BLOATER_UNLOCK_PCT: u32 = 25;
+pub const WARDEN_UNLOCK_PCT: u32 = 40;
+pub const BROOD_UNLOCK_PCT: u32 = 55;
+pub const ROLE_PACK_PCT: i32 = 50;
+/// Lancer pack: Swarmers plus 1-2 Lancers.
+pub const LANCER_PACK_SWARMERS: (i32, i32) = (4, 6);
+pub const LANCER_PACK_LANCERS: (i32, i32) = (1, 2);
+/// Bloater pack: Swarmers plus 1-2 Bloaters walking among them.
+pub const BLOATER_PACK_SWARMERS: (i32, i32) = (5, 8);
+pub const BLOATER_PACK_BLOATERS: (i32, i32) = (1, 2);
+/// Warden pack: Swarmers, sometimes a Spitter, and one Warden.
+pub const WARDEN_PACK_SWARMERS: (i32, i32) = (6, 9);
+/// Brood pack: one Brood behind 1-2 Spitters and a few Swarmers.
+pub const BROOD_PACK_SPITTERS: (i32, i32) = (1, 2);
+pub const BROOD_PACK_SWARMERS: (i32, i32) = (2, 3);
+
 /// `start` moved toward `end` by the fraction of the ramp elapsed at tick `t`.
 const fn ramp(start: i64, end: i64, t: u32) -> i64 {
     let t = if t < SPAWN_RAMP { t } else { SPAWN_RAMP } as i64;
@@ -232,6 +320,14 @@ pub const SWARMER_CREDITS: u32 = 2;
 pub const SWARMER_CRYSTAL_PCT: i32 = 5;
 pub const SPITTER_CREDITS: u32 = 15;
 pub const SPITTER_CRYSTAL_PCT: i32 = 60;
+pub const LANCER_CREDITS: u32 = 8;
+pub const LANCER_CRYSTAL_PCT: i32 = 30;
+pub const BLOATER_CREDITS: u32 = 6;
+pub const BLOATER_CRYSTAL_PCT: i32 = 20;
+pub const BROOD_CREDITS: u32 = 20;
+pub const BROOD_CRYSTAL_PCT: i32 = 70;
+pub const WARDEN_CREDITS: u32 = 15;
+pub const WARDEN_CRYSTAL_PCT: i32 = 60;
 /// Mission success bonus. Tuned up from the spec's 50 cr + 2 VC (TAKOAI-42):
 /// played runs kill mostly Swarmers and lose a few expired drops, so they
 /// collected ~70-100 cr and 1-5 VC and the spec's 50 + 2 bonus left a win

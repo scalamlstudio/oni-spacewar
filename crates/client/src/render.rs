@@ -12,10 +12,12 @@ use bevy::input::mouse::AccumulatedMouseScroll;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy_ggrs::{LocalPlayers, Session};
+use sim::state::warden_of;
 use sim::tuning::{
-    FISSURE_RADIUS, SHOCKWAVE_RADIUS, SPITTER_FIRE_RANGE, SPITTER_WINDUP, TICKS_PER_SEC,
+    BLOATER_BLAST_RADIUS, BLOATER_FUSE, BROOD_WINDUP, FISSURE_RADIUS, LANCER_DASH_DISTANCE,
+    LANCER_WINDUP, SHOCKWAVE_RADIUS, SPITTER_FIRE_RANGE, SPITTER_WINDUP, TICKS_PER_SEC,
 };
-use sim::{EnemyKind, FxVec2, LootKind, MissionStatus, Ship, ShipKind, SimState, SUB};
+use sim::{Enemy, EnemyKind, FxVec2, LootKind, MissionStatus, Ship, ShipKind, SimState, SUB};
 
 use crate::art::ContentImages;
 use crate::flow::PauseMenu;
@@ -62,6 +64,18 @@ pub mod ids {
     pub const SHIP_BULWARK: &str = "core.battle.ship.bulwark";
     pub const ENEMY_SWARMER: &str = "core.battle.enemy.void_swarmer";
     pub const ENEMY_SPITTER: &str = "core.battle.enemy.void_spitter";
+    pub const ENEMY_LANCER: &str = "core.battle.enemy.void_lancer";
+    pub const ENEMY_LANCER_WINDUP: &str = "core.battle.pose.void_lancer_windup";
+    pub const ENEMY_LANCER_DASH: &str = "core.battle.pose.void_lancer_dash";
+    pub const ENEMY_BLOATER: &str = "core.battle.enemy.void_bloater";
+    pub const ENEMY_BLOATER_SWELLING: &str = "core.battle.pose.void_bloater_swelling";
+    pub const ENEMY_BROOD: &str = "core.battle.enemy.void_brood";
+    pub const ENEMY_BROOD_WINDUP: &str = "core.battle.pose.void_brood_windup";
+    pub const ENEMY_WARDEN: &str = "core.battle.enemy.void_warden";
+    pub const FX_LANCER_CHARGE_LINE: &str = "core.battle.fx.lancer_charge_line";
+    pub const FX_BLOATER_WARNING_RING: &str = "core.battle.fx.bloater_warning_ring";
+    pub const FX_WARDEN_TETHER: &str = "core.battle.fx.warden_tether";
+    pub const FX_WARDEN_SHIELD: &str = "core.battle.fx.warden_shield";
     pub const LOOT_CREDITS: &str = crate::art::ids::ICON_CREDITS;
     pub const LOOT_VOID_CRYSTAL: &str = crate::art::ids::ICON_VOID_CRYSTAL;
     pub const FX_SPIT: &str = "core.battle.fx.spit";
@@ -73,6 +87,18 @@ pub mod ids {
 /// Default sprite size: the longest side is this many times the sim hit
 /// circle's diameter, so what you see is close to what gets hit (TAKOAI-50).
 const SPRITE_SCALE: f32 = 1.2;
+/// The TAKOAI-114 role art sits on padded square canvases (horns, tails
+/// and sacs reach the edges), so it is drawn a little larger to match.
+const ROLE_SCALE: f32 = 1.6;
+
+const fn role(id: &'static str) -> SpriteArt {
+    SpriteArt {
+        id,
+        scale: ROLE_SCALE,
+        spin: 0.0,
+        pulse: 0.0,
+    }
+}
 
 /// How big each sprite is drawn: its longest side is `scale` times the sim
 /// hit circle's diameter.
@@ -128,6 +154,14 @@ const SPRITES: &[SpriteArt] = &[
         spin: 0.0,
         pulse: 0.0,
     },
+    role(ids::ENEMY_LANCER),
+    role(ids::ENEMY_LANCER_WINDUP),
+    role(ids::ENEMY_LANCER_DASH),
+    role(ids::ENEMY_BLOATER),
+    role(ids::ENEMY_BLOATER_SWELLING),
+    role(ids::ENEMY_BROOD),
+    role(ids::ENEMY_BROOD_WINDUP),
+    role(ids::ENEMY_WARDEN),
     // Fissures have no hit circle; drawn at about their spawn ring's size.
     // Static (no spin, TAKOAI-58), with a gentle pulse.
     SpriteArt {
@@ -145,7 +179,14 @@ pub fn battle_image_ids() -> Vec<&'static str> {
         .iter()
         .map(|s| s.id)
         .chain(crate::fx::FX.iter().map(|f| f.id))
-        .chain([ids::FX_SPITTER_WINDUP, ids::FX_SPITTER_AIM_LINE])
+        .chain([
+            ids::FX_SPITTER_WINDUP,
+            ids::FX_SPITTER_AIM_LINE,
+            ids::FX_LANCER_CHARGE_LINE,
+            ids::FX_BLOATER_WARNING_RING,
+            ids::FX_WARDEN_TETHER,
+            ids::FX_WARDEN_SHIELD,
+        ])
         .collect()
 }
 
@@ -210,11 +251,42 @@ fn ship_id(kind: ShipKind) -> &'static str {
     }
 }
 
-fn enemy_id(kind: EnemyKind) -> &'static str {
+/// An enemy kind's resting sprite (codex, tests).
+pub fn enemy_id(kind: EnemyKind) -> &'static str {
     match kind {
         EnemyKind::Swarmer => ids::ENEMY_SWARMER,
         EnemyKind::Spitter => ids::ENEMY_SPITTER,
+        EnemyKind::Lancer => ids::ENEMY_LANCER,
+        EnemyKind::Bloater => ids::ENEMY_BLOATER,
+        EnemyKind::Brood => ids::ENEMY_BROOD,
+        EnemyKind::Warden => ids::ENEMY_WARDEN,
     }
+}
+
+/// The pose an enemy is drawn in right now: the Lancer crouches through its
+/// wind-up and smears through its dash, the Bloater swells once armed, the
+/// Brood's sac bulges before a release.
+pub fn enemy_pose(e: &Enemy) -> &'static str {
+    match e.kind {
+        EnemyKind::Lancer if e.dash > 0 => ids::ENEMY_LANCER_DASH,
+        EnemyKind::Lancer if e.windup > 0 => ids::ENEMY_LANCER_WINDUP,
+        EnemyKind::Bloater if e.struck != 0 => ids::ENEMY_BLOATER_SWELLING,
+        EnemyKind::Brood if e.windup > 0 => ids::ENEMY_BROOD_WINDUP,
+        kind => enemy_id(kind),
+    }
+}
+
+/// How far through a telegraph `left` ticks of `total` is (0..1).
+pub fn telegraph_done(left: u32, total: u32) -> f32 {
+    total.saturating_sub(left) as f32 / total.max(1) as f32
+}
+
+/// Bloater warning ring diameter (px) with `fuse` ticks left: it grows to
+/// the burst's real size as the fuse runs out, so the edge at the end is
+/// where the damage reaches.
+pub fn warning_ring_size(fuse: u32) -> f32 {
+    let d = 2.0 * BLOATER_BLAST_RADIUS as f32;
+    d * (0.45 + 0.55 * telegraph_done(fuse, BLOATER_FUSE))
 }
 
 fn loot_id(kind: LootKind) -> &'static str {
@@ -363,6 +435,8 @@ struct Draw {
     /// frames and the stretched aim line. `None` draws the whole image at
     /// `size`.
     rect: Option<(Rect, Vec2)>,
+    /// Mirror the image (art drawn facing right, moving left).
+    flip: bool,
 }
 
 /// Reused sprite entities (hidden when unused) plus per-ship facing, which
@@ -435,11 +509,11 @@ fn draw_sprites(
     let mut draws = Vec::new();
     if let Some(world) = world.as_deref() {
         let t = time.elapsed_secs(); // visual only
+                                     // Returns the new draw's index, if the art is there.
         let mut push = |id: &str, pos: Vec2, radius: f32, angle: f32, color: Color, z: f32| {
-            let Some(spec) = SPRITES.iter().find(|s| s.id == id) else {
-                return;
-            };
-            if let Some(image) = art.get(&mut images, id) {
+            let spec = SPRITES.iter().find(|s| s.id == id)?;
+            let image = art.get(&mut images, id)?;
+            {
                 let pulse = 1.0 + spec.pulse * (t * 2.5).sin();
                 draws.push(Draw {
                     image,
@@ -449,8 +523,10 @@ fn draw_sprites(
                     color,
                     z,
                     rect: None,
+                    flip: false,
                 });
             }
+            Some(draws.len() - 1)
         };
         for f in &world.fissures {
             push(
@@ -472,15 +548,17 @@ fn draw_sprites(
                 0.1,
             );
         }
+        let mut poses = Vec::new();
         for e in &world.enemies {
-            push(
-                enemy_id(e.kind),
+            let drawn = push(
+                enemy_pose(e),
                 to_world(e.pos),
                 e.kind.radius() as f32,
                 0.0,
                 hit_tint(flash.amount(e.id, t)),
                 0.2,
             );
+            poses.extend(drawn.map(|i| (i, e)));
         }
         for p in &world.enemy_projectiles {
             let v = to_world(p.vel);
@@ -518,6 +596,26 @@ fn draw_sprites(
                 0.4,
             );
         }
+        // Role art faces right: mirror it toward the ship or along the dash.
+        // A Brood about to release throbs.
+        for (i, e) in poses {
+            let d = &mut draws[i];
+            let toward = match world
+                .ships
+                .iter()
+                .filter(|s| s.alive())
+                .min_by_key(|s| (s.pos - e.pos).length_squared())
+            {
+                _ if e.kind == EnemyKind::Lancer && (e.dash > 0 || e.windup > 0) => e.aim.x,
+                Some(s) => (s.pos - e.pos).x,
+                None => 1,
+            };
+            d.flip = !matches!(e.kind, EnemyKind::Swarmer | EnemyKind::Spitter) && toward < 0;
+            if e.kind == EnemyKind::Brood && e.windup > 0 {
+                let k = telegraph_done(e.windup, BROOD_WINDUP);
+                d.size *= 1.0 + 0.12 * k * (t * 18.0).sin().abs();
+            }
+        }
         let glow = state
             .glow
             .get_or_insert_with(|| images.add(glow_image()))
@@ -531,6 +629,7 @@ fn draw_sprites(
                 color: PLAYER_COLORS[p.owner % PLAYER_COLORS.len()],
                 z: 0.5,
                 rect: None,
+                flip: false,
             });
         }
         let windup = art.get(&mut images, ids::FX_SPITTER_WINDUP);
@@ -552,6 +651,7 @@ fn draw_sprites(
                         Rect::new(x, y, x + w, y + h),
                         Vec2::new(AIM_LINE_LENGTH, AIM_LINE_THICKNESS),
                     )),
+                    flip: false,
                 });
             }
             if let Some(image) = windup.clone() {
@@ -567,14 +667,26 @@ fn draw_sprites(
                         Rect::new(x, 0.0, x + FX_CELL, FX_CELL),
                         Vec2::splat(WINDUP_SIZE),
                     )),
+                    flip: false,
                 });
             }
         }
     }
 
+    if let Some(world) = world.as_deref() {
+        role_telegraphs(
+            world,
+            time.elapsed_secs(),
+            &mut art,
+            &mut images,
+            &mut draws,
+        );
+    }
+
     for (i, d) in draws.iter().enumerate() {
         let (rect, size) = match d.rect {
-            Some((rect, size)) => (Some(rect), size),
+            // An empty rect: the whole image at exactly `size`.
+            Some((rect, size)) => ((!rect.is_empty()).then_some(rect), size),
             None => {
                 let px = ContentImages::size(&images, &d.image);
                 (None, px * (d.size / px.max_element()))
@@ -587,6 +699,7 @@ fn draw_sprites(
             color: d.color,
             custom_size: Some(size),
             rect,
+            flip_x: d.flip,
             ..default()
         };
         match state.pool.get(i).copied() {
@@ -611,6 +724,107 @@ fn draw_sprites(
         }
     }
 }
+
+/// The new roles' warnings (TAKOAI-116, Art's TAKOAI-114 sheets), all read
+/// from sim state so they match what is about to happen:
+/// - Lancer: the charge line along the locked dash, `LANCER_DASH_DISTANCE`
+///   long, brightening over the 0.7 s wind-up.
+/// - Bloater: the dashed warning ring round an armed Bloater or a pending
+///   burst, growing to the burst's reach as the fuse runs out.
+/// - Warden: a tether to every ally it shields and a shimmer round each.
+fn role_telegraphs(
+    world: &SimState,
+    t: f32,
+    art: &mut ContentImages,
+    images: &mut Assets<Image>,
+    draws: &mut Vec<Draw>,
+) {
+    let line = art.get(images, ids::FX_LANCER_CHARGE_LINE);
+    let ring = art.get(images, ids::FX_BLOATER_WARNING_RING);
+    let tether = art.get(images, ids::FX_WARDEN_TETHER);
+    let shield = art.get(images, ids::FX_WARDEN_SHIELD);
+    let exact = |image: Handle<Image>, pos, size: Vec2, angle, color, z| Draw {
+        image,
+        pos,
+        size: 0.0,
+        angle,
+        color,
+        z,
+        rect: Some((Rect::new(0.0, 0.0, 0.0, 0.0), size)),
+        flip: false,
+    };
+    let mut rings = Vec::new();
+    for (i, e) in world.enemies.iter().enumerate() {
+        let at = to_world(e.pos);
+        match e.kind {
+            EnemyKind::Lancer if e.windup > 0 => {
+                if let Some(image) = line.clone() {
+                    let dir = to_world(e.aim).normalize_or_zero();
+                    let done = telegraph_done(e.windup, LANCER_WINDUP);
+                    let len = LANCER_DASH_DISTANCE as f32;
+                    draws.push(exact(
+                        image,
+                        at + dir * len / 2.0,
+                        Vec2::new(len, LANCER_LINE_THICKNESS),
+                        dir.y.atan2(dir.x),
+                        Color::srgba(1.0, 1.0, 1.0, 0.35 + 0.65 * done),
+                        0.15,
+                    ));
+                }
+            }
+            EnemyKind::Bloater if e.struck != 0 => rings.push((at, e.windup)),
+            _ => {}
+        }
+        if let Some(w) = warden_of(&world.enemies, i) {
+            let from = to_world(world.enemies[w].pos);
+            let d = at - from;
+            if let Some(image) = tether.clone() {
+                draws.push(exact(
+                    image,
+                    from + d / 2.0,
+                    Vec2::new(d.length(), TETHER_THICKNESS),
+                    d.y.atan2(d.x),
+                    Color::srgba(1.0, 1.0, 1.0, 0.8),
+                    0.12,
+                ));
+            }
+            if let Some(image) = shield.clone() {
+                let size =
+                    2.0 * e.kind.radius() as f32 * SHIELD_SCALE * (1.0 + 0.05 * (t * 4.0).sin());
+                draws.push(exact(
+                    image,
+                    at,
+                    Vec2::splat(size),
+                    0.0,
+                    Color::srgba(1.0, 1.0, 1.0, 0.6),
+                    0.21,
+                ));
+            }
+        }
+    }
+    rings.extend(world.blasts.iter().map(|b| (to_world(b.pos), b.fuse)));
+    if let Some(image) = ring {
+        for (at, fuse) in rings {
+            let done = telegraph_done(fuse, BLOATER_FUSE);
+            // Blinks faster as it gets close.
+            let blink = 0.65 + 0.35 * (t * (8.0 + 16.0 * done)).sin();
+            draws.push(exact(
+                image.clone(),
+                at,
+                Vec2::splat(warning_ring_size(fuse)),
+                0.0,
+                Color::srgba(1.0, 1.0, 1.0, blink),
+                0.16,
+            ));
+        }
+    }
+}
+
+/// Lancer charge line thickness, Warden tether thickness (px).
+const LANCER_LINE_THICKNESS: f32 = 22.0;
+const TETHER_THICKNESS: f32 = 14.0;
+/// Warden shield shimmer: this many times the shielded enemy's diameter.
+const SHIELD_SCALE: f32 = 1.6;
 
 /// One edge arrow per fissure that is off screen: a point just inside the
 /// screen edge toward that fissure and the unit direction to it, in
@@ -907,8 +1121,6 @@ mod tests {
         for id in [
             ship_id(ShipKind::Kite),
             ship_id(ShipKind::Bulwark),
-            enemy_id(EnemyKind::Swarmer),
-            enemy_id(EnemyKind::Spitter),
             loot_id(LootKind::Credits),
             loot_id(LootKind::VoidCrystal),
             ids::FX_SPIT,
@@ -916,6 +1128,38 @@ mod tests {
         ] {
             assert!(SPRITES.iter().any(|p| p.id == id), "{id}");
         }
+        // Every enemy in every pose.
+        for kind in EnemyKind::ALL {
+            let mut e = sim::Enemy::new(kind, FxVec2::ZERO);
+            for (windup, dash, struck) in [(0, 0, 0), (5, 0, 0), (0, 5, 0), (5, 0, 1)] {
+                (e.windup, e.dash, e.struck) = (windup, dash, struck);
+                let id = enemy_pose(&e);
+                assert!(SPRITES.iter().any(|p| p.id == id), "{id}");
+            }
+        }
+        let mut art = ContentImages::repo();
+        let mut images = Assets::<Image>::default();
+        for id in battle_image_ids() {
+            assert!(art.get(&mut images, id).is_some(), "{id} not shipped");
+        }
+    }
+
+    #[test]
+    fn role_poses_follow_the_sim() {
+        let mut e = sim::Enemy::new(EnemyKind::Lancer, FxVec2::ZERO);
+        assert_eq!(enemy_pose(&e), ids::ENEMY_LANCER);
+        e.windup = 3;
+        assert_eq!(enemy_pose(&e), ids::ENEMY_LANCER_WINDUP);
+        e.dash = 3;
+        assert_eq!(enemy_pose(&e), ids::ENEMY_LANCER_DASH);
+        let mut b = sim::Enemy::new(EnemyKind::Bloater, FxVec2::ZERO);
+        b.struck = 1;
+        assert_eq!(enemy_pose(&b), ids::ENEMY_BLOATER_SWELLING);
+        // The warning ring ends exactly at the burst's reach.
+        assert_eq!(warning_ring_size(0), 2.0 * BLOATER_BLAST_RADIUS as f32);
+        assert!(warning_ring_size(BLOATER_FUSE) < warning_ring_size(BLOATER_FUSE / 2));
+        assert_eq!(telegraph_done(LANCER_WINDUP, LANCER_WINDUP), 0.0);
+        assert_eq!(telegraph_done(0, LANCER_WINDUP), 1.0);
     }
 
     #[test]

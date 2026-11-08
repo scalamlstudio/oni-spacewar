@@ -1,8 +1,10 @@
 //! The whole rolled-back simulation state and its fixed-timestep step.
 //!
 //! One Elimination mission (design/READINESS.md § Demo Spec): click-to-move
-//! battleships with an auto-firing basic attack and two skills each, two void
-//! monster types pouring out of void fissures, loot drops, and a win/lose result.
+//! battleships with an auto-firing basic attack and two skills each, void
+//! monster packs pouring out of void fissures (Swarmers and Spitters, and from
+//! TAKOAI-116 the Lancer, Bloater, Brood and Warden roles), loot drops, and a
+//! win/lose result.
 //!
 //! - All state is plain data in [`SimState`] (entities in `Vec`s, see
 //!   [`crate::entity`]).
@@ -50,6 +52,8 @@ pub struct SimState {
     /// Shots fired by enemies.
     pub enemy_projectiles: Vec<Projectile>,
     pub pickups: Vec<Pickup>,
+    /// Bloater bursts waiting to go off.
+    pub blasts: Vec<Blast>,
     /// Where enemies come from; placed once at mission start.
     pub fissures: Vec<Fissure>,
     pub mission: Mission,
@@ -133,6 +137,43 @@ fn nearest_ship(ships: &[Ship], pos: FxVec2) -> Option<usize> {
         .map(|s| s.handle)
 }
 
+/// The new roles in the order they unlock, with their unlock point
+/// (percent of the kill target). `Mission::introduced` has a bit per index.
+const ROLES: [(EnemyKind, u32); 4] = [
+    (EnemyKind::Lancer, LANCER_UNLOCK_PCT),
+    (EnemyKind::Bloater, BLOATER_UNLOCK_PCT),
+    (EnemyKind::Warden, WARDEN_UNLOCK_PCT),
+    (EnemyKind::Brood, BROOD_UNLOCK_PCT),
+];
+
+/// The living Warden shielding enemy `i`, if any: the first (lowest index)
+/// within `WARDEN_RANGE`. Wardens don't shield each other.
+pub fn warden_of(enemies: &[Enemy], i: usize) -> Option<usize> {
+    let e = &enemies[i];
+    if e.kind == EnemyKind::Warden || e.hp <= 0 {
+        return None;
+    }
+    let range = px(WARDEN_RANGE) as i64;
+    enemies.iter().position(|w| {
+        w.kind == EnemyKind::Warden && w.hp > 0 && (w.pos - e.pos).length_squared() <= range * range
+    })
+}
+
+/// Damage after a Warden's shield: it absorbs half, rounded down, so the
+/// enemy takes half rounded up.
+pub const fn warded(amount: i32) -> i32 {
+    amount - amount / 2
+}
+
+/// Damage enemy `i` takes from a hit of `amount`, after any Warden.
+fn damage_to(enemies: &[Enemy], i: usize, amount: i32) -> i32 {
+    if warden_of(enemies, i).is_some() {
+        warded(amount)
+    } else {
+        amount
+    }
+}
+
 impl SimState {
     /// A mission where every player flies the default loadout.
     pub fn new(params: SimParams) -> Self {
@@ -169,6 +210,7 @@ impl SimState {
             projectiles: Vec::new(),
             enemy_projectiles: Vec::new(),
             pickups: Vec::new(),
+            blasts: Vec::new(),
             fissures,
             mission: Mission::default(),
             next_id: 1,
@@ -204,6 +246,7 @@ impl SimState {
             self.move_projectiles();
             self.projectile_hits();
             self.separate();
+            self.update_blasts();
             self.kill_and_drop();
             self.update_pickups();
             self.check_end();
@@ -212,11 +255,12 @@ impl SimState {
     }
 
     /// The spawn director: every `pack_interval` ticks a pack comes out of
-    /// a random fissure: `PACK_SWARMERS_MIN..=PACK_SWARMERS_MAX` Swarmers
-    /// plus a Spitter for each of `PACK_SPITTER_ROLLS` rolls under
-    /// `spitter_pct`, both ramping with mission time. A pack brings only
-    /// what fits under `MAX_LIVE_ENEMIES` (Spitters first); with the field
-    /// full the director waits.
+    /// a random fissure. A plain pack is `PACK_SWARMERS_MIN..=PACK_SWARMERS_MAX`
+    /// Swarmers plus a Spitter for each of `PACK_SPITTER_ROLLS` rolls under
+    /// `spitter_pct`, both ramping with mission time. Once kills unlock the
+    /// new roles (`ROLES`), a pack can be a role pack instead (`role_pack`).
+    /// A pack brings only what fits under `MAX_LIVE_ENEMIES`, its role
+    /// enemies and Spitters first; with the field full the director waits.
     fn direct_spawns(&mut self) {
         let m = &mut self.mission;
         if m.spawn_timer > 0 {
@@ -230,19 +274,65 @@ impl SimState {
             return;
         }
         let t = self.frame;
-        let swarmers = self.rng.range(PACK_SWARMERS_MIN, PACK_SWARMERS_MAX) as usize;
-        let mut spitters = 0;
-        for _ in 0..PACK_SPITTER_ROLLS {
-            if self.rng.range(0, 99) < spitter_pct(t) {
-                spitters += 1;
+        let mut kinds = match self.pick_role() {
+            Some(role) => self.role_pack(role),
+            None => {
+                let swarmers = self.rng.range(PACK_SWARMERS_MIN, PACK_SWARMERS_MAX) as usize;
+                let spitters = self.spitter_rolls(PACK_SPITTER_ROLLS);
+                core::iter::repeat_n(EnemyKind::Spitter, spitters)
+                    .chain(core::iter::repeat_n(EnemyKind::Swarmer, swarmers))
+                    .collect()
             }
-        }
-        let spitters = spitters.min(room);
-        let swarmers = swarmers.min(room - spitters);
-        let kinds = core::iter::repeat_n(EnemyKind::Spitter, spitters)
-            .chain(core::iter::repeat_n(EnemyKind::Swarmer, swarmers));
-        self.spawn_pack(kinds.collect());
+        };
+        kinds.truncate(room);
+        self.spawn_pack(kinds);
         self.mission.spawn_timer = pack_interval(t);
+    }
+
+    /// How many of `rolls` Spitter rolls come up at the current ramp.
+    fn spitter_rolls(&mut self, rolls: u32) -> usize {
+        let pct = spitter_pct(self.frame);
+        (0..rolls).filter(|_| self.rng.range(0, 99) < pct).count()
+    }
+
+    /// Which role this pack is built round, if any. A role unlocks when the
+    /// kills reach its share of the kill target; the first pack after that
+    /// always brings it, later ones `ROLE_PACK_PCT`% of the time (evenly
+    /// among the unlocked roles). No RNG is drawn before the first unlock.
+    fn pick_role(&mut self) -> Option<EnemyKind> {
+        let m = &mut self.mission;
+        let unlocked: Vec<usize> = (0..ROLES.len())
+            .filter(|&i| m.kills as u64 * 100 >= ROLES[i].1 as u64 * m.kill_target as u64)
+            .collect();
+        if let Some(&i) = unlocked.iter().find(|&&i| m.introduced & (1 << i) == 0) {
+            m.introduced |= 1 << i;
+            return Some(ROLES[i].0);
+        }
+        if unlocked.is_empty() || self.rng.range(0, 99) >= ROLE_PACK_PCT {
+            return None;
+        }
+        let pick = self.rng.range(0, unlocked.len() as i32 - 1) as usize;
+        Some(ROLES[unlocked[pick]].0)
+    }
+
+    /// The mixed pack for a role, the role's enemies first: Swarmers with
+    /// Lancers; Swarmers with Bloaters among them; a Warden over Swarmers
+    /// (and maybe a Spitter); a Brood behind Spitters and a few Swarmers.
+    fn role_pack(&mut self, role: EnemyKind) -> Vec<EnemyKind> {
+        let mut roll = |(lo, hi): (i32, i32)| self.rng.range(lo, hi) as usize;
+        let (leaders, spitters, swarmers) = match role {
+            EnemyKind::Lancer => (roll(LANCER_PACK_LANCERS), 0, roll(LANCER_PACK_SWARMERS)),
+            EnemyKind::Bloater => (roll(BLOATER_PACK_BLOATERS), 0, roll(BLOATER_PACK_SWARMERS)),
+            EnemyKind::Brood => (1, roll(BROOD_PACK_SPITTERS), roll(BROOD_PACK_SWARMERS)),
+            _ => {
+                let swarmers = roll(WARDEN_PACK_SWARMERS);
+                (1, self.spitter_rolls(1), swarmers)
+            }
+        };
+        core::iter::repeat_n(role, leaders)
+            .chain(core::iter::repeat_n(EnemyKind::Spitter, spitters))
+            .chain(core::iter::repeat_n(EnemyKind::Swarmer, swarmers))
+            .collect()
     }
 
     /// Spawn a pack evenly round the spawn ring of one random fissure,
@@ -258,6 +348,7 @@ impl SimState {
                 + FxVec2::new(mul_q16(r, cos_q16(angle)), mul_q16(r, sin_q16(angle)));
             let mut e = Enemy::new(kind, pos);
             e.id = new_id(&mut self.next_id);
+            e.home = self.fissures[f].pos;
             if kind == EnemyKind::Spitter && self.rng.range(0, 1) == 0 {
                 e.orbit = -1;
             }
@@ -372,17 +463,20 @@ impl SimState {
                     skill: Skill::Shockwave,
                     pos: centre,
                 });
-                for e in &mut self.enemies {
+                let dealt: Vec<i32> = (0..self.enemies.len())
+                    .map(|j| damage_to(&self.enemies, j, damage))
+                    .collect();
+                for (e, dealt) in self.enemies.iter_mut().zip(dealt) {
                     if !overlaps(centre, px(SHOCKWAVE_RADIUS), e.pos, px(e.kind.radius())) {
                         continue;
                     }
-                    e.hp -= damage;
+                    e.hp -= dealt;
                     self.events.push(SimEvent::Hit {
                         enemy: e.id,
                         ship: handle,
                         attack: Attack::Shockwave,
                         source: 0,
-                        amount: damage,
+                        amount: dealt,
                         pos: e.pos,
                     });
                     let d = e.pos - centre;
@@ -457,11 +551,31 @@ impl SimState {
         }
     }
 
-    /// Swarmers rush the nearest ship and hit on contact; Spitters close to
-    /// a distance band, then strafe around the ship inside it, and stop only
-    /// for the 0.4 s wind-up before each shot (aim locked at its start).
+    /// Each enemy acts on the nearest living ship, by role:
+    /// - Swarmers rush it and hit on contact.
+    /// - Spitters close to a distance band, then strafe around it, and stop
+    ///   only for the 0.4 s wind-up before each shot (aim locked at its start).
+    /// - Lancers walk in, stop for a 0.7 s wind-up with the dash locked, then
+    ///   dash `LANCER_DASH_DISTANCE` along it, hitting each ship once.
+    /// - Bloaters waddle in; touching a ship arms a 1 s fuse (it stops) and
+    ///   the burst goes off when it runs out (`kill_and_drop`, `update_blasts`).
+    /// - Broods hold near their fissure, toward the ship, and every
+    ///   `BROOD_INTERVAL` pulse for `BROOD_WINDUP` and release Swarmers.
+    /// - Wardens stay by the nearest ally but out of the ship's reach.
     fn enemy_behaviour(&mut self) {
+        let mut releases: Vec<FxVec2> = Vec::new();
         for i in 0..self.enemies.len() {
+            // A Warden's ally, read before `e` borrows the list.
+            let ally = (self.enemies[i].kind == EnemyKind::Warden)
+                .then(|| {
+                    let at = self.enemies[i].pos;
+                    self.enemies
+                        .iter()
+                        .filter(|a| a.kind != EnemyKind::Warden && a.hp > 0)
+                        .min_by_key(|a| (a.pos - at).length_squared())
+                        .map(|a| a.pos)
+                })
+                .flatten();
             let e = &mut self.enemies[i];
             e.cooldown = e.cooldown.saturating_sub(1);
             let Some(h) = nearest_ship(&self.ships, e.pos) else {
@@ -525,7 +639,134 @@ impl SimState {
                         e.aim = vel;
                     }
                 }
+                EnemyKind::Lancer => {
+                    if e.dash > 0 {
+                        e.pos = e.pos + e.aim;
+                        e.dash -= 1;
+                        for s in self.ships.iter_mut().filter(|s| s.alive()) {
+                            let bit = 1 << s.handle;
+                            let reach = px(s.stats.radius + CONTACT_REACH);
+                            if e.struck & bit != 0
+                                || !overlaps(e.pos, px(e.kind.radius()), s.pos, reach)
+                            {
+                                continue;
+                            }
+                            e.struck |= bit;
+                            let hull_lost = s.take_damage(LANCER_DASH_DAMAGE);
+                            self.events.push(SimEvent::ShipDamaged {
+                                ship: s.handle,
+                                source: e.id,
+                                amount: LANCER_DASH_DAMAGE,
+                                hull_lost,
+                                pos: s.pos,
+                            });
+                        }
+                        if e.dash == 0 {
+                            e.cooldown = LANCER_RECOVER;
+                        }
+                        continue;
+                    }
+                    if e.windup > 0 {
+                        e.windup -= 1;
+                        if e.windup == 0 {
+                            e.dash = LANCER_DASH_TICKS;
+                            e.struck = 0;
+                        }
+                        continue;
+                    }
+                    let d = to_ship.length();
+                    let vel = to_ship.scale_to(px(LANCER_DASH_DISTANCE) / LANCER_DASH_TICKS as i32);
+                    if e.cooldown == 0 && d <= px(LANCER_CHARGE_RANGE) as i64 && vel != FxVec2::ZERO
+                    {
+                        e.windup = LANCER_WINDUP;
+                        e.aim = vel;
+                    } else if d > px(LANCER_CHARGE_RANGE / 2) as i64 {
+                        e.pos = e.pos + to_ship.scale_to(speed);
+                    }
+                }
+                EnemyKind::Bloater => {
+                    if e.struck != 0 {
+                        // Armed: swell in place; at 0 it dies and bursts.
+                        e.windup = e.windup.saturating_sub(1);
+                        if e.windup == 0 {
+                            e.hp = 0;
+                        }
+                        continue;
+                    }
+                    if to_ship.length() > speed as i64 {
+                        e.pos = e.pos + to_ship.scale_to(speed);
+                    }
+                    let reach = ship.stats.radius + CONTACT_REACH;
+                    if overlaps(e.pos, px(e.kind.radius()), ship.pos, px(reach)) {
+                        e.struck = 1 << h;
+                        e.windup = BLOATER_FUSE;
+                    }
+                }
+                EnemyKind::Brood => {
+                    if e.windup > 0 {
+                        e.windup -= 1;
+                        if e.windup == 0 {
+                            releases.push(e.pos);
+                            e.cooldown = BROOD_INTERVAL - BROOD_WINDUP;
+                        }
+                        continue;
+                    }
+                    let toward = ship.pos - e.home;
+                    let hold = if toward == FxVec2::ZERO {
+                        e.home
+                    } else {
+                        e.home + toward.scale_to(px(BROOD_HOLD))
+                    };
+                    let d = hold - e.pos;
+                    e.pos = if d.length() <= speed as i64 {
+                        hold
+                    } else {
+                        e.pos + d.scale_to(speed)
+                    };
+                    if e.cooldown == 0 {
+                        e.windup = BROOD_WINDUP;
+                    }
+                }
+                EnemyKind::Warden => {
+                    let d = to_ship.length();
+                    let step = if d < px(WARDEN_KEEP_AWAY) as i64 {
+                        FxVec2::ZERO - to_ship.scale_to(speed)
+                    } else if let Some(ally) = ally {
+                        // Sit with the ally, close enough to shield it.
+                        let to_ally = ally - e.pos;
+                        if to_ally.length() > px(WARDEN_RANGE / 2) as i64 {
+                            to_ally.scale_to(speed)
+                        } else {
+                            FxVec2::ZERO
+                        }
+                    } else if d > px(WARDEN_KEEP_AWAY + 60) as i64 {
+                        to_ship.scale_to(speed)
+                    } else {
+                        FxVec2::ZERO
+                    };
+                    e.pos = e.pos + step;
+                }
             }
+        }
+        for at in releases {
+            self.release_swarmers(at);
+        }
+    }
+
+    /// A Brood at `at` releases `BROOD_SWARMERS` Swarmers round itself, as
+    /// many as fit under `MAX_LIVE_ENEMIES`.
+    fn release_swarmers(&mut self, at: FxVec2) {
+        let room = MAX_LIVE_ENEMIES.saturating_sub(self.enemies.len());
+        let n = (BROOD_SWARMERS as usize).min(room);
+        let start = self.rng.range(0, ANGLE_STEPS - 1);
+        let r = px(BROOD_RELEASE_RING);
+        for k in 0..n as i32 {
+            let angle = (start + k * ANGLE_STEPS / BROOD_SWARMERS) % ANGLE_STEPS;
+            let pos = at + FxVec2::new(mul_q16(r, cos_q16(angle)), mul_q16(r, sin_q16(angle)));
+            let mut e = Enemy::new(EnemyKind::Swarmer, pos);
+            e.id = new_id(&mut self.next_id);
+            self.enemies.push(e);
+            self.mission.spawned += 1;
         }
     }
 
@@ -544,12 +785,13 @@ impl SimState {
     /// A ship's shot also knocks the enemy back a little along its flight.
     fn projectile_hits(&mut self) {
         for p in &mut self.projectiles {
-            let hit = self
-                .enemies
-                .iter_mut()
-                .find(|e| e.hp > 0 && overlaps(p.pos, px(p.radius), e.pos, px(e.kind.radius())));
-            if let Some(e) = hit {
-                e.hp -= p.damage;
+            let hit = self.enemies.iter().position(|e| {
+                e.hp > 0 && overlaps(p.pos, px(p.radius), e.pos, px(e.kind.radius()))
+            });
+            if let Some(i) = hit {
+                let dealt = damage_to(&self.enemies, i, p.damage);
+                let e = &mut self.enemies[i];
+                e.hp -= dealt;
                 p.ttl = 0;
                 let knockback = match p.attack {
                     Attack::Scatter => SCATTER_KNOCKBACK,
@@ -561,7 +803,7 @@ impl SimState {
                     ship: p.owner,
                     attack: p.attack,
                     source: p.id,
-                    amount: p.damage,
+                    amount: dealt,
                     pos: e.pos,
                 });
             }
@@ -589,11 +831,11 @@ impl SimState {
 
     /// Ships and enemies push apart, split by mass (the lighter one moves
     /// more); enemies push each other apart evenly. Ships never collide with
-    /// each other.
+    /// each other, and a dashing Lancer runs straight through ships.
     fn separate(&mut self) {
         let total = SHIP_MASS + ENEMY_MASS;
         for ship in self.ships.iter_mut().filter(|s| s.alive()) {
-            for e in &mut self.enemies {
+            for e in self.enemies.iter_mut().filter(|e| e.dash == 0) {
                 let Some(push) =
                     separation(ship.pos, px(ship.stats.radius), e.pos, px(e.kind.radius()))
                 else {
@@ -619,6 +861,54 @@ impl SimState {
         }
     }
 
+    /// Bloater bursts tick down and go off at 0: every living ship and enemy
+    /// within `BLOATER_BLAST_RADIUS` takes damage (Wardens shield enemies as
+    /// usual), so a burst can kill more Bloaters and chain.
+    fn update_blasts(&mut self) {
+        let r = px(BLOATER_BLAST_RADIUS);
+        for b in &mut self.blasts {
+            b.fuse = b.fuse.saturating_sub(1);
+            if b.fuse > 0 {
+                continue;
+            }
+            self.events.push(SimEvent::Burst {
+                blast: b.id,
+                pos: b.pos,
+            });
+            for ship in self.ships.iter_mut().filter(|s| s.alive()) {
+                if !overlaps(b.pos, r, ship.pos, px(ship.stats.radius)) {
+                    continue;
+                }
+                let hull_lost = ship.take_damage(BLOATER_BLAST_DAMAGE);
+                self.events.push(SimEvent::ShipDamaged {
+                    ship: ship.handle,
+                    source: b.id,
+                    amount: BLOATER_BLAST_DAMAGE,
+                    hull_lost,
+                    pos: ship.pos,
+                });
+            }
+            let dealt: Vec<i32> = (0..self.enemies.len())
+                .map(|j| damage_to(&self.enemies, j, BLOATER_BLAST_ENEMY_DAMAGE))
+                .collect();
+            for (e, dealt) in self.enemies.iter_mut().zip(dealt) {
+                if e.hp <= 0 || !overlaps(b.pos, r, e.pos, px(e.kind.radius())) {
+                    continue;
+                }
+                e.hp -= dealt;
+                self.events.push(SimEvent::Hit {
+                    enemy: e.id,
+                    ship: 0,
+                    attack: Attack::Blast,
+                    source: b.id,
+                    amount: dealt,
+                    pos: e.pos,
+                });
+            }
+        }
+        self.blasts.retain(|b| b.fuse > 0);
+    }
+
     /// Dead enemies count as kills and drop loot rolled with the sim RNG.
     fn kill_and_drop(&mut self) {
         for e in self.enemies.iter().filter(|e| e.hp <= 0) {
@@ -628,10 +918,19 @@ impl SimState {
                 kind: e.kind,
                 pos: e.pos,
             });
-            let (credits, crystal_pct) = match e.kind {
-                EnemyKind::Swarmer => (SWARMER_CREDITS, SWARMER_CRYSTAL_PCT),
-                EnemyKind::Spitter => (SPITTER_CREDITS, SPITTER_CRYSTAL_PCT),
-            };
+            if e.kind == EnemyKind::Bloater {
+                // Killed: the full fuse. Burst on contact: what's left of it.
+                self.blasts.push(Blast {
+                    id: new_id(&mut self.next_id),
+                    pos: e.pos,
+                    fuse: if e.struck != 0 {
+                        e.windup
+                    } else {
+                        BLOATER_FUSE
+                    },
+                });
+            }
+            let (credits, crystal_pct) = e.kind.loot();
             self.pickups.push(Pickup {
                 id: new_id(&mut self.next_id),
                 kind: LootKind::Credits,
@@ -695,6 +994,7 @@ impl SimState {
                 m.collected.add(p.kind, p.amount);
             }
             self.enemies.clear();
+            self.blasts.clear();
             self.projectiles.clear();
             self.enemy_projectiles.clear();
         } else if self.ships.iter().all(|s| !s.alive()) {
@@ -1680,5 +1980,244 @@ mod tests {
             again.extend(s.events.iter().map(|e| (f, e.key())));
         }
         assert_eq!(first, again);
+    }
+
+    // ---- New roles (TAKOAI-116) --------------------------------------------
+
+    #[test]
+    fn lancer_shows_its_line_then_dashes_along_it_hitting_once() {
+        let mut s = quiet(&[BULWARK]);
+        s.ships[0].basic_cooldown = u32::MAX;
+        let mut e = enemy(EnemyKind::Lancer, 300, 0);
+        e.cooldown = 0;
+        s.enemies.push(e);
+        s.step(&idle(1));
+        let l = &s.enemies[0];
+        assert_eq!(l.windup, LANCER_WINDUP);
+        assert!(l.aim.x < 0 && l.aim.y == 0, "locked toward the ship");
+        let at = l.pos;
+        for _ in 0..LANCER_WINDUP {
+            s.step(&idle(1));
+        }
+        assert_eq!(s.enemies[0].pos, at, "holds still while winding up");
+        assert_eq!(s.enemies[0].dash, LANCER_DASH_TICKS);
+        for _ in 0..LANCER_DASH_TICKS {
+            s.step(&idle(1));
+        }
+        let travelled = (s.enemies[0].pos - at).length();
+        assert!(
+            (travelled - px(LANCER_DASH_DISTANCE) as i64).abs() < px(30) as i64,
+            "{travelled}"
+        );
+        assert_eq!(
+            s.ships[0].hull,
+            BULWARK_HULL - LANCER_DASH_DAMAGE,
+            "hit once"
+        );
+        assert_eq!(s.enemies[0].cooldown, LANCER_RECOVER);
+    }
+
+    #[test]
+    fn the_slowest_ship_can_sidestep_a_lancer() {
+        let mut s = quiet(&[BULWARK]);
+        s.ships[0].basic_cooldown = u32::MAX;
+        let mut e = enemy(EnemyKind::Lancer, 300, 0);
+        e.cooldown = 0;
+        s.enemies.push(e);
+        s.step(&idle(1));
+        // A quarter-second reaction, then move off the line.
+        for _ in 0..ticks(1, 4) {
+            s.step(&idle(1));
+        }
+        for _ in 0..ticks(2, 1) {
+            s.step(&[input(INPUT_MOVE, 0, 2000)]);
+        }
+        assert_eq!(s.ships[0].hull, BULWARK_HULL, "sidestepped");
+    }
+
+    #[test]
+    fn a_killed_bloater_bursts_a_second_later_and_chains() {
+        let mut s = quiet(&[BULWARK]);
+        s.ships[0].basic_cooldown = u32::MAX;
+        let mut b = enemy(EnemyKind::Bloater, 400, 0);
+        b.hp = 0;
+        s.enemies.push(b);
+        // A Swarmer and a second Bloater in the burst, a Swarmer outside it.
+        s.enemies.push(enemy(EnemyKind::Swarmer, 400, 60));
+        s.enemies.push(enemy(EnemyKind::Bloater, 460, 0));
+        s.enemies.push(enemy(EnemyKind::Swarmer, 400, 300));
+        s.step(&idle(1));
+        assert_eq!(s.mission.kills, 1);
+        assert_eq!(s.blasts.len(), 1);
+        assert_eq!(s.blasts[0].fuse, BLOATER_FUSE);
+        // Freeze the rest so the geometry holds.
+        for e in &mut s.enemies {
+            e.cooldown = u32::MAX;
+        }
+        let mut burst_at = None;
+        for t in 1..=BLOATER_FUSE {
+            for e in &mut s.enemies {
+                e.pos = e.home;
+            }
+            s.step(&idle(1));
+            if s.events.iter().any(|e| matches!(e, SimEvent::Burst { .. })) {
+                burst_at = Some(t);
+                break;
+            }
+        }
+        assert_eq!(burst_at, Some(BLOATER_FUSE));
+        // The Swarmer and the Bloater in range died; the far Swarmer lives.
+        assert_eq!(s.mission.kills, 3);
+        assert_eq!(s.enemies.len(), 1);
+        // The chained Bloater left its own burst.
+        assert_eq!(s.blasts.len(), 1);
+        assert_eq!(s.ships[0].hull, BULWARK_HULL, "the ship was far away");
+    }
+
+    #[test]
+    fn a_bloater_that_touches_a_ship_swells_then_bursts() {
+        let mut s = quiet(&[BULWARK]);
+        s.ships[0].basic_cooldown = u32::MAX;
+        s.enemies.push(enemy(EnemyKind::Bloater, 36, 0));
+        s.step(&idle(1));
+        let b = &s.enemies[0];
+        assert_ne!(b.struck, 0);
+        assert_eq!(b.windup, BLOATER_FUSE);
+        let at = b.pos;
+        let mut ticks_to_burst = 0;
+        while !s.events.iter().any(|e| matches!(e, SimEvent::Burst { .. })) {
+            s.step(&idle(1));
+            ticks_to_burst += 1;
+            assert!(ticks_to_burst < BLOATER_FUSE + 5);
+            if let Some(b) = s.enemies.first() {
+                // It stops walking (only separation nudges it).
+                assert!(
+                    (b.pos - at).length() <= px(1) as i64,
+                    "holds while swelling"
+                );
+            }
+        }
+        assert!(ticks_to_burst >= BLOATER_FUSE);
+        assert_eq!(s.ships[0].hull, BULWARK_HULL - BLOATER_BLAST_DAMAGE);
+        assert_eq!(s.mission.kills, 1);
+    }
+
+    #[test]
+    fn brood_pulses_then_releases_swarmers_by_its_fissure() {
+        let mut s = quiet(&[BULWARK]);
+        s.ships[0].basic_cooldown = u32::MAX;
+        let mut b = enemy(EnemyKind::Brood, 1000, 0);
+        b.cooldown = 1;
+        s.enemies.push(b);
+        s.step(&idle(1));
+        assert_eq!(s.enemies[0].windup, BROOD_WINDUP);
+        for _ in 0..BROOD_WINDUP {
+            assert_eq!(s.enemies.len(), 1);
+            s.step(&idle(1));
+        }
+        assert_eq!(s.enemies.len(), 1 + BROOD_SWARMERS as usize);
+        assert_eq!(s.mission.spawned, BROOD_SWARMERS as u32);
+        assert_eq!(s.enemies[0].cooldown, BROOD_INTERVAL - BROOD_WINDUP);
+        // It hangs back: never more than `BROOD_HOLD` out from home.
+        for _ in 0..ticks(10, 1) {
+            s.step(&idle(1));
+            let b = s
+                .enemies
+                .iter()
+                .find(|e| e.kind == EnemyKind::Brood)
+                .unwrap();
+            // (Plus a little give for its own Swarmers jostling it.)
+            assert!((b.pos - b.home).length() <= px(BROOD_HOLD + BROOD_RADIUS) as i64);
+        }
+    }
+
+    #[test]
+    fn a_warden_halves_damage_to_allies_near_it() {
+        let mut s = quiet(&[BULWARK]);
+        s.enemies.push(enemy(EnemyKind::Spitter, 100, 0));
+        s.enemies.push(enemy(EnemyKind::Warden, 100, 100));
+        s.enemies.push(enemy(EnemyKind::Spitter, 100, 500));
+        assert_eq!(warden_of(&s.enemies, 0), Some(1));
+        assert_eq!(warden_of(&s.enemies, 1), None, "not itself");
+        assert_eq!(warden_of(&s.enemies, 2), None, "out of range");
+        s.ships[0].w_cooldown = 0;
+        s.step(&[input(INPUT_SKILL_W, 0, 0)]);
+        let hit = |id: usize| {
+            s.events.iter().find_map(|e| match *e {
+                SimEvent::Hit { enemy, amount, .. } if enemy == s.enemies[id].id => Some(amount),
+                _ => None,
+            })
+        };
+        assert_eq!(hit(0), Some(warded(SHOCKWAVE_DAMAGE)));
+        assert_eq!(s.enemies[0].hp, SPITTER_HP - warded(SHOCKWAVE_DAMAGE));
+        assert_eq!(warded(4), 2);
+        assert_eq!(warded(15), 8);
+        // A dead Warden shields nobody.
+        s.enemies[1].hp = 0;
+        assert_eq!(warden_of(&s.enemies, 0), None);
+    }
+
+    #[test]
+    fn new_roles_join_the_packs_in_order_as_kills_rise() {
+        let mut s = SimState::with_loadouts(5, &[KITE]).with_kill_target(100);
+        let mut first_pack: Vec<(EnemyKind, u32)> = Vec::new();
+        for _ in 0..ticks(400, 1) {
+            s.ships[0].hull = 100_000;
+            s.ships[0].basic_cooldown = u32::MAX;
+            let live = s.enemies.len();
+            s.step(&idle(1));
+            for e in &s.enemies[live.min(s.enemies.len())..] {
+                if !first_pack.iter().any(|(k, _)| *k == e.kind) {
+                    first_pack.push((e.kind, s.mission.kills));
+                }
+            }
+            // Fake progress: a kill every second, and keep the field small.
+            if s.frame.is_multiple_of(60) {
+                s.mission.kills += 1;
+                s.enemies.retain(|e| e.kind == EnemyKind::Brood);
+            }
+        }
+        let order: Vec<_> = first_pack.iter().map(|(k, _)| *k).collect();
+        let at = |k| first_pack.iter().find(|(x, _)| *x == k).unwrap().1;
+        for (kind, pct) in ROLES {
+            assert!(order.contains(&kind), "{kind:?} never came: {order:?}");
+            assert!(at(kind) >= pct, "{kind:?} at {} kills", at(kind));
+        }
+        assert!(at(EnemyKind::Lancer) < at(EnemyKind::Bloater));
+        assert!(at(EnemyKind::Bloater) < at(EnemyKind::Warden));
+        assert!(at(EnemyKind::Warden) < at(EnemyKind::Brood));
+    }
+
+    #[test]
+    fn every_role_stays_deterministic_under_rollback() {
+        // A short kill target unlocks every role early in a scripted run.
+        let go = |frames: u32| {
+            let mut s = SimState::with_loadouts(11, &mixed(2)).with_kill_target(40);
+            for f in 0..frames {
+                for sh in &mut s.ships {
+                    sh.hull = sh.hull.max(1000);
+                }
+                s.step(&scripted_inputs(f, 2));
+            }
+            s
+        };
+        let a = go(2400);
+        assert_eq!(a.checksum(), go(2400).checksum());
+        assert!(
+            a.mission.introduced.count_ones() >= 2,
+            "{}",
+            a.mission.introduced
+        );
+        let mut s = go(1800);
+        let snapshot = s.clone();
+        for f in 1800..2000 {
+            s.step(&scripted_inputs(f, 2));
+        }
+        let ahead = s.checksum();
+        let mut s = snapshot;
+        for f in 1800..2000 {
+            s.step(&scripted_inputs(f, 2));
+        }
+        assert_eq!(s.checksum(), ahead);
     }
 }

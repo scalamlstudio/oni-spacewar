@@ -145,15 +145,15 @@ pub fn stats(image: &str) -> Vec<(&'static str, String)> {
                 rows.push(("Effect", def.effect.to_string()));
             }
         }
-    } else if let Some(key) = image.strip_prefix("core.battle.enemy.") {
-        use sim::tuning::*;
-        let (hp, speed) = match key {
-            "void_swarmer" => (SWARMER_HP, SWARMER_SPEED),
-            "void_spitter" => (SPITTER_HP, SPITTER_SPEED),
-            _ => return rows,
+    } else if image.starts_with("core.battle.enemy.") {
+        let Some(kind) = sim::EnemyKind::ALL
+            .into_iter()
+            .find(|&k| crate::render::enemy_id(k) == image)
+        else {
+            return rows;
         };
-        rows.push(("HP", hp.to_string()));
-        rows.push(("Speed", format!("{speed} px/s")));
+        rows.push(("HP", kind.hp().to_string()));
+        rows.push(("Speed", format!("{} px/s", kind.speed_px())));
     } else if let Some(key) = image.strip_prefix("core.battle.ship.") {
         let ship = match key {
             "kite" => sim::ShipKind::Kite,
