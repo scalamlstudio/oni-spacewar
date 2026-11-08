@@ -17,6 +17,7 @@ use sim::{EnemyKind, FxVec2, LootKind, MissionStatus, Ship, ShipKind, SimState, 
 
 use crate::art::ContentImages;
 use crate::flow::PauseMenu;
+use crate::fx::{EnemyFlash, HitStop, ScreenShake};
 use crate::rollback::{GameConfig, SimWorld};
 use crate::stats::Stats;
 use crate::zoom::{self, Zoom};
@@ -136,7 +137,11 @@ const SPRITES: &[SpriteArt] = &[
 /// Every manifest image the battle draws (the transition screen loads
 /// them all before the battle starts).
 pub fn battle_image_ids() -> Vec<&'static str> {
-    SPRITES.iter().map(|s| s.id).collect()
+    SPRITES
+        .iter()
+        .map(|s| s.id)
+        .chain(crate::fx::FX.iter().map(|f| f.id))
+        .collect()
 }
 
 /// Loot is drawn as if its hit circle had this radius (pickups have none;
@@ -169,10 +174,7 @@ fn to_world(p: FxVec2) -> Vec2 {
     Vec2::new(p.x as f32 / SUB as f32, p.y as f32 / SUB as f32)
 }
 
-/// The handle whose ship the camera and HUD follow (first local player).
-fn local_handle(local: Option<&LocalPlayers>) -> usize {
-    local.and_then(|l| l.0.first().copied()).unwrap_or(0)
-}
+use crate::fx::local_handle;
 
 fn ship_id(kind: ShipKind) -> &'static str {
     match kind {
@@ -369,6 +371,15 @@ fn glow_image() -> Image {
     )
 }
 
+/// An enemy's sprite tint: plain, or over-bright toward white for `flash`
+/// (0..=1) just after a hit. Values above 1 saturate the art to white.
+pub fn hit_tint(flash: f32) -> Color {
+    let k = 1.0 + HIT_FLASH_GAIN * flash;
+    Color::LinearRgba(LinearRgba::new(k, k, k, 1.0))
+}
+
+const HIT_FLASH_GAIN: f32 = 6.0;
+
 /// Direction `v` as a sprite rotation, for art drawn pointing up.
 fn heading(v: Vec2) -> f32 {
     v.y.atan2(v.x) - std::f32::consts::FRAC_PI_2
@@ -379,11 +390,17 @@ fn draw_sprites(
     mut commands: Commands,
     world: Option<Res<SimWorld>>,
     time: Res<Time>,
+    flash: Res<EnemyFlash>,
+    hit_stop: Res<HitStop>,
     mut art: ResMut<ContentImages>,
     mut images: ResMut<Assets<Image>>,
     mut state: ResMut<BattleSprites>,
     mut sprites: Query<(&mut Sprite, &mut Transform, &mut Visibility), With<BattleSprite>>,
 ) {
+    // Hit-stop: the sprites hold their last pose while the sim runs on.
+    if hit_stop.active(time.elapsed_secs()) && world.is_some() {
+        return;
+    }
     let mut draws = Vec::new();
     if let Some(world) = world.as_deref() {
         let t = time.elapsed_secs(); // visual only
@@ -429,7 +446,7 @@ fn draw_sprites(
                 to_world(e.pos),
                 e.kind.radius() as f32,
                 0.0,
-                Color::WHITE,
+                hit_tint(flash.amount(e.id, t)),
                 0.2,
             );
         }
@@ -636,6 +653,8 @@ struct CameraFollow {
     vel: Vec2,
     zoom: Zoom,
     active: bool,
+    /// The shake offset added this frame.
+    shake: Vec2,
 }
 
 const CAMERA_STICKY: f32 = 0.3;
@@ -648,6 +667,7 @@ fn follow_camera(
     scroll: Res<AccumulatedMouseScroll>,
     pause: Option<Res<PauseMenu>>,
     windows: Query<&Window, With<PrimaryWindow>>,
+    shake: Res<ScreenShake>,
     mut follow: ResMut<CameraFollow>,
     mut camera: Query<(&mut Transform, &mut Projection), With<Camera2d>>,
 ) {
@@ -677,7 +697,8 @@ fn follow_camera(
     let size = window.map_or(crate::DEFAULT_WINDOW.as_vec2(), Window::size);
     let cursor = window.and_then(Window::cursor_position);
     let base = 1.0 / BATTLE_ZOOM;
-    let pos = cam.translation.truncate();
+    // Last frame's shake is not part of where the camera is.
+    let pos = cam.translation.truncate() - follow.shake;
     let pos = follow
         .zoom
         .update(time.delta_secs(), base, pos, cursor, size);
@@ -687,14 +708,17 @@ fn follow_camera(
     }
     // No arena edge, so the clamp is our ship staying on screen.
     follow.zoom.keep_in_view(size / 2.0 * scale);
+    // Screen shake (`crate::fx`), in screen px so it reads the same at
+    // every zoom; only ever added on top of the follow position.
+    follow.shake = shake.offset(time.elapsed_secs()) * scale;
     let Some(ship) = world.ships.get(local_handle(local.as_deref())) else {
-        cam.translation = pos.extend(cam.translation.z);
+        cam.translation = (pos + follow.shake).extend(cam.translation.z);
         return;
     };
     let target = to_world(ship.pos) + follow.zoom.offset;
     let next = pos + follow.vel;
     follow.vel = follow.vel * CAMERA_STICKY + (target - next) * (1.0 - CAMERA_STICKY);
-    cam.translation = next.extend(cam.translation.z);
+    cam.translation = (next + follow.shake).extend(cam.translation.z);
 }
 
 fn cooldown_text(ticks: u32) -> String {

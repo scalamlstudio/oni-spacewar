@@ -62,6 +62,10 @@ pub const BULWARK_BASIC_RANGE: i32 = 240;
 /// Basic-attack bolt (engine default: the spec gives damage/rate/range only).
 pub const BOLT_SPEED: i32 = 900;
 pub const BOLT_RADIUS: i32 = 4;
+/// Knock-back on an enemy hit by a bolt or a Scatter bolt, px along the
+/// shot's flight (TAKOAI-112; design/BATTLE.md #1: "a small knock-back").
+pub const BOLT_KNOCKBACK: i32 = 5;
+pub const SCATTER_KNOCKBACK: i32 = 4;
 
 /// Kite Q — Afterburn: dash 160 px toward the cursor.
 pub const AFTERBURN_DISTANCE: i32 = 160;

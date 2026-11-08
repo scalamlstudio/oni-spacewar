@@ -20,6 +20,7 @@
 
 pub mod collision;
 pub mod entity;
+pub mod event;
 pub mod fixed;
 pub mod input;
 pub mod mission;
@@ -32,6 +33,7 @@ pub use entity::{
     Enemy, EnemyKind, Fissure, Loadout, Loot, LootKind, Pickup, Projectile, Ship, ShipKind,
     ShipSheet, ShipStats, Upgrades,
 };
+pub use event::{Attack, SimEvent, Skill};
 pub use fixed::{FxVec2, SUB};
 pub use input::NetInput;
 pub use mission::{Mission, MissionOutcome, MissionStatus};

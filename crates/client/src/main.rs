@@ -10,9 +10,11 @@
 //! players alternating Kite / Bulwark loadouts so both ships are exercised.
 
 mod art;
+mod audio;
 mod carrier;
 mod codex;
 mod flow;
+mod fx;
 mod input;
 mod layout;
 mod loading;
@@ -56,7 +58,7 @@ pub const DEFAULT_WINDOW: UVec2 = UVec2::new(1000, 580);
 const USAGE: &str = "\
 usage:
   oni-spacewar [--autoplay [--ship kite|bulwark] [--missions N] [--continue] [--abandon]
-                [--shots DIR]] [--kill-target N]
+                [--shots DIR [--clip]]] [--kill-target N]
                 --autoplay battles end at 10 kills, normal play at 40;
                 --kill-target N overrides either (manual testing)
   oni-spacewar synctest [--minutes M] [--check-distance D] [--headless] [--bot]
@@ -97,6 +99,8 @@ struct Args {
     resume: bool,
     /// `--abandon`: autoplay quits its last mission (counts as Failed).
     abandon: bool,
+    /// `--clip`: extra battle frames for a short clip (`flow::Autoplay::clip`).
+    clip: bool,
     shots: Option<std::path::PathBuf>,
     /// `--kill-target N`; `None` = 10 under `--autoplay`, else 40.
     kill_target: Option<u32>,
@@ -147,6 +151,7 @@ fn parse_args() -> Args {
         missions: 1,
         resume: false,
         abandon: false,
+        clip: false,
         shots: None,
         kill_target: None,
     };
@@ -183,6 +188,7 @@ fn parse_args() -> Args {
             "--missions" => a.missions = val(&flag, it),
             "--continue" => a.resume = true,
             "--abandon" => a.abandon = true,
+            "--clip" => a.clip = true,
             "--shots" => a.shots = Some(val(&flag, it)),
             "--kill-target" => a.kill_target = Some(val(&flag, it)),
             _ => usage_exit(&format!("unknown flag {flag}\n")),
@@ -262,7 +268,7 @@ fn main() {
         }))
         // Keep simulating when the window is in the background (two windows side by side).
         .insert_resource(WinitSettings::continuous())
-        .add_plugins(render::RenderPlugin);
+        .add_plugins((render::RenderPlugin, fx::FxPlugin, audio::BattleAudioPlugin));
         // Pacing feeds the synctest/p2p run report and needs their RunLimit.
         if args.mode != "demo" {
             app.add_plugins(pacing::PacingPlugin);
@@ -301,6 +307,7 @@ fn main() {
                 missions: args.missions,
                 resume: args.resume,
                 abandon: args.abandon,
+                clip: args.clip,
                 ..Default::default()
             });
         }

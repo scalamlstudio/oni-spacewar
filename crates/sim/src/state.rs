@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::collision::{overlaps, separation};
 use crate::entity::*;
+use crate::event::{Attack, SimEvent, Skill};
 use crate::fixed::{mul_q16, FxVec2, SUB};
 use crate::input::{NetInput, INPUT_MOVE, INPUT_SKILL_Q, INPUT_SKILL_W};
 use crate::mission::{Mission, MissionOutcome, MissionStatus};
@@ -52,6 +53,20 @@ pub struct SimState {
     /// Where enemies come from; placed once at mission start.
     pub fissures: Vec<Fissure>,
     pub mission: Mission,
+    /// The next stable entity ID to hand out (enemies, shots, pickups share
+    /// one counter, starting at 1).
+    pub next_id: u32,
+    /// What happened during the last `step` (cleared at its start), for
+    /// client feedback; see [`crate::event`].
+    pub events: Vec<SimEvent>,
+}
+
+/// Hands out the next stable entity ID. A free function over the counter
+/// field so it can run while other fields of `SimState` are borrowed.
+fn new_id(next: &mut u32) -> u32 {
+    let id = *next;
+    *next += 1;
+    id
 }
 
 const fn px(v: i32) -> i32 {
@@ -156,6 +171,8 @@ impl SimState {
             pickups: Vec::new(),
             fissures,
             mission: Mission::default(),
+            next_id: 1,
+            events: Vec::new(),
         }
     }
 
@@ -177,6 +194,7 @@ impl SimState {
     /// mission has ended the world is frozen and only `frame` advances.
     pub fn step(&mut self, inputs: &[NetInput]) {
         assert_eq!(inputs.len(), self.ships.len(), "one input per player");
+        self.events.clear();
         if self.mission.status == MissionStatus::InProgress {
             self.direct_spawns();
             self.apply_inputs(inputs);
@@ -226,6 +244,7 @@ impl SimState {
         let pos = self.fissures[f].pos
             + FxVec2::new(mul_q16(r, cos_q16(angle)), mul_q16(r, sin_q16(angle)));
         let mut e = Enemy::new(kind, pos);
+        e.id = new_id(&mut self.next_id);
         if self.rng.range(0, 1) == 0 {
             e.orbit = -1;
         }
@@ -279,12 +298,22 @@ impl SimState {
                 ship.dash_vel = vel;
                 ship.dash_ticks = AFTERBURN_TICKS;
                 ship.q_cooldown = ship.stats.q_cooldown;
+                self.events.push(SimEvent::SkillUsed {
+                    ship: ship.handle,
+                    skill: Skill::Afterburn,
+                    pos: ship.pos,
+                });
             }
             ShipKind::Bulwark => {
                 // Bastion: absorb the next N damage for a while.
                 ship.shield = BASTION_SHIELD;
                 ship.shield_ticks = BASTION_DURATION;
                 ship.q_cooldown = ship.stats.q_cooldown;
+                self.events.push(SimEvent::SkillUsed {
+                    ship: ship.handle,
+                    skill: Skill::Bastion,
+                    pos: ship.pos,
+                });
             }
         }
     }
@@ -303,24 +332,45 @@ impl SimState {
                 for k in 0..SCATTER_BOLTS {
                     let angle = (k - SCATTER_BOLTS / 2) * SCATTER_STEP;
                     self.projectiles.push(Projectile {
+                        id: new_id(&mut self.next_id),
                         owner,
                         pos,
                         vel: rotate(dir, angle),
                         ttl: SCATTER_LIFETIME,
                         damage,
                         radius: SCATTER_RADIUS,
+                        attack: Attack::Scatter,
                     });
                 }
                 self.ships[i].w_cooldown = self.ships[i].stats.w_cooldown;
+                self.events.push(SimEvent::SkillUsed {
+                    ship: owner,
+                    skill: Skill::Scatter,
+                    pos,
+                });
             }
             ShipKind::Bulwark => {
                 // Shockwave: damage and push back every enemy in range.
                 let (centre, damage) = (ship.pos, ship.stats.skill_damage(SHOCKWAVE_DAMAGE));
+                let handle = ship.handle;
+                self.events.push(SimEvent::SkillUsed {
+                    ship: handle,
+                    skill: Skill::Shockwave,
+                    pos: centre,
+                });
                 for e in &mut self.enemies {
                     if !overlaps(centre, px(SHOCKWAVE_RADIUS), e.pos, px(e.kind.radius())) {
                         continue;
                     }
                     e.hp -= damage;
+                    self.events.push(SimEvent::Hit {
+                        enemy: e.id,
+                        ship: handle,
+                        attack: Attack::Shockwave,
+                        source: 0,
+                        amount: damage,
+                        pos: e.pos,
+                    });
                     let d = e.pos - centre;
                     let push = if d == FxVec2::ZERO {
                         FxVec2::new(px(SHOCKWAVE_PUSH), 0)
@@ -374,15 +424,22 @@ impl SimState {
             if vel == FxVec2::ZERO {
                 continue;
             }
+            let id = new_id(&mut self.next_id);
             self.projectiles.push(Projectile {
+                id,
                 owner: ship.handle,
                 pos: ship.pos,
                 vel,
                 ttl: (ship.stats.basic_range * TICKS_PER_SEC / BOLT_SPEED) as u32 + 2,
                 damage: ship.stats.basic_damage,
                 radius: BOLT_RADIUS,
+                attack: Attack::Bolt,
             });
             ship.basic_cooldown = ship.stats.basic_interval;
+            self.events.push(SimEvent::Fired {
+                ship: ship.handle,
+                shot: id,
+            });
         }
     }
 
@@ -407,8 +464,15 @@ impl SimState {
                     let reach = ship.stats.radius + CONTACT_REACH;
                     if e.cooldown == 0 && overlaps(e.pos, px(e.kind.radius()), ship.pos, px(reach))
                     {
-                        ship.take_damage(SWARMER_CONTACT_DAMAGE);
+                        let hull_lost = ship.take_damage(SWARMER_CONTACT_DAMAGE);
                         e.cooldown = SWARMER_CONTACT_COOLDOWN;
+                        self.events.push(SimEvent::ShipDamaged {
+                            ship: h,
+                            source: e.id,
+                            amount: SWARMER_CONTACT_DAMAGE,
+                            hull_lost,
+                            pos: ship.pos,
+                        });
                     }
                 }
                 EnemyKind::Spitter => {
@@ -426,12 +490,14 @@ impl SimState {
                     if e.cooldown == 0 && d <= px(SPITTER_FIRE_RANGE) as i64 && vel != FxVec2::ZERO
                     {
                         self.enemy_projectiles.push(Projectile {
+                            id: new_id(&mut self.next_id),
                             owner: 0,
                             pos: e.pos,
                             vel,
                             ttl: SPIT_LIFETIME,
                             damage: SPIT_DAMAGE,
                             radius: SPIT_RADIUS,
+                            attack: Attack::Bolt,
                         });
                         e.cooldown = SPITTER_FIRE_INTERVAL;
                     }
@@ -452,6 +518,7 @@ impl SimState {
     }
 
     /// Each shot damages the first living target it overlaps and is spent.
+    /// A ship's shot also knocks the enemy back a little along its flight.
     fn projectile_hits(&mut self) {
         for p in &mut self.projectiles {
             let hit = self
@@ -461,6 +528,19 @@ impl SimState {
             if let Some(e) = hit {
                 e.hp -= p.damage;
                 p.ttl = 0;
+                let knockback = match p.attack {
+                    Attack::Scatter => SCATTER_KNOCKBACK,
+                    _ => BOLT_KNOCKBACK,
+                };
+                e.pos = e.pos + p.vel.scale_to(px(knockback));
+                self.events.push(SimEvent::Hit {
+                    enemy: e.id,
+                    ship: p.owner,
+                    attack: p.attack,
+                    source: p.id,
+                    amount: p.damage,
+                    pos: e.pos,
+                });
             }
         }
         for p in &mut self.enemy_projectiles {
@@ -469,8 +549,15 @@ impl SimState {
                 .iter_mut()
                 .find(|s| s.alive() && overlaps(p.pos, px(p.radius), s.pos, px(s.stats.radius)));
             if let Some(s) = hit {
-                s.take_damage(p.damage);
+                let hull_lost = s.take_damage(p.damage);
                 p.ttl = 0;
+                self.events.push(SimEvent::ShipDamaged {
+                    ship: s.handle,
+                    source: p.id,
+                    amount: p.damage,
+                    hull_lost,
+                    pos: s.pos,
+                });
             }
         }
         self.projectiles.retain(|p| p.ttl > 0);
@@ -513,11 +600,17 @@ impl SimState {
     fn kill_and_drop(&mut self) {
         for e in self.enemies.iter().filter(|e| e.hp <= 0) {
             self.mission.kills += 1;
+            self.events.push(SimEvent::Killed {
+                enemy: e.id,
+                kind: e.kind,
+                pos: e.pos,
+            });
             let (credits, crystal_pct) = match e.kind {
                 EnemyKind::Swarmer => (SWARMER_CREDITS, SWARMER_CRYSTAL_PCT),
                 EnemyKind::Spitter => (SPITTER_CREDITS, SPITTER_CRYSTAL_PCT),
             };
             self.pickups.push(Pickup {
+                id: new_id(&mut self.next_id),
                 kind: LootKind::Credits,
                 amount: credits,
                 pos: e.pos,
@@ -525,6 +618,7 @@ impl SimState {
             });
             if self.rng.range(0, 99) < crystal_pct {
                 self.pickups.push(Pickup {
+                    id: new_id(&mut self.next_id),
                     kind: LootKind::VoidCrystal,
                     amount: 1,
                     pos: e.pos + FxVec2::from_px(CRYSTAL_DROP_OFFSET, 0),
@@ -557,6 +651,12 @@ impl SimState {
             if (self.ships[h].pos - p.pos).length() <= px(PICKUP_COLLECT_RANGE) as i64 {
                 self.mission.collected.add(p.kind, p.amount);
                 p.ttl = 0;
+                self.events.push(SimEvent::Collected {
+                    ship: h,
+                    pickup: p.id,
+                    kind: p.kind,
+                    amount: p.amount,
+                });
             }
         }
         self.pickups.retain(|p| p.ttl > 0);
@@ -580,6 +680,9 @@ impl SimState {
             return;
         }
         m.end_frame = self.frame;
+        self.events.push(SimEvent::MissionEnded {
+            success: m.status == MissionStatus::Success,
+        });
     }
 
     /// Platform- and toolchain-independent checksum (FNV-1a over `Hash`), for
@@ -1112,6 +1215,7 @@ mod tests {
         assert_eq!(s.mission.kill_target, KILL_TARGET);
         s.mission.kills = KILL_TARGET - 1;
         s.pickups.push(Pickup {
+            id: 0,
             kind: LootKind::Credits,
             amount: 7,
             pos: FxVec2::from_px(500, 500),
@@ -1239,12 +1343,14 @@ mod tests {
     fn pickups_drift_in_and_expire() {
         let mut s = quiet(&[KITE]);
         s.pickups.push(Pickup {
+            id: 0,
             kind: LootKind::VoidCrystal,
             amount: 1,
             pos: FxVec2::from_px(70, 0),
             ttl: PICKUP_LIFETIME,
         });
         s.pickups.push(Pickup {
+            id: 0,
             kind: LootKind::Credits,
             amount: 5,
             pos: FxVec2::from_px(-500, 0),
@@ -1298,5 +1404,162 @@ mod tests {
         let mut d = a.clone();
         d.mission.collected.credits += 1;
         assert_ne!(a.checksum(), d.checksum());
+    }
+
+    #[test]
+    fn entity_ids_are_unique_and_stable() {
+        let mut s = SimState::with_loadouts(7, &mixed(4));
+        let mut seen: std::collections::BTreeMap<u32, &'static str> = Default::default();
+        for f in 0..3000 {
+            s.step(&scripted_inputs(f, 4));
+            let ids = s
+                .enemies
+                .iter()
+                .map(|e| (e.id, "enemy"))
+                .chain(s.projectiles.iter().map(|p| (p.id, "shot")))
+                .chain(s.enemy_projectiles.iter().map(|p| (p.id, "spit")))
+                .chain(s.pickups.iter().map(|p| (p.id, "pickup")));
+            for (id, what) in ids {
+                assert_ne!(id, 0, "{what} without an ID");
+                // An ID never moves to another entity kind.
+                assert_eq!(*seen.entry(id).or_insert(what), what, "id {id}");
+            }
+            let mut live: Vec<u32> = s.enemies.iter().map(|e| e.id).collect();
+            live.extend(s.projectiles.iter().map(|p| p.id));
+            live.extend(s.pickups.iter().map(|p| p.id));
+            let n = live.len();
+            live.sort_unstable();
+            live.dedup();
+            assert_eq!(live.len(), n, "duplicate live IDs on frame {f}");
+        }
+        assert!(seen.len() > 100, "{}", seen.len());
+    }
+
+    #[test]
+    fn bolt_hit_reports_the_hit_and_knocks_the_enemy_back() {
+        let mut s = quiet(&[KITE]);
+        let mut e = enemy(EnemyKind::Spitter, 100, 0);
+        e.id = 42;
+        e.cooldown = u32::MAX;
+        s.enemies.push(e);
+        let mut fired = None;
+        let mut hit = None;
+        for _ in 0..20 {
+            let before = s.enemies[0].pos;
+            s.step(&idle(1));
+            for ev in &s.events {
+                match *ev {
+                    SimEvent::Fired { ship: 0, shot } if fired.is_none() => fired = Some(shot),
+                    SimEvent::Hit {
+                        enemy,
+                        ship,
+                        attack,
+                        source,
+                        amount,
+                        ..
+                    } if hit.is_none() => {
+                        hit = Some((enemy, ship, attack, source, amount));
+                        // Pushed away from the ship (+x) past its own step.
+                        assert!(s.enemies[0].pos.x > before.x, "no knock-back");
+                    }
+                    _ => {}
+                }
+            }
+        }
+        let shot = fired.expect("the ship fired");
+        assert_eq!(
+            hit,
+            Some((42, 0, Attack::Bolt, shot, KITE_BASIC_DAMAGE)),
+            "{:?}",
+            s.events
+        );
+    }
+
+    #[test]
+    fn kills_damage_skills_and_the_end_are_reported() {
+        // Kill: an enemy at 0 HP is reported once, with its ID and kind.
+        let mut s = quiet(&[BULWARK]);
+        let mut e = enemy(EnemyKind::Swarmer, 500, 500);
+        (e.id, e.hp) = (7, 0);
+        s.enemies.push(e);
+        s.step(&idle(1));
+        assert!(s.events.iter().any(|ev| matches!(
+            ev,
+            SimEvent::Killed {
+                enemy: 7,
+                kind: EnemyKind::Swarmer,
+                ..
+            }
+        )));
+        s.step(&idle(1));
+        assert!(!s
+            .events
+            .iter()
+            .any(|ev| matches!(ev, SimEvent::Killed { .. })));
+
+        // Shockwave: the skill and a hit on every enemy in range.
+        let mut e = enemy(EnemyKind::Spitter, 100, 0);
+        e.id = 8;
+        s.enemies.push(e);
+        s.step(&[input(INPUT_SKILL_W, 0, 0)]);
+        assert!(s.events.contains(&SimEvent::SkillUsed {
+            ship: 0,
+            skill: Skill::Shockwave,
+            pos: FxVec2::ZERO,
+        }));
+        assert!(s.events.iter().any(|ev| matches!(
+            ev,
+            SimEvent::Hit {
+                enemy: 8,
+                attack: Attack::Shockwave,
+                amount: SHOCKWAVE_DAMAGE,
+                ..
+            }
+        )));
+
+        // Ship damage: contact from a Swarmer, all of it to the hull.
+        let mut s = quiet(&[BULWARK]);
+        let mut e = enemy(EnemyKind::Swarmer, 30, 0);
+        e.id = 9;
+        s.enemies.push(e);
+        s.step(&idle(1));
+        assert!(s.events.contains(&SimEvent::ShipDamaged {
+            ship: 0,
+            source: 9,
+            amount: SWARMER_CONTACT_DAMAGE,
+            hull_lost: SWARMER_CONTACT_DAMAGE,
+            pos: s.ships[0].pos,
+        }));
+
+        // Mission end: reported on the tick it ends, then never again.
+        let mut s = quiet(&[KITE]).with_kill_target(1);
+        let mut e = enemy(EnemyKind::Swarmer, 500, 500);
+        e.hp = 0;
+        s.enemies.push(e);
+        s.step(&idle(1));
+        assert!(s.events.contains(&SimEvent::MissionEnded { success: true }));
+        s.step(&idle(1));
+        assert!(s.events.is_empty());
+    }
+
+    #[test]
+    fn resimulated_frames_report_the_same_events() {
+        // Rollback replays frames; the client dedupes by (frame, key), which
+        // only works if a replay reports the same keys.
+        let mut s = run(4, 1500);
+        let snapshot = s.clone();
+        let mut first = Vec::new();
+        for f in 1500..1800 {
+            s.step(&scripted_inputs(f, 4));
+            first.extend(s.events.iter().map(|e| (f, e.key())));
+        }
+        assert!(first.len() > 20, "{}", first.len());
+        let mut s = snapshot;
+        let mut again = Vec::new();
+        for f in 1500..1800 {
+            s.step(&scripted_inputs(f, 4));
+            again.extend(s.events.iter().map(|e| (f, e.key())));
+        }
+        assert_eq!(first, again);
     }
 }

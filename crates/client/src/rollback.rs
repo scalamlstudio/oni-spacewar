@@ -2,7 +2,8 @@
 //!
 //! The whole simulation is one resource, [`SimWorld`], registered for rollback
 //! (saved/loaded by clone) and for checksumming (by `Hash`). One system in
-//! `GgrsSchedule` feeds the confirmed/predicted inputs to `SimState::step`.
+//! `GgrsSchedule` feeds the confirmed/predicted inputs to `SimState::step`
+//! and hands each step's events to the client's feedback log.
 //! Nothing outside this schedule may mutate `SimWorld`.
 
 use bevy::prelude::*;
@@ -34,10 +35,19 @@ impl Plugin for RollbackPlugin {
     }
 }
 
-fn step_sim(inputs: Res<PlayerInputs<GameConfig>>, mut world: ResMut<SimWorld>) {
+fn step_sim(
+    inputs: Res<PlayerInputs<GameConfig>>,
+    mut world: ResMut<SimWorld>,
+    events: Option<ResMut<crate::fx::BattleEvents>>,
+) {
     // PlayerInputs is indexed by player handle, matching `SimState::ships`.
     let inputs: Vec<NetInput> = inputs.iter().map(|(input, _status)| *input).collect();
     world.step(&inputs);
+    // Each step's events, before a re-simulated frame replaces them; the
+    // log is not rolled back and drops repeats (`crate::fx`). None headless.
+    if let Some(mut events) = events {
+        events.record(&world);
+    }
 }
 
 fn inject_desync(flag: Res<InjectDesync>, mut world: ResMut<SimWorld>, mut calls: Local<u64>) {

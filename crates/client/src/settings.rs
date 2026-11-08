@@ -1,15 +1,18 @@
 //! Player settings (TAKOAI-96): a local `settings.json` beside the save,
-//! the Settings screen, and the carrier's floor and wall colours.
+//! the Settings screen, the carrier's floor and wall colours, and (TAKOAI-112)
+//! the battle feedback toggles and sound volumes.
 //!
 //! Settings are per player and per machine. They are not part of the save
 //! game and never reach `sim`, so nothing here can change a battle or
 //! multiplayer sync. Floats and `powf` are fine here: all of it is visual.
 //!
 //! The Settings screen opens from its gear button (Title, Carrier HUD),
-//! from Esc on the Title and from the Carrier's Esc (pause) menu, and
-//! closes with Esc or Close. It is built from sections (`spawn_panel`):
-//! Display › Carrier colours, and Codex, which opens the full-screen
-//! Codex (`crate::codex`) on top.
+//! from Esc on the Title and from the Carrier's and the Battle's Esc
+//! (pause) menu, and closes with Esc or Close. It is built from sections
+//! (`spawn_panel`) in two columns: Display › Carrier colours, and Codex,
+//! which opens the full-screen Codex (`crate::codex`) on top; then Battle
+//! (damage numbers, screen shake) and Sound (mute, master / effects /
+//! music volume).
 //!
 //! **Recolouring.** Art's carrier tiles (`core.carrier.tile.*`) are flat
 //! scripted shapes in a handful of colours: the floor (`FLOOR_REF`, with
@@ -171,6 +174,97 @@ pub struct Settings {
     pub version: u32,
     #[serde(default)]
     pub display: Display,
+    #[serde(default)]
+    pub battle: BattleFeedback,
+    #[serde(default)]
+    pub audio: AudioSettings,
+}
+
+/// Battle feedback a player may not want (TAKOAI-112).
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BattleFeedback {
+    pub damage_numbers: bool,
+    pub screen_shake: bool,
+}
+
+impl Default for BattleFeedback {
+    fn default() -> Self {
+        Self {
+            damage_numbers: true,
+            screen_shake: true,
+        }
+    }
+}
+
+/// Volumes in percent (0..=100, steps of `VOLUME_STEP`), and mute.
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AudioSettings {
+    pub master: u8,
+    pub sfx: u8,
+    pub music: u8,
+    pub muted: bool,
+}
+
+impl Default for AudioSettings {
+    fn default() -> Self {
+        Self {
+            master: 80,
+            sfx: 80,
+            music: 60,
+            muted: false,
+        }
+    }
+}
+
+pub const VOLUME_STEP: u8 = 10;
+
+/// Which volume a row sets.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Channel {
+    Master,
+    Sfx,
+    Music,
+}
+
+impl AudioSettings {
+    fn level(&mut self, channel: Channel) -> &mut u8 {
+        match channel {
+            Channel::Master => &mut self.master,
+            Channel::Sfx => &mut self.sfx,
+            Channel::Music => &mut self.music,
+        }
+    }
+
+    /// One `VOLUME_STEP` up or down, kept within 0..=100.
+    pub fn step(&mut self, channel: Channel, up: bool) {
+        let v = self.level(channel);
+        *v = if up {
+            v.saturating_add(VOLUME_STEP).min(100)
+        } else {
+            v.saturating_sub(VOLUME_STEP)
+        };
+    }
+
+    fn gain(&self, level: u8) -> f32 {
+        if self.muted {
+            return 0.0;
+        }
+        // Percent sliders read evenly with a squared (roughly perceptual) curve.
+        let f = |v: u8| (v.min(100) as f32 / 100.0).powi(2);
+        f(self.master) * f(level)
+    }
+
+    /// Linear gain for sound effects (0 when muted).
+    pub fn sfx_volume(&self) -> f32 {
+        self.gain(self.sfx)
+    }
+
+    /// Linear gain for music (0 when muted).
+    pub fn music_volume(&self) -> f32 {
+        self.gain(self.music)
+    }
 }
 
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
@@ -194,6 +288,8 @@ impl Default for Settings {
         Self {
             version: SETTINGS_VERSION,
             display: Display::default(),
+            battle: BattleFeedback::default(),
+            audio: AudioSettings::default(),
         }
     }
 }
@@ -443,6 +539,10 @@ enum SettingsClick {
     ResetFloor,
     ResetWall,
     OpenCodex,
+    DamageNumbers,
+    ScreenShake,
+    Mute,
+    Volume(Channel, bool),
 }
 
 pub struct SettingsPlugin;
@@ -524,6 +624,19 @@ fn settings_clicks(
             SettingsClick::Wall(i) => display.carrier_wall = WALL_PRESETS[i].rgb,
             SettingsClick::ResetFloor => display.carrier_floor = DEFAULT_FLOOR,
             SettingsClick::ResetWall => display.carrier_wall = DEFAULT_WALL,
+            SettingsClick::DamageNumbers => {
+                let b = &mut file.settings.battle;
+                b.damage_numbers = !b.damage_numbers;
+            }
+            SettingsClick::ScreenShake => {
+                let b = &mut file.settings.battle;
+                b.screen_shake = !b.screen_shake;
+            }
+            SettingsClick::Mute => {
+                let a = &mut file.settings.audio;
+                a.muted = !a.muted;
+            }
+            SettingsClick::Volume(channel, up) => file.settings.audio.step(channel, up),
         }
         file.store();
         screen.dirty = true;
@@ -602,7 +715,6 @@ fn spawn_panel(commands: &mut Commands, settings: &Settings) {
                 position_type: PositionType::Absolute,
                 left: px(24),
                 top: px(24),
-                width: px(430),
                 flex_direction: FlexDirection::Column,
                 row_gap: px(10),
                 padding: UiRect::all(px(16)),
@@ -623,33 +735,152 @@ fn spawn_panel(commands: &mut Commands, settings: &Settings) {
                 row.spawn(text("Settings", 24.0, Color::WHITE));
                 text_button(row, SettingsClick::Close, "[Esc] Close");
             });
-            p.spawn(text("Display", 18.0, TEXT));
-            p.spawn(text("Carrier colours", 15.0, MUTED));
-            let d = &settings.display;
-            colour_row(p, "Floor colour", &FLOOR_PRESETS, d.carrier_floor, SettingsClick::Floor, SettingsClick::ResetFloor);
-            colour_row(p, "Wall colour", &WALL_PRESETS, d.carrier_wall, SettingsClick::Wall, SettingsClick::ResetWall);
-            let ratio = contrast(d.carrier_floor, d.carrier_wall);
-            p.spawn(text(format!("Floor / wall contrast {ratio:.1}:1"), 14.0, MUTED));
-            if ratio < MIN_CONTRAST {
-                p.spawn(text(
+            p.spawn(Node {
+                column_gap: px(28),
+                align_items: AlignItems::FlexStart,
+                ..default()
+            })
+            .with_children(|cols| {
+                cols.spawn(column(400.0))
+                    .with_children(|p| display_section(p, settings));
+                cols.spawn(column(300.0))
+                    .with_children(|p| battle_and_sound(p, settings));
+            });
+        });
+}
+
+fn column(width: f32) -> Node {
+    Node {
+        width: px(width),
+        flex_direction: FlexDirection::Column,
+        row_gap: px(10),
+        ..default()
+    }
+}
+
+/// Display › Carrier colours, and the Codex.
+fn display_section(p: &mut ChildSpawnerCommands, settings: &Settings) {
+    p.spawn(text("Display", 18.0, TEXT));
+    p.spawn(text("Carrier colours", 15.0, MUTED));
+    let d = &settings.display;
+    colour_row(
+        p,
+        "Floor colour",
+        &FLOOR_PRESETS,
+        d.carrier_floor,
+        SettingsClick::Floor,
+        SettingsClick::ResetFloor,
+    );
+    colour_row(
+        p,
+        "Wall colour",
+        &WALL_PRESETS,
+        d.carrier_wall,
+        SettingsClick::Wall,
+        SettingsClick::ResetWall,
+    );
+    let ratio = contrast(d.carrier_floor, d.carrier_wall);
+    p.spawn(text(
+        format!("Floor / wall contrast {ratio:.1}:1"),
+        14.0,
+        MUTED,
+    ));
+    if ratio < MIN_CONTRAST {
+        p.spawn(text(
                     format!(
                         "Warning: floor and walls are close in brightness (below {MIN_CONTRAST:.0}:1), so walls may be hard to see."
                     ),
                     14.0,
                     WARN,
                 ));
-            }
-            p.spawn(text("Codex", 18.0, TEXT));
-            p.spawn(Node {
-                column_gap: px(10),
-                align_items: AlignItems::Center,
-                ..default()
-            })
-            .with_children(|row| {
-                text_button(row, SettingsClick::OpenCodex, "Open Codex");
-                row.spawn(text("Enemies, stations, furniture, crew and ships", 14.0, MUTED));
-            });
+    }
+    p.spawn(text("Codex", 18.0, TEXT));
+    p.spawn(Node {
+        column_gap: px(10),
+        align_items: AlignItems::Center,
+        ..default()
+    })
+    .with_children(|row| {
+        text_button(row, SettingsClick::OpenCodex, "Open Codex");
+        row.spawn(text(
+            "Enemies, stations, furniture, crew and ships",
+            14.0,
+            MUTED,
+        ));
+    });
+}
+
+/// Battle feedback toggles and the sound volumes.
+fn battle_and_sound(p: &mut ChildSpawnerCommands, settings: &Settings) {
+    let on_off = |on: bool| if on { "On" } else { "Off" };
+    let b = &settings.battle;
+    p.spawn(text("Battle", 18.0, TEXT));
+    toggle_row(
+        p,
+        "Damage numbers",
+        on_off(b.damage_numbers),
+        SettingsClick::DamageNumbers,
+    );
+    toggle_row(
+        p,
+        "Screen shake",
+        on_off(b.screen_shake),
+        SettingsClick::ScreenShake,
+    );
+    let a = &settings.audio;
+    p.spawn(text("Sound", 18.0, TEXT));
+    toggle_row(
+        p,
+        "Sound",
+        if a.muted { "Muted" } else { "On" },
+        SettingsClick::Mute,
+    );
+    for (label, channel, level) in [
+        ("Master volume", Channel::Master, a.master),
+        ("Effects volume", Channel::Sfx, a.sfx),
+        ("Music volume", Channel::Music, a.music),
+    ] {
+        p.spawn(Node {
+            column_gap: px(8),
+            align_items: AlignItems::Center,
+            ..default()
+        })
+        .with_children(|row| {
+            row.spawn((
+                text(format!("{label}: {level}%"), 15.0, TEXT),
+                Node {
+                    width: px(170),
+                    ..default()
+                },
+            ));
+            text_button(row, SettingsClick::Volume(channel, false), "-");
+            text_button(row, SettingsClick::Volume(channel, true), "+");
         });
+    }
+    p.spawn(text(
+        "Placeholder CC0 sounds (credits in assets/source/core/audio)",
+        13.0,
+        MUTED,
+    ));
+}
+
+/// A label with its current value and a button that flips it.
+fn toggle_row(p: &mut ChildSpawnerCommands, label: &str, value: &str, click: SettingsClick) {
+    p.spawn(Node {
+        column_gap: px(8),
+        align_items: AlignItems::Center,
+        ..default()
+    })
+    .with_children(|row| {
+        row.spawn((
+            text(label, 15.0, TEXT),
+            Node {
+                width: px(170),
+                ..default()
+            },
+        ));
+        text_button(row, click, value);
+    });
 }
 
 /// A label with the chosen preset's name (or the hex of a custom colour),
@@ -813,6 +1044,37 @@ mod tests {
             Err(SettingsError::Version(2))
         ));
         assert!(from_json(br##"{"version":1,"display":{"carrier_wall":"red"}}"##).is_err());
+    }
+
+    #[test]
+    fn battle_feedback_and_sound_default_on_and_load_from_older_files() {
+        // A TAKOAI-96 file (no battle / audio sections) gets everything on.
+        let s = from_json(br##"{"version":1,"display":{}}"##).unwrap();
+        assert!(s.battle.damage_numbers && s.battle.screen_shake);
+        assert!(!s.audio.muted && s.audio.sfx_volume() > 0.0 && s.audio.music_volume() > 0.0);
+        let s =
+            from_json(br#"{"version":1,"battle":{"screen_shake":false},"audio":{"muted":true}}"#)
+                .unwrap();
+        assert!(s.battle.damage_numbers && !s.battle.screen_shake);
+        assert_eq!((s.audio.sfx_volume(), s.audio.music_volume()), (0.0, 0.0));
+    }
+
+    #[test]
+    fn volume_steps_stay_in_range() {
+        let mut a = AudioSettings::default();
+        for _ in 0..20 {
+            a.step(Channel::Music, true);
+        }
+        assert_eq!(a.music, 100);
+        for _ in 0..20 {
+            a.step(Channel::Sfx, false);
+        }
+        assert_eq!(a.sfx, 0);
+        assert_eq!(a.sfx_volume(), 0.0);
+        a.master = 100;
+        assert_eq!(a.music_volume(), 1.0);
+        a.master = 50;
+        assert!((a.music_volume() - 0.25).abs() < 1e-6);
     }
 
     #[test]

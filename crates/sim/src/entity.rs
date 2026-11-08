@@ -4,6 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::event::Attack;
 use crate::fixed::FxVec2;
 use crate::tuning::*;
 
@@ -202,10 +203,12 @@ impl Ship {
     }
 
     /// Apply incoming damage: the shield absorbs first, then the hull.
-    pub fn take_damage(&mut self, amount: i32) {
+    /// Returns the hull lost.
+    pub fn take_damage(&mut self, amount: i32) -> i32 {
         let absorbed = amount.min(self.shield);
         self.shield -= absorbed;
         self.hull -= amount - absorbed;
+        amount - absorbed
     }
 }
 
@@ -244,6 +247,8 @@ impl EnemyKind {
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub struct Enemy {
+    /// Stable entity ID (unique within the mission; 0 = not yet assigned).
+    pub id: u32,
     pub kind: EnemyKind,
     pub pos: FxVec2,
     pub hp: i32,
@@ -257,6 +262,7 @@ pub struct Enemy {
 impl Enemy {
     pub fn new(kind: EnemyKind, pos: FxVec2) -> Self {
         Self {
+            id: 0,
             kind,
             pos,
             hp: kind.hp(),
@@ -280,6 +286,8 @@ pub struct Fissure {
 /// enemy shots live in `SimState::enemy_projectiles` and hit ships.
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub struct Projectile {
+    /// Stable entity ID (unique within the mission).
+    pub id: u32,
     /// Handle of the ship that fired it (enemy shots: 0, unused).
     pub owner: usize,
     pub pos: FxVec2,
@@ -290,6 +298,8 @@ pub struct Projectile {
     pub damage: i32,
     /// Pixels.
     pub radius: i32,
+    /// What kind of attack it is (ship shots; enemy shots: `Bolt`, unused).
+    pub attack: Attack,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
@@ -301,6 +311,8 @@ pub enum LootKind {
 /// A loot drop on the field, collected by flying over it.
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub struct Pickup {
+    /// Stable entity ID (unique within the mission).
+    pub id: u32,
     pub kind: LootKind,
     pub amount: u32,
     pub pos: FxVec2,

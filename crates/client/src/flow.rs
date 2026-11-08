@@ -140,6 +140,9 @@ pub struct Autoplay {
     pub missions: u32,
     pub resume: bool,
     pub abandon: bool,
+    /// `--clip`: the first battle also shoots a frame every 0.1 s from 7 s
+    /// to 10 s (`15c-battle-clip-NN`), for a short clip of the feedback.
+    pub clip: bool,
     /// Missions flown so far in this run.
     pub flown: u32,
     /// This Carrier visit builds (decided on arrival), and what: the spec's
@@ -577,7 +580,14 @@ fn apply_mission_request(
     ));
 }
 
-fn enter_battle(mut commands: Commands, save: Res<SaveSlot>, kill_target: Res<KillTarget>) {
+fn enter_battle(
+    mut commands: Commands,
+    save: Res<SaveSlot>,
+    kill_target: Res<KillTarget>,
+    mut events: ResMut<crate::fx::BattleEvents>,
+) {
+    // A new battle: frame numbers and entity IDs start over.
+    events.reset();
     let game = save.game.clone().unwrap_or_default();
     let config = mission::config_from_save(&game, kill_target.0);
     commands.insert_resource(SimWorld(mission::launch_sim(&config)));
@@ -922,7 +932,9 @@ fn apply_pause_actions(
     if !pause.open || settings.open {
         return;
     }
-    if keys.just_pressed(KeyCode::KeyS) && *state.get() == GameScreen::Carrier {
+    if keys.just_pressed(KeyCode::KeyS)
+        && matches!(state.get(), GameScreen::Carrier | GameScreen::Battle)
+    {
         settings.open(&mut pause, true);
     } else if keys.just_pressed(KeyCode::KeyM) && *state.get() == GameScreen::Battle {
         handle_action(
@@ -975,7 +987,7 @@ fn sync_pause_menu(
     commands.spawn((
         PauseEntity,
         Text::new(if in_battle {
-            "Paused\n\nR Resume    M Quit Mission (counts as Failed)\nT Title    Q Quit"
+            "Paused\n\nR Resume    S Settings    M Quit Mission (counts as Failed)\nT Title    Q Quit"
         } else {
             "Paused\n\nR Resume    S Settings    T Title    Q Quit"
         }),
@@ -997,15 +1009,14 @@ fn sync_pause_menu(
         292.0,
     );
     pause_button(&mut commands, DemoButton::QuitGame, "Quit Game", 344.0);
+    pause_button(&mut commands, DemoButton::Settings, "Settings", 396.0);
     if in_battle {
         pause_button(
             &mut commands,
             DemoButton::QuitMission,
             "Quit Mission",
-            396.0,
+            448.0,
         );
-    } else {
-        pause_button(&mut commands, DemoButton::Settings, "Settings", 396.0);
     }
 }
 
@@ -1047,6 +1058,7 @@ fn step_demo_battle(
     mut pending_result: ResMut<LastMissionResult>,
     mut next: ResMut<NextState<GameScreen>>,
     autoplay: Option<Res<Autoplay>>,
+    mut events: ResMut<crate::fx::BattleEvents>,
     mut last_cursor: Local<IVec2>,
 ) {
     if *state.get() != GameScreen::Battle || pause.open {
@@ -1080,6 +1092,7 @@ fn step_demo_battle(
         }
     };
     world.step(&[input]);
+    events.record(&world);
     if let Some(outcome) = mission::sim_outcome(&world) {
         if world.frame >= world.mission.end_frame + RESULT_DELAY {
             let result = mission::result_from_sim(&world, outcome);
@@ -1648,6 +1661,13 @@ fn autoplay_flow(
                         &mut commands,
                         &format!("{:02}-battle-{}-{i}", 15 + n * 10, n + 1),
                     );
+                }
+            }
+            if autoplay.clip && n == 0 {
+                for k in 0..30 {
+                    if at(7.0 + k as f32 * 0.1) {
+                        autoplay.shoot(&mut commands, &format!("15c-battle-clip-{k:02}"));
+                    }
                 }
             }
             if autoplay.abandon && n + 1 == autoplay.missions && at(20.5) {

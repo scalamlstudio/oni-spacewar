@@ -22,6 +22,7 @@ crates/
   sim/                package `oni-sim`, lib `sim` — deterministic mission simulation, NO Bevy
     src/lib.rs          crate docs + determinism rules
     src/state.rs        SimState (all rolled-back state), step() and its phases
+    src/event.rs        SimEvent: hits, kills, ship damage, shots, skills, pickups, mission end (last step only; client feedback)
     src/entity.rs       plain-data entities: Ship (+ ShipKind, Loadout, ShipSheet, ShipStats), Enemy, Projectile, Pickup, Fissure
     src/mission.rs      Elimination bookkeeping: spawn-director timer, kills, loot totals, MissionStatus/MissionOutcome
     src/tuning.rs       Demo Spec numbers (design/READINESS.md) + unit conversion (px/s -> sub-px/tick)
@@ -55,7 +56,9 @@ crates/
     src/settings.rs     player settings (settings.json beside the save, not in it), the Settings screen and gear button, carrier floor / wall colour presets + contrast check, CarrierPalette (recoloured tile images)
     src/codex.rs        the Codex (from Settings): content browser built from `core.codex` (assets/source/core/codex.json) — category tabs, scrolling thumbnail grid, detail panel; stats read from the catalogue / sim tuning; `discovered` hook
     src/mission.rs      typed client mission config/result handoff into `sim::SimState`; reward rules (survives_failure)
-    src/rollback.rs     SimWorld resource, rollback/checksum registration, GgrsSchedule
+    src/rollback.rs     SimWorld resource, rollback/checksum registration, GgrsSchedule (+ hands each step's events to fx::BattleEvents)
+    src/fx.rs           battle hit / kill feedback from sim events: BattleEvents (dedupe by frame + key), hit flash, Art's spark / burst / impact strips, damage numbers, screen shake, render-only hit-stop
+    src/audio.rs        placeholder CC0 battle sound: effects from sim events, looping battle music, volumes from settings
     src/input.rs        mouse + keyboard / bot → NetInput (ReadInputs)
     src/net.rs          matchbox ↔ ggrs socket adapter + latency/loss emulator (from the spike)
     src/stats.rs        rollback / frame-time / desync measurement + report (from the spike)
@@ -169,8 +172,10 @@ The target shipped formats are:
   `battle/ship/kite.png` -> `core.battle.ship.kite`), every TTF font the
   same way (`fonts/russo_one.ttf` -> `core.fonts.russo_one`, kind
   `font/ttf`, licence text next to it), every JSON data file the same way
-  (`codex.json` -> `core.codex`, kind `application/json`) plus the HUD
-  text, and writes the zstd bundles and manifest. Images ship as PNG for now.
+  (`codex.json` -> `core.codex`, kind `application/json`), every Ogg
+  Vorbis sound the same way (`audio/sfx/hit.ogg` -> `core.audio.sfx.hit`,
+  kind `audio/ogg`; sources and licences in `audio/CREDITS.md`) plus the
+  HUD text, and writes the zstd bundles and manifest. Images ship as PNG for now.
 
 Run the current pipeline after editing pack source files:
 
@@ -757,6 +762,39 @@ follow:
   `bulwark`) and purchased upgrade IDs (`hull_plating_<n>`,
   `weapon_tuning_<n>`, `thruster_tuning_<n>`; highest level wins) into the
   sim `Loadout`.
+- **Stable entity IDs and events** (TAKOAI-112). Every enemy, shot and
+  pickup gets an `id` from `SimState::next_id` when it is created (one
+  counter, from 1; ships are identified by handle). `SimState::events`
+  lists what the last `step` did (`event.rs`: `Hit` with enemy, ship,
+  attack, shot and amount; `Killed`; `ShipDamaged` with hull lost;
+  `Fired`; `SkillUsed`; `Collected`; `MissionEnded`) and is cleared at
+  the start of each step. Both are ordinary rolled-back, hashed state;
+  events never feed back into the sim. Whoever steps the sim
+  (`rollback::step_sim`, `flow::step_demo_battle`) passes the world to
+  `fx::BattleEvents::record` right after each step, which keeps each
+  `(frame, SimEvent::key())` once, so a re-simulated frame doesn't flash,
+  burst or play a sound twice; `fresh()` is read in `Update` and emptied
+  in `Last`. The one gameplay change of that step is in the sim too: a
+  bolt / Scatter bolt hit knocks the enemy `BOLT_KNOCKBACK` /
+  `SCATTER_KNOCKBACK` px along the shot's flight.
+- **Battle feedback is client-only** (`fx.rs`, `audio.rs`, both
+  `Update`). Hit enemies draw over-bright toward white for `FLASH_SECS`
+  (`render::hit_tint`, keyed by enemy ID). Art's one-row 256 px strips
+  (`core.battle.fx.*`, imported unchanged by `demo-art-import`'s `STRIPS`)
+  play once as atlas sprites, the last frame fading: a spark per hit
+  (Scatter impact for Scatter bolts), a death burst per kill, a ship spark
+  when a ship is hit, and the Shockwave impact centred on the Bulwark at
+  the Shockwave's reach. Damage numbers are `Text2d` in Russo One with
+  Art's colours (normal, big for Shockwave or ≥ 10, pink `-N` for hull our
+  ship lost, blue when the shield took it all), capped at 60. Screen
+  shake is trauma (our ship hit, our Shockwave / Scatter) added on top of
+  the follow camera. `HitStop` freezes the battle sprites only while the
+  sim runs on; `fx::hit_stop_secs` gives none for current enemies (it is
+  for elites and bosses). Sounds play from the same events, each with a
+  minimum gap so volleys don't stack; the battle track loops while a
+  battle runs. Settings (`settings.json`, `battle` and `audio` sections):
+  damage numbers and shake on / off, mute, master / effects / music
+  volume; the battle's pause menu opens Settings with S.
 - **Collision** is integer circle overlap; pairs are checked brute-force in
   `Vec` order, which is fine at current entity counts. A deterministic broad
   phase can be added when counts grow.

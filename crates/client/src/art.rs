@@ -1,4 +1,4 @@
-//! Shipped images and fonts by stable content ID. Each ID is resolved through
+//! Shipped images, fonts and sounds by stable content ID. Each ID is resolved through
 //! `assets/manifest.json` to its processed file, decoded once and cached.
 //! Client only; the sim never sees these.
 
@@ -17,6 +17,7 @@ pub struct ContentImages {
     manifest: Option<ContentManifest>,
     loaded: HashMap<String, Option<Handle<Image>>>,
     fonts: HashMap<String, Option<Handle<Font>>>,
+    sounds: HashMap<String, Option<Handle<AudioSource>>>,
 }
 
 impl ContentImages {
@@ -80,6 +81,28 @@ impl ContentImages {
             warn!("font {id} unavailable");
         }
         self.fonts.insert(id.to_string(), handle.clone());
+        handle
+    }
+
+    /// The sound shipped under `id` (Ogg Vorbis), or `None` (logged once)
+    /// if it is missing.
+    pub fn sound(
+        &mut self,
+        sources: &mut Assets<AudioSource>,
+        id: &str,
+    ) -> Option<Handle<AudioSource>> {
+        if let Some(handle) = self.sounds.get(id) {
+            return handle.clone();
+        }
+        let handle = self.read(id).map(|bytes| {
+            sources.add(AudioSource {
+                bytes: bytes.into(),
+            })
+        });
+        if handle.is_none() {
+            warn!("sound {id} unavailable");
+        }
+        self.sounds.insert(id.to_string(), handle.clone());
         handle
     }
 
