@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
+use bevy::ui::FocusPolicy;
 use bevy::window::PrimaryWindow;
 use sim::input::{INPUT_MOVE, INPUT_SKILL_Q, INPUT_SKILL_W};
 use sim::{FxVec2, NetInput, SimState, SUB};
@@ -325,7 +326,7 @@ pub(crate) struct ScreenEntity;
 #[derive(Component)]
 struct PauseEntity;
 
-#[derive(Component, Clone, Copy)]
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 enum DemoButton {
     NewGame,
     Continue,
@@ -1013,55 +1014,76 @@ fn sync_pause_menu(
         return;
     }
     let in_battle = *state.get() == GameScreen::Battle;
-    commands.spawn((
-        PauseEntity,
-        Text::new(if in_battle {
-            "Paused\n\nR Resume    S Settings    M Quit Mission (counts as Failed)\nT Title    Q Quit"
-        } else {
-            "Paused\n\nR Resume    S Settings    T Title    Q Quit"
-        }),
-        text_style(26.0, Color::WHITE),
-        Node {
-            position_type: PositionType::Absolute,
-            left: px(320),
-            top: px(110),
-            padding: UiRect::all(px(18)),
-            ..default()
-        },
-        BackgroundColor(Color::srgba(0.02, 0.03, 0.04, 0.92)),
-    ));
-    pause_button(&mut commands, DemoButton::Resume, "Resume", 240.0);
-    pause_button(
-        &mut commands,
-        DemoButton::QuitToTitle,
-        "Quit to Title",
-        292.0,
-    );
-    pause_button(&mut commands, DemoButton::QuitGame, "Quit Game", 344.0);
-    pause_button(&mut commands, DemoButton::Settings, "Settings", 396.0);
+    // One centred panel: the title, then a button per action, each showing
+    // its hotkey (`apply_pause_actions`).
+    let mut buttons = vec![
+        (DemoButton::Resume, "Resume [R]"),
+        (DemoButton::Settings, "Settings [S]"),
+        (DemoButton::QuitToTitle, "Quit to Title [T]"),
+        (DemoButton::QuitGame, "Quit Game [Q]"),
+    ];
     if in_battle {
-        pause_button(
-            &mut commands,
+        buttons.push((
             DemoButton::QuitMission,
-            "Quit Mission",
-            448.0,
-        );
+            "Quit Mission [M] (counts as Failed)",
+        ));
     }
-}
-
-fn pause_button(commands: &mut Commands, action: DemoButton, label: &str, top: f32) {
     commands
         .spawn((
             PauseEntity,
+            Node {
+                position_type: PositionType::Absolute,
+                width: percent(100),
+                height: percent(100),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
+            FocusPolicy::Block,
+            GlobalZIndex(40),
+        ))
+        .with_children(|root| {
+            root.spawn((
+                Node {
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::Stretch,
+                    row_gap: px(10),
+                    padding: UiRect::all(px(18)),
+                    max_width: percent(90),
+                    max_height: percent(90),
+                    border: UiRect::all(px(1)),
+                    ..default()
+                },
+                BackgroundColor(settings::PANEL_BG),
+                BorderColor::all(settings::PANEL_BORDER),
+            ))
+            .with_children(|panel| {
+                panel.spawn((
+                    Text::new("Paused"),
+                    text_style(26.0, Color::WHITE),
+                    Node {
+                        align_self: AlignSelf::Center,
+                        margin: UiRect::bottom(px(4)),
+                        ..default()
+                    },
+                ));
+                for (action, label) in buttons {
+                    pause_button(panel, action, label);
+                }
+            });
+        });
+}
+
+fn pause_button(panel: &mut ChildSpawnerCommands, action: DemoButton, label: &str) {
+    panel
+        .spawn((
             action,
             Button,
             BackgroundColor(Color::srgb(0.12, 0.22, 0.28)),
             Node {
-                position_type: PositionType::Absolute,
-                left: px(320),
-                top: px(top),
-                width: px(190),
+                min_width: px(220),
                 height: px(42),
+                padding: UiRect::horizontal(px(14)),
                 align_items: AlignItems::Center,
                 justify_content: JustifyContent::Center,
                 border: UiRect::all(px(1)),
@@ -1198,6 +1220,44 @@ fn autopilot(world: &SimState) -> NetInput {
     input
 }
 
+/// A smaller window than `DEFAULT_WINDOW`, for the pause-menu shots.
+const SMALL_WINDOW: Vec2 = Vec2::new(800.0, 460.0);
+
+/// Autoplay: from `t0`, opens the pause menu and shoots it (`name`), then
+/// at `SMALL_WINDOW` (`name-small`), then restores the window and resumes.
+#[allow(clippy::too_many_arguments)]
+fn pause_shots(
+    at: &dyn Fn(f32) -> bool,
+    t0: f32,
+    autoplay: &Autoplay,
+    commands: &mut Commands,
+    pause: &mut PauseMenu,
+    windows: &mut Query<&mut Window, With<PrimaryWindow>>,
+    name: &str,
+) {
+    let mut resize = |size: Vec2| {
+        if let Ok(mut window) = windows.single_mut() {
+            window.resolution.set(size.x, size.y);
+        }
+    };
+    if at(t0) {
+        pause.hold(true);
+    }
+    if at(t0 + 0.3) {
+        autoplay.shoot(commands, name);
+    }
+    if at(t0 + 0.4) {
+        resize(SMALL_WINDOW);
+    }
+    if at(t0 + 1.0) {
+        autoplay.shoot(commands, &format!("{name}-small"));
+    }
+    if at(t0 + 1.4) {
+        resize(crate::DEFAULT_WINDOW.as_vec2());
+        pause.hold(false);
+    }
+}
+
 /// Scripted scene steps for `--autoplay`. Each step fires once, when the
 /// scene has been up for its time in seconds.
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
@@ -1218,7 +1278,7 @@ fn autoplay_flow(
         ResMut<PauseMenu>,
         ResMut<CodexScreen>,
     ),
-    mut drag: ResMut<PilotDrag>,
+    (mut drag, mut windows): (ResMut<PilotDrag>, Query<&mut Window, With<PrimaryWindow>>),
     pilot: Query<(&Transform, &Pilot)>,
     mut launch: MessageWriter<MissionRequest>,
     mut exit: MessageWriter<AppExit>,
@@ -1353,19 +1413,28 @@ fn autoplay_flow(
                 // Last visit: the Settings screen over the carrier, from
                 // the pause menu, before quitting.
                 if autoplay.reloaded {
-                    if at(2.3) {
+                    pause_shots(
+                        &at,
+                        2.3,
+                        &autoplay,
+                        &mut commands,
+                        &mut pause,
+                        &mut windows,
+                        "91a-carrier-pause",
+                    );
+                    if at(3.9) {
                         pause.hold(true);
                         settings_screen.open(&mut pause, true);
                     }
-                    if at(2.9) {
+                    if at(4.5) {
                         autoplay.shoot(&mut commands, "91-carrier-settings");
                     }
-                    if at(3.2) {
+                    if at(4.8) {
                         settings_screen.close(&mut pause);
                         pause.hold(false);
                     }
                 }
-                let quit_at = if autoplay.reloaded { 3.5 } else { 2.5 };
+                let quit_at = if autoplay.reloaded { 5.1 } else { 2.5 };
                 if at(quit_at) {
                     save.store();
                     if autoplay.reloaded {
@@ -1719,6 +1788,17 @@ fn autoplay_flow(
                     }
                 }
             }
+            if autoplay.abandon && n + 1 == autoplay.missions {
+                pause_shots(
+                    &at,
+                    18.8,
+                    &autoplay,
+                    &mut commands,
+                    &mut pause,
+                    &mut windows,
+                    &format!("{:02}d-battle-pause", 15 + n * 10),
+                );
+            }
             if autoplay.abandon && n + 1 == autoplay.missions && at(20.5) {
                 if let Some(world) = world {
                     let r = mission::result_from_sim(&world, MissionOutcome::Abandoned);
@@ -1971,6 +2051,53 @@ mod tests {
             transition(GameScreen::Loading, FlowEvent::ReturnToCarrier, true),
             GameScreen::Carrier
         );
+    }
+
+    /// TAKOAI-127: the pause menu is one panel (a single root), with a
+    /// button per action; Battle adds Quit Mission.
+    #[test]
+    fn pause_menu_is_one_panel_of_buttons() {
+        use bevy::ecs::system::RunSystemOnce;
+        for (screen, quit_mission) in [(GameScreen::Carrier, false), (GameScreen::Battle, true)] {
+            let mut world = World::new();
+            world.insert_resource(State::new(screen));
+            world.insert_resource(SettingsScreen::default());
+            world.insert_resource(PauseMenu {
+                open: true,
+                dirty: true,
+            });
+            world.run_system_once(sync_pause_menu).unwrap();
+            let roots = world
+                .query_filtered::<Entity, With<PauseEntity>>()
+                .iter(&world)
+                .count();
+            assert_eq!(roots, 1, "{screen:?}");
+            let mut buttons: Vec<DemoButton> = world
+                .query_filtered::<&DemoButton, With<Button>>()
+                .iter(&world)
+                .copied()
+                .collect();
+            buttons.sort_by_key(|b| *b as u8);
+            let mut expected = vec![
+                DemoButton::Resume,
+                DemoButton::Settings,
+                DemoButton::QuitToTitle,
+                DemoButton::QuitGame,
+            ];
+            if quit_mission {
+                expected.push(DemoButton::QuitMission);
+            }
+            expected.sort_by_key(|b| *b as u8);
+            assert_eq!(buttons, expected, "{screen:?}");
+            // Closing despawns the whole panel.
+            world.resource_mut::<PauseMenu>().hold(false);
+            world.run_system_once(sync_pause_menu).unwrap();
+            assert_eq!(
+                world.query::<&DemoButton>().iter(&world).count(),
+                0,
+                "{screen:?}"
+            );
+        }
     }
 
     #[test]

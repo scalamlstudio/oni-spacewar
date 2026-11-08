@@ -663,7 +663,9 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   one, quit to the Title, reload the save from disk and Continue (a restart
   inside the same process), then quit (saving). `--abandon` quits the last mission from the pause menu 20 s in;
   `--shots` saves a screenshot of every scene (including the Settings
-  screen over the first Title and over the last Carrier visit). Use a scratch `ONI_SAVE_DIR`.
+  screen over the first Title and over the last Carrier visit, and the
+  pause menu over that visit and, with `--abandon`, over the last battle,
+  each also at `flow::SMALL_WINDOW`: `flow::pause_shots`). Use a scratch `ONI_SAVE_DIR`.
   The acceptance loop is `--missions 2` followed by `--continue --missions 0`.
   On macOS, wrap it in `caffeinate -d`: if the display sleeps the window stops
   presenting and screenshots come out black. For the same reason (a fully
@@ -676,7 +678,11 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   `sim`, so they cannot affect a battle or sync. Stored on every change.
   The Settings screen (`SettingsScreen`) opens from the gear button
   (top right on the Title, beside Build in the Carrier HUD), Esc on the
-  Title, and the Carrier pause menu's Settings (S); Esc or Close shuts it
+  Title, and the Carrier pause menu's Settings (S). The pause menu
+  (`flow::sync_pause_menu`, TAKOAI-127) is one centred panel: "Paused",
+  then a button per action labelled with its hotkey (Resume [R],
+  Settings [S], Quit to Title [T], Quit Game [Q], and in Battle Quit
+  Mission [M]); Esc or Close shuts it
   (Esc is used up there, `settings_keys` runs before
   `flow::toggle_pause_menu`). On the Carrier it holds `PauseMenu::open`
   with the menu hidden, so the scene stays paused and every carrier system
