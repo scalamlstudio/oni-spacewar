@@ -211,9 +211,12 @@ impl SimState {
         self.frame += 1;
     }
 
-    /// The spawn director: one enemy every `spawn_interval` ticks out of a
-    /// random fissure, a Spitter with `spitter_pct` chance, both ramping up
-    /// with mission time. It waits while `MAX_LIVE_ENEMIES` are alive.
+    /// The spawn director: every `pack_interval` ticks a pack comes out of
+    /// a random fissure: `PACK_SWARMERS_MIN..=PACK_SWARMERS_MAX` Swarmers
+    /// plus a Spitter for each of `PACK_SPITTER_ROLLS` rolls under
+    /// `spitter_pct`, both ramping with mission time. A pack brings only
+    /// what fits under `MAX_LIVE_ENEMIES` (Spitters first); with the field
+    /// full the director waits.
     fn direct_spawns(&mut self) {
         let m = &mut self.mission;
         if m.spawn_timer > 0 {
@@ -222,34 +225,45 @@ impl SimState {
                 return;
             }
         }
-        if self.enemies.len() >= MAX_LIVE_ENEMIES {
+        let room = MAX_LIVE_ENEMIES.saturating_sub(self.enemies.len());
+        if room == 0 {
             return;
         }
         let t = self.frame;
-        let kind = if self.rng.range(0, 99) < spitter_pct(t) {
-            EnemyKind::Spitter
-        } else {
-            EnemyKind::Swarmer
-        };
-        self.spawn_at_fissure(kind);
-        self.mission.spawn_timer = spawn_interval(t);
+        let swarmers = self.rng.range(PACK_SWARMERS_MIN, PACK_SWARMERS_MAX) as usize;
+        let mut spitters = 0;
+        for _ in 0..PACK_SPITTER_ROLLS {
+            if self.rng.range(0, 99) < spitter_pct(t) {
+                spitters += 1;
+            }
+        }
+        let spitters = spitters.min(room);
+        let swarmers = swarmers.min(room - spitters);
+        let kinds = core::iter::repeat_n(EnemyKind::Spitter, spitters)
+            .chain(core::iter::repeat_n(EnemyKind::Swarmer, swarmers));
+        self.spawn_pack(kinds.collect());
+        self.mission.spawn_timer = pack_interval(t);
     }
 
-    /// Spawn one enemy on the spawn ring of a random fissure, at a random
-    /// angle. Spitters strafe a random way round.
-    fn spawn_at_fissure(&mut self, kind: EnemyKind) {
+    /// Spawn a pack evenly round the spawn ring of one random fissure,
+    /// starting at a random angle. Spitters strafe a random way round.
+    fn spawn_pack(&mut self, kinds: Vec<EnemyKind>) {
         let f = self.rng.range(0, self.fissures.len() as i32 - 1) as usize;
-        let angle = self.rng.range(0, ANGLE_STEPS - 1);
+        let start = self.rng.range(0, ANGLE_STEPS - 1);
         let r = px(FISSURE_SPAWN_RING);
-        let pos = self.fissures[f].pos
-            + FxVec2::new(mul_q16(r, cos_q16(angle)), mul_q16(r, sin_q16(angle)));
-        let mut e = Enemy::new(kind, pos);
-        e.id = new_id(&mut self.next_id);
-        if self.rng.range(0, 1) == 0 {
-            e.orbit = -1;
+        let n = kinds.len() as i32;
+        for (i, kind) in kinds.into_iter().enumerate() {
+            let angle = (start + i as i32 * ANGLE_STEPS / n) % ANGLE_STEPS;
+            let pos = self.fissures[f].pos
+                + FxVec2::new(mul_q16(r, cos_q16(angle)), mul_q16(r, sin_q16(angle)));
+            let mut e = Enemy::new(kind, pos);
+            e.id = new_id(&mut self.next_id);
+            if kind == EnemyKind::Spitter && self.rng.range(0, 1) == 0 {
+                e.orbit = -1;
+            }
+            self.enemies.push(e);
+            self.mission.spawned += 1;
         }
-        self.enemies.push(e);
-        self.mission.spawned += 1;
     }
 
     /// Click-to-move sets the target while held; Q / W use the ship's skills
@@ -444,8 +458,8 @@ impl SimState {
     }
 
     /// Swarmers rush the nearest ship and hit on contact; Spitters close to
-    /// a distance band, then strafe around the ship inside it and shoot, so
-    /// no enemy ever sits still.
+    /// a distance band, then strafe around the ship inside it, and stop only
+    /// for the 0.4 s wind-up before each shot (aim locked at its start).
     fn enemy_behaviour(&mut self) {
         for i in 0..self.enemies.len() {
             let e = &mut self.enemies[i];
@@ -476,6 +490,24 @@ impl SimState {
                     }
                 }
                 EnemyKind::Spitter => {
+                    // Winding up: hold still, then fire along the locked aim.
+                    if e.windup > 0 {
+                        e.windup -= 1;
+                        if e.windup == 0 {
+                            self.enemy_projectiles.push(Projectile {
+                                id: new_id(&mut self.next_id),
+                                owner: 0,
+                                pos: e.pos,
+                                vel: e.aim,
+                                ttl: SPIT_LIFETIME,
+                                damage: SPIT_DAMAGE,
+                                radius: SPIT_RADIUS,
+                                attack: Attack::Bolt,
+                            });
+                            e.cooldown = SPITTER_FIRE_INTERVAL - SPITTER_WINDUP;
+                        }
+                        continue;
+                    }
                     let d = to_ship.length();
                     let step = if d < px(SPITTER_MIN_RANGE) as i64 {
                         FxVec2::ZERO - to_ship.scale_to(speed)
@@ -489,17 +521,8 @@ impl SimState {
                     let vel = to_ship.scale_to(px_per_tick(SPIT_SPEED));
                     if e.cooldown == 0 && d <= px(SPITTER_FIRE_RANGE) as i64 && vel != FxVec2::ZERO
                     {
-                        self.enemy_projectiles.push(Projectile {
-                            id: new_id(&mut self.next_id),
-                            owner: 0,
-                            pos: e.pos,
-                            vel,
-                            ttl: SPIT_LIFETIME,
-                            damage: SPIT_DAMAGE,
-                            radius: SPIT_RADIUS,
-                            attack: Attack::Bolt,
-                        });
-                        e.cooldown = SPITTER_FIRE_INTERVAL;
+                        e.windup = SPITTER_WINDUP;
+                        e.aim = vel;
                     }
                 }
             }
@@ -908,10 +931,11 @@ mod tests {
         for _ in 0..BULWARK_BASIC_INTERVAL - 1 {
             s.step(&idle(1));
         }
-        assert!(s.enemies[0].hp < SWARMER_HP);
-        let fired_before = s.enemies[0].hp;
+        // One bolt, one dead Swarmer; the next shot waits for the Spitter.
+        assert_eq!(s.mission.kills, 1);
+        assert_eq!(s.enemies.len(), 1);
         s.step(&idle(1));
-        assert!(s.projectiles.len() == 1 || s.enemies[0].hp < fired_before);
+        assert!(s.projectiles.is_empty());
     }
 
     #[test]
@@ -1135,30 +1159,45 @@ mod tests {
     }
 
     #[test]
-    fn director_ramps_up_rate_and_spitters_to_a_cap() {
-        // The curve: faster spawns and more Spitters over the ramp, flat after.
-        assert_eq!(spawn_interval(0), SPAWN_INTERVAL_START);
-        assert_eq!(spawn_interval(SPAWN_RAMP), SPAWN_INTERVAL_END);
-        assert_eq!(spawn_interval(SPAWN_RAMP * 10), SPAWN_INTERVAL_END);
+    fn director_releases_packs_faster_with_more_spitters_up_to_a_cap() {
+        // The curve: packs closer together and more Spitters over the ramp,
+        // flat after.
+        assert_eq!(pack_interval(0), PACK_INTERVAL_START);
+        assert_eq!(pack_interval(SPAWN_RAMP), PACK_INTERVAL_END);
+        assert_eq!(pack_interval(SPAWN_RAMP * 10), PACK_INTERVAL_END);
         assert_eq!(spitter_pct(0), SPITTER_PCT_START);
         assert_eq!(spitter_pct(SPAWN_RAMP * 10), SPITTER_PCT_END);
         for t in 0..SPAWN_RAMP {
-            assert!(spawn_interval(t + 1) <= spawn_interval(t));
+            assert!(pack_interval(t + 1) <= pack_interval(t));
             assert!(spitter_pct(t + 1) >= spitter_pct(t));
         }
-        // In the sim: spawns get closer together, Spitters get commoner,
-        // and the live count never passes the cap.
+        // In the sim: each pulse is a whole pack out of one fissure, pulses
+        // get closer together, Spitters get commoner, and the live count
+        // never passes the cap.
         let mut s = SimState::with_loadouts(9, &[KITE]);
-        let mut spawn_ticks = Vec::new();
-        let mut kinds = Vec::new();
+        let mut packs: Vec<(u32, Vec<EnemyKind>)> = Vec::new();
         for _ in 0..ticks(240, 1) {
             s.ships[0].hull = 100_000;
             s.ships[0].basic_cooldown = u32::MAX;
-            let before = s.mission.spawned;
+            let before = s.mission.spawned as usize;
+            let live = s.enemies.len();
             s.step(&idle(1));
-            if s.mission.spawned > before {
-                spawn_ticks.push(s.frame - 1);
-                kinds.push(s.enemies.last().unwrap().kind);
+            let new = s.mission.spawned as usize - before;
+            if new > 0 {
+                let pack = &s.enemies[live..];
+                assert_eq!(pack.len(), new);
+                let swarmers = pack.iter().filter(|e| e.kind == EnemyKind::Swarmer).count();
+                assert!(
+                    (PACK_SWARMERS_MIN as usize..=PACK_SWARMERS_MAX as usize).contains(&swarmers)
+                );
+                assert!(new - swarmers <= PACK_SPITTER_ROLLS as usize);
+                // All from the same fissure (pushed apart a little already).
+                let near = |f: &Fissure| {
+                    pack.iter()
+                        .all(|e| (e.pos - f.pos).length() <= px(FISSURE_SPAWN_RING + 40) as i64)
+                };
+                assert!(s.fissures.iter().any(near), "pack split across fissures");
+                packs.push((s.frame - 1, pack.iter().map(|e| e.kind).collect()));
             }
             assert!(s.enemies.len() <= MAX_LIVE_ENEMIES);
             // Thin the field now and then so the cap doesn't stop the curve.
@@ -1166,15 +1205,18 @@ mod tests {
                 s.enemies.truncate(2);
             }
         }
-        assert_eq!(spawn_ticks[0], SPAWN_FIRST - 1);
-        let first_gap = spawn_ticks[1] - spawn_ticks[0];
-        let late: Vec<_> = spawn_ticks.windows(2).map(|w| w[1] - w[0]).collect();
-        assert_eq!(first_gap, spawn_interval(SPAWN_FIRST - 1));
-        assert!(late.iter().rev().take(10).all(|&g| g >= SPAWN_INTERVAL_END));
-        assert!(late.iter().rev().take(10).any(|&g| g == SPAWN_INTERVAL_END));
-        let spit = |k: &[EnemyKind]| k.iter().filter(|k| **k == EnemyKind::Spitter).count();
-        let half = kinds.len() / 2;
-        assert!(spit(&kinds[half..]) > spit(&kinds[..half]), "{kinds:?}");
+        assert_eq!(packs[0].0, SPAWN_FIRST - 1);
+        let gaps: Vec<_> = packs.windows(2).map(|w| w[1].0 - w[0].0).collect();
+        assert_eq!(gaps[0], pack_interval(SPAWN_FIRST - 1));
+        assert!(gaps.iter().rev().take(10).all(|&g| g == PACK_INTERVAL_END));
+        let spit = |p: &[(u32, Vec<EnemyKind>)]| {
+            p.iter()
+                .flat_map(|(_, k)| k)
+                .filter(|k| **k == EnemyKind::Spitter)
+                .count()
+        };
+        let half = packs.len() / 2;
+        assert!(spit(&packs[half..]) > spit(&packs[..half]), "{packs:?}");
         // With nobody killing anything, the field fills to the cap and stops.
         let mut s = SimState::with_loadouts(9, &[KITE]);
         for _ in 0..ticks(120, 1) {
@@ -1187,6 +1229,76 @@ mod tests {
     }
 
     #[test]
+    fn one_basic_hit_kills_a_swarmer_from_any_ship() {
+        for loadout in [KITE, BULWARK] {
+            let stats = ShipStats::new(loadout);
+            assert!(stats.basic_damage >= SWARMER_HP, "{loadout:?}");
+        }
+        let mut s = quiet(&[KITE]);
+        s.enemies.push(enemy(EnemyKind::Swarmer, 200, 0));
+        let mut f = 0;
+        while s.mission.kills == 0 {
+            s.step(&idle(1));
+            f += 1;
+            assert!(f < KITE_BASIC_INTERVAL, "killed by the first bolt");
+        }
+    }
+
+    #[test]
+    fn spitter_winds_up_then_fires_along_the_locked_aim() {
+        let mut s = quiet(&[BULWARK]);
+        s.ships[0].basic_cooldown = u32::MAX;
+        let mut e = enemy(EnemyKind::Spitter, 260, 0);
+        e.cooldown = 0;
+        s.enemies.push(e);
+        s.step(&idle(1));
+        // It starts winding up, aimed at the ship, and stops moving.
+        let e = s.enemies[0].clone();
+        assert_eq!(e.windup, SPITTER_WINDUP);
+        assert!(e.aim.x < 0 && e.aim.y == 0, "{:?}", e.aim);
+        assert!(s.enemy_projectiles.is_empty());
+        // The ship moving away doesn't turn the aim.
+        s.ships[0].pos = FxVec2::from_px(0, 300);
+        for _ in 1..SPITTER_WINDUP {
+            s.step(&idle(1));
+            assert_eq!(s.enemies[0].pos, e.pos, "holds still");
+            assert_eq!(s.enemies[0].aim, e.aim);
+            assert!(s.enemy_projectiles.is_empty(), "no shot before 0.4 s");
+        }
+        s.step(&idle(1));
+        assert_eq!(s.enemy_projectiles.len(), 1);
+        assert_eq!(s.enemy_projectiles[0].vel, e.aim);
+        assert_eq!(s.enemies[0].windup, 0);
+        // The next shot comes a fire interval after this one's wind-up began.
+        assert_eq!(
+            s.enemies[0].cooldown,
+            SPITTER_FIRE_INTERVAL - SPITTER_WINDUP
+        );
+    }
+
+    /// B2 (design/BATTLE.md): enemy shots are slow enough that the slowest
+    /// ship dodges by moving sideways once the wind-up shows, even from the
+    /// Spitter's closest band edge.
+    #[test]
+    fn the_slowest_ship_can_dodge_a_spitter_shot() {
+        let mut s = quiet(&[BULWARK]);
+        s.ships[0].basic_cooldown = u32::MAX;
+        let mut e = enemy(EnemyKind::Spitter, SPITTER_MIN_RANGE, 0);
+        e.cooldown = 0;
+        s.enemies.push(e);
+        s.step(&idle(1));
+        assert_eq!(s.enemies[0].windup, SPITTER_WINDUP);
+        // A quarter-second reaction, then fly straight across the line.
+        for _ in 0..ticks(1, 4) {
+            s.step(&idle(1));
+        }
+        for _ in 0..ticks(3, 1) {
+            s.step(&[input(INPUT_MOVE, 0, 2000)]);
+        }
+        assert_eq!(s.ships[0].hull, BULWARK_HULL, "dodged");
+    }
+
+    #[test]
     fn spitters_strafe_inside_their_band() {
         let mut s = quiet(&[BULWARK]);
         s.ships[0].basic_cooldown = u32::MAX;
@@ -1194,9 +1306,12 @@ mod tests {
         s.enemies.push(enemy(EnemyKind::Spitter, 260, 0));
         let mut last = s.enemies[0].pos;
         for t in 0..ticks(20, 1) {
+            let winding = s.enemies[0].windup > 0;
             s.step(&idle(1));
             let e = &s.enemies[0];
-            assert_ne!(e.pos, last, "tick {t}: Spitter stood still");
+            if !winding && e.windup == 0 {
+                assert_ne!(e.pos, last, "tick {t}: Spitter stood still");
+            }
             last = e.pos;
             let d = e.pos.length();
             assert!(
@@ -1373,7 +1488,7 @@ mod tests {
 
     #[test]
     fn crystal_drop_rate_follows_the_rng() {
-        // Over many Swarmer kills the 15% roll lands near 15%.
+        // Over many Swarmer kills the roll lands near its percentage.
         let mut s = quiet(&[KITE]);
         let mut crystals = 0;
         for _ in 0..1000 {
@@ -1389,7 +1504,11 @@ mod tests {
                 .count();
             s.pickups.clear();
         }
-        assert!((100..=200).contains(&crystals), "{crystals}");
+        let expected = SWARMER_CRYSTAL_PCT as usize * 10;
+        assert!(
+            (expected / 2..=expected * 3 / 2).contains(&crystals),
+            "{crystals}"
+        );
     }
 
     #[test]

@@ -24,7 +24,7 @@ crates/
     src/state.rs        SimState (all rolled-back state), step() and its phases
     src/event.rs        SimEvent: hits, kills, ship damage, shots, skills, pickups, mission end (last step only; client feedback)
     src/entity.rs       plain-data entities: Ship (+ ShipKind, Loadout, ShipSheet, ShipStats), Enemy, Projectile, Pickup, Fissure
-    src/mission.rs      Elimination bookkeeping: spawn-director timer, kills, loot totals, MissionStatus/MissionOutcome
+    src/mission.rs      Elimination bookkeeping: spawn-director (pack pulse) timer, kills, loot totals, MissionStatus/MissionOutcome
     src/tuning.rs       Demo Spec numbers (design/READINESS.md) + unit conversion (px/s -> sub-px/tick)
     src/collision.rs    integer circle overlap + separation
     src/fixed.rs        fixed-point: SUB (1 px = 256), FxVec2 (+ scale_to), mul_q16
@@ -40,7 +40,7 @@ crates/
     src/bin/content_manifest_diff.rs   compare manifests and list packs/assets a patch needs
     src/cutouts.rs                     background keying, sheet slicing, single-sprite crop, resize
     src/bin/sprite_sheet_cutouts.rs    expression sheets -> portraits
-    src/bin/demo_art_import.rs         design/art/demo (+ demo-v2 battle art and backdrops) -> battle / title / result / icon sources
+    src/bin/demo_art_import.rs         design/art/demo (+ demo-v2 battle art and backdrops, Art's battle feedback strips incl. the Spitter wind-up and aim line) -> battle / title / result / icon / fx sources
     src/bin/carrier_tile_import.rs     design/art/carrier-furniture catalogues (batches A/B, patches, hull edge, berth floor) -> carrier/tile, carrier/item, carrier/berth, scaffold, front marker sources
     hull-wall/build-hull-wall-extra.py every reachable hull-edge case Art's catalogue lacks, drawn by Art's generator -> hull-wall/extra-v1/ (PNGs + catalogue)
   client/             package `oni-client`, bin `oni-spacewar` — everything else
@@ -63,7 +63,7 @@ crates/
     src/net.rs          matchbox ↔ ggrs socket adapter + latency/loss emulator (from the spike)
     src/stats.rs        rollback / frame-time / desync measurement + report (from the spike)
     src/pacing.rs       frame-pacing profiler (windowed): main / render / swapchain-acquire split + OS-stall probe
-    src/render.rs       battle sprites keyed by stable content IDs + gizmo FX, fissure pointers, camera follow, battle HUD (Update, outside rollback)
+    src/render.rs       battle sprites keyed by stable content IDs + gizmo FX, Spitter wind-up telegraph (glow frame + stretched aim line, read from the sim's `Enemy::windup` / `aim`), fissure pointers, camera follow, battle HUD (Update, outside rollback)
     src/zoom.rs         mouse-wheel zoom for the local camera (Carrier and battle): 0.5×–2× target, eased, about the cursor; follow offset kept on screen; picking maths (`world_at`)
     src/sky.rs          procedural nebula sky: SkyMaterial (Material2d, `sky.wgsl`) on a quad that follows the camera; one sky behind every scene
 ```

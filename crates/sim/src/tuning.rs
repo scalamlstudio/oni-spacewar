@@ -121,7 +121,9 @@ pub const fn trained(cooldown: u32, training: u8) -> u32 {
 
 pub const ENEMY_MASS: i32 = 1;
 
-pub const SWARMER_HP: i32 = 10;
+/// One basic hit from any ship kills a Swarmer (TAKOAI-113, design/BATTLE.md
+/// #2 and B1): Kite's unupgraded bolt does 4. Was 10 (3 Kite hits).
+pub const SWARMER_HP: i32 = 4;
 /// +20% over the spec's 110 (TAKOAI-58).
 pub const SWARMER_SPEED: i32 = 132;
 pub const SWARMER_RADIUS: i32 = 10;
@@ -138,7 +140,12 @@ pub const SPITTER_RADIUS: i32 = 14;
 pub const SPITTER_MIN_RANGE: i32 = 200;
 pub const SPITTER_MAX_RANGE: i32 = 320;
 pub const SPITTER_FIRE_RANGE: i32 = 360;
+/// Time from one shot to the next, wind-up included.
 pub const SPITTER_FIRE_INTERVAL: u32 = ticks(5, 2);
+/// The Spitter stops, glows and shows its aim line for this long before
+/// each shot (TAKOAI-113, design/BATTLE.md #3): 0.4 s. The shot's direction
+/// is locked when the wind-up starts, so moving off the line dodges it.
+pub const SPITTER_WINDUP: u32 = ticks(2, 5);
 /// Delay before a fresh Spitter's first shot (engine default).
 pub const SPITTER_FIRST_SHOT: u32 = ticks(1, 1);
 pub const SPIT_DAMAGE: i32 = 8;
@@ -148,11 +155,12 @@ pub const SPIT_LIFETIME: u32 = ticks(3, 1);
 
 // --- Elimination: void fissures and the spawn director ----------------------
 
-/// Normal play's kill target. Raised from 20 with the 3× spawn rate
-/// (TAKOAI-58) so a mission still lasts about 1-2 minutes. The sim reads the
+/// Normal play's kill target. Raised from 40 with packs and one-hit
+/// Swarmers (TAKOAI-113): the scripted QA pilot wins in 60-77 s over 12
+/// seeds per ship (target 60-90 s). The sim reads the
 /// mission's own [`Mission::kill_target`](crate::Mission::kill_target), set
 /// at launch (`SimState::with_kill_target`); this is only its default.
-pub const KILL_TARGET: u32 = 40;
+pub const KILL_TARGET: u32 = 100;
 /// `--autoplay` / test runs' kill target (TAKOAI-77): shorter QA battles.
 pub const AUTOPLAY_KILL_TARGET: u32 = 10;
 
@@ -175,20 +183,29 @@ pub const FISSURE_MIN_GAP: i32 = 600;
 /// Enemies appear on a ring this far from a fissure's centre.
 pub const FISSURE_SPAWN_RING: i32 = 60;
 
-/// First spawn this long after the mission starts.
+/// First pack this long after the mission starts.
 pub const SPAWN_FIRST: u32 = ticks(2, 1);
-/// Time between spawns falls linearly from `SPAWN_INTERVAL_START` to
-/// `SPAWN_INTERVAL_END` over `SPAWN_RAMP`, then stays there. 3× the
-/// TAKOAI-53 rate (4 s -> 1.5 s): 1.33 s -> 0.5 s (TAKOAI-58).
-pub const SPAWN_INTERVAL_START: u32 = ticks(4, 3);
-pub const SPAWN_INTERVAL_END: u32 = ticks(1, 2);
-/// The Spitter share of spawns rises from `SPITTER_PCT_START`% to
-/// `SPITTER_PCT_END`% over the same ramp.
-pub const SPITTER_PCT_START: i32 = 10;
-pub const SPITTER_PCT_END: i32 = 40;
-pub const SPAWN_RAMP: u32 = ticks(120, 1);
-/// The director holds off while this many enemies are alive.
-pub const MAX_LIVE_ENEMIES: usize = 36;
+/// The director releases a pack out of one fissure on a pulse
+/// (TAKOAI-113, design/BATTLE.md #2) instead of one enemy at a time. The
+/// gap between packs falls linearly from `PACK_INTERVAL_START` to
+/// `PACK_INTERVAL_END` over `SPAWN_RAMP`, then stays there.
+pub const PACK_INTERVAL_START: u32 = ticks(6, 1);
+pub const PACK_INTERVAL_END: u32 = ticks(7, 2);
+/// Each pack has `PACK_SWARMERS_MIN..=PACK_SWARMERS_MAX` Swarmers ...
+pub const PACK_SWARMERS_MIN: i32 = 6;
+pub const PACK_SWARMERS_MAX: i32 = 10;
+/// ... and `PACK_SPITTER_ROLLS` chances to add a Spitter, each with
+/// `spitter_pct`% chance: `SPITTER_PCT_START`% rising to `SPITTER_PCT_END`%
+/// over the same ramp, so early packs rarely bring one and late packs
+/// usually bring 1-2.
+pub const PACK_SPITTER_ROLLS: u32 = 2;
+pub const SPITTER_PCT_START: i32 = 20;
+pub const SPITTER_PCT_END: i32 = 60;
+pub const SPAWN_RAMP: u32 = ticks(90, 1);
+/// Most enemies alive at once. A pack that would go past it brings only
+/// what fits; with the field full the director waits. Raised from 36 with
+/// packs (TAKOAI-113).
+pub const MAX_LIVE_ENEMIES: usize = 60;
 
 /// `start` moved toward `end` by the fraction of the ramp elapsed at tick `t`.
 const fn ramp(start: i64, end: i64, t: u32) -> i64 {
@@ -196,20 +213,23 @@ const fn ramp(start: i64, end: i64, t: u32) -> i64 {
     start + (end - start) * t / SPAWN_RAMP as i64
 }
 
-/// Ticks until the next spawn, for a spawn at mission tick `t`.
-pub const fn spawn_interval(t: u32) -> u32 {
-    ramp(SPAWN_INTERVAL_START as i64, SPAWN_INTERVAL_END as i64, t) as u32
+/// Ticks until the next pack, for a pack at mission tick `t`.
+pub const fn pack_interval(t: u32) -> u32 {
+    ramp(PACK_INTERVAL_START as i64, PACK_INTERVAL_END as i64, t) as u32
 }
 
-/// Chance (percent) that a spawn at mission tick `t` is a Spitter.
+/// Chance (percent) of each Spitter roll for a pack at mission tick `t`.
 pub const fn spitter_pct(t: u32) -> i32 {
     ramp(SPITTER_PCT_START as i64, SPITTER_PCT_END as i64, t) as i32
 }
 
 // --- Loot (Demo Spec § Loot) -------------------------------------------------
 
-pub const SWARMER_CREDITS: u32 = 5;
-pub const SWARMER_CRYSTAL_PCT: i32 = 15;
+/// Lowered from 5 cr / 15% with packs (TAKOAI-113): a win kills ~2.5×
+/// the Swarmers, so the haul per win stays where it was (QA pilot:
+/// ~170-260 cr and 4-11 VC with the bonus).
+pub const SWARMER_CREDITS: u32 = 2;
+pub const SWARMER_CRYSTAL_PCT: i32 = 5;
 pub const SPITTER_CREDITS: u32 = 15;
 pub const SPITTER_CRYSTAL_PCT: i32 = 60;
 /// Mission success bonus. Tuned up from the spec's 50 cr + 2 VC (TAKOAI-42):

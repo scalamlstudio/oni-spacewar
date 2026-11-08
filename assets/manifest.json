@@ -6,7 +6,7 @@
       "id": "core",
       "version": "0.2.0",
       "gameplay_affecting": false,
-      "content_hash": "484dbb2793755d04864fffd3629ed6764dc4f25040f8ebebaab6dc2b176b3f75",
+      "content_hash": "f809a471873d075a68091c021bb9ad859dc0638f3c53819c337b01a474bf95ab",
       "assets": [
         {
           "id": "core.audio.music.battle",
@@ -222,6 +222,24 @@
           "processed": "packs/core/processed/battle/fx/spit.png",
           "compressed": "packs/core/bundles/battle/fx/spit.png.zst",
           "hash": "b465ae78550be4937cd853ba29da20c6f5400848c146a56fc7769933b6ef53c4",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.fx.spitter_aim_line",
+          "kind": "image/png",
+          "source": "source/core/battle/fx/spitter_aim_line.png",
+          "processed": "packs/core/processed/battle/fx/spitter_aim_line.png",
+          "compressed": "packs/core/bundles/battle/fx/spitter_aim_line.png.zst",
+          "hash": "b6c60ad118adbd4d0b806f7bc80d651ffb185525b860eee568186bd348e82cf7",
+          "gameplay_affecting": false
+        },
+        {
+          "id": "core.battle.fx.spitter_windup",
+          "kind": "image/png",
+          "source": "source/core/battle/fx/spitter_windup.png",
+          "processed": "packs/core/processed/battle/fx/spitter_windup.png",
+          "compressed": "packs/core/bundles/battle/fx/spitter_windup.png.zst",
+          "hash": "a4aa98cdf92b98f9219c45b79dde82025f4e15bb5afcd3a8883d447ae615bc98",
           "gameplay_affecting": false
         },
         {

@@ -540,10 +540,10 @@ Basic attacks fire at the nearest enemy in range (design/DESIGN.md § Player).
 | | Void Swarmer | Void Spitter |
 |---|---|---|
 | Behavior | rushes the nearest battleship | keeps 200–320 px from the nearest battleship; fires when it's within 360 px |
-| HP | 10 | 36 |
+| HP | 4 (one basic hit from any ship, TAKOAI-113) | 36 |
 | Move speed | 132 px/s | 72 px/s |
 | Radius | 10 px | 14 px |
-| Attack | contact: 5 dmg, then 1 s cooldown per swarmer | slow projectile: 8 dmg, 160 px/s, radius 5 px, 3 s life, every 2.5 s |
+| Attack | contact: 5 dmg, then 1 s cooldown per swarmer | slow projectile: 8 dmg, 160 px/s, radius 5 px, 3 s life, every 2.5 s; each shot has a 0.4 s wind-up first (it stops, glows and shows its aim line; the aim is locked when the wind-up starts, TAKOAI-113) |
 
 ### Elimination mission
 
@@ -553,7 +553,7 @@ Basic attacks fire at the nearest enemy in range (design/DESIGN.md § Player).
   procedural "magical night sky with nebula" (deep blue-violet, drifting
   magenta / teal / violet clouds, twinkling stars at 3 parallax depths), kept
   dark so ships and shots read.
-- **Kill target:** 40. The HUD shows "Kills x/40". `--autoplay` QA runs use
+- **Kill target:** 100 (40 before packs, TAKOAI-113). The HUD shows "Kills x/100". `--autoplay` QA runs use
   10 instead (shorter test battles, TAKOAI-77); `--kill-target N` overrides
   either for manual testing. Reaching the target is Success immediately: remaining enemies vanish and every pickup still on the field is
   collected.
@@ -561,8 +561,9 @@ Basic attacks fire at the nearest enemy in range (design/DESIGN.md § Player).
   Mission from the pause menu also counts as Failed.
 - **No time limit.**
 
-Spawn plan (Revision 2, TAKOAI-58: 3× the enemies, 20% faster; Revision 1,
-TAKOAI-53, replaced the 3 fixed waves):
+Spawn plan (Revision 3, TAKOAI-113: packs and one-hit Swarmers,
+design/BATTLE.md #2; Revision 2, TAKOAI-58: 3× the enemies, 20% faster;
+Revision 1, TAKOAI-53, replaced the 3 fixed waves):
 
 - **Void fissures:** 1 or 2 per mission (seeded), on a ring 900–1300 px from
   the start at seeded angles, outside the starting view (centre ≥ 130 px past
@@ -570,31 +571,37 @@ TAKOAI-53, replaced the 3 fixed waves):
   rotate (a gentle pulse only). Every off-screen fissure has its own arrow at
   the screen edge pointing at it, in the v2 fissure's rim colours
   (violet-magenta with a teal inner edge); the arrow goes while it's on screen.
-- **Spawn director:** one enemy at a time out of a random fissure, on a ring
-  60 px from its centre. First spawn 2 s in. The gap between spawns falls
-  from 1.33 s to 0.5 s and the Spitter share rises from 10% to 40%, both
-  linearly over the first 120 s, then stay. At most 36 enemies alive at once
-  (the director waits while the field is full). It keeps spawning until the
-  kill target, so the player never has to hunt the last one.
+- **Spawn director:** packs on a pulse. Each pack comes out of one random
+  fissure, spread evenly round a ring 60 px from its centre: 6–10 Swarmers
+  plus up to 2 Spitters (two rolls, each with a chance rising from 20% to
+  60%). First pack 2 s in. The gap between packs falls from 6 s to 3.5 s
+  and the Spitter chance rises, both linearly over the first 90 s, then
+  stay. At most 60 enemies alive at once (was 36): a pack that doesn't fit
+  brings only what does (Spitters first), and the director waits while the
+  field is full. It keeps spawning until the kill target, so the player
+  never has to hunt the last one.
 - **Moving enemies:** Swarmers chase the nearest battleship. Spitters close to
   their 200–320 px band, then strafe around the battleship inside it (a random
-  way round) while shooting.
+  way round) while shooting; they stop only for each shot's 0.4 s wind-up.
 - Tuned so a Kite or Bulwark with no upgrades wins in about 1–1.5 minutes
-  (52–74 s over 12 seeds with the scripted QA pilot, TAKOAI-58).
+  (60–77 s over 12 seeds per ship with the scripted QA pilot, TAKOAI-113;
+  was 52–74 s at 40 kills, TAKOAI-58).
 
 ### Loot
 
 | Source | Credits | Void Crystal | Survives failure |
 |---|---|---|---|
-| Void Swarmer | 5 (always) | 1 (15% chance) | off |
+| Void Swarmer | 2 (always) | 1 (5% chance) | off |
 | Void Spitter | 15 (always) | 1 (60% chance) | off |
 | Mission success bonus | 50 | 2 | — (success only) |
 
 - Drops are rolled with the sim's deterministic RNG.
 - Pickups are collected when a battleship comes within 32 px; within 80 px they
   drift toward it. They disappear after 20 s.
-- Expected haul from a successful run (~17 Swarmers + 3 Spitters + bonus):
-  **~180 credits, ~6 Void Crystal.** A failed run keeps nothing.
+- Expected haul from a successful run (~85 Swarmers + ~15 Spitters +
+  bonus): **~170–260 credits, ~4–11 Void Crystal** (scripted QA pilot). A
+  failed run keeps nothing. Swarmer drops went from 5 cr / 15% to 2 cr / 5%
+  with packs (TAKOAI-113) so the haul per win stays about where it was.
 - Every reward type carries a `survives_failure` flag, default off. The demo
   turns none on.
 
@@ -611,7 +618,8 @@ one successful mission buys about one upgrade.
 
 All six levels cost 1200 credits + 30 Void Crystal (~6 successful missions). A
 new game starts with 0 credits and 0 Void Crystal. Weapon Tuning 1 is the most
-visible first buy: Bulwark one-shots Swarmers, Kite needs 2 hits instead of 3.
+visible first buy: every ship already one-shots Swarmers (TAKOAI-113), so it
+shows on Spitters (Kite 9 → 8 → 6 basic hits; Bulwark 5 → 4 → 3).
 
 ### Crew dialogue
 
@@ -622,7 +630,7 @@ sleepy).
 
 | Crew | Lines (expression) |
 |---|---|
-| **Pilot** (main character) — briefing at a berth | "Elimination run. Void monsters are nesting in the next segment." (serious) · "Forty kills clears it. They keep pouring out of void fissures." (normal) · "Grab whatever they drop — the Workshop runs on it." (excited) |
+| **Pilot** (main character) — briefing at a berth | "Elimination run. Void monsters are nesting in the next segment." (serious) · "A hundred kills clears it. They pour out of void fissures in packs." (normal) · "Grab whatever they drop — the Workshop runs on it." (excited) |
 | **Gunner** — Command Console | "Swarmers rush you. Keep moving and let the guns work." (serious) · "Spitters hang back. Their shots are slow — sidestep them." (normal) · Reaction — success: "Clean shooting out there." (happy) / failed: "We lost the hull, not the crew. Again." (angry) |
 | **Researcher** — Sample Analyzer | "Void Crystal hums when you hold it. I'd love a proper lab." (excited) · "Kite or Bulwark? Speed or armor — both are valid." (confused) · Reaction — success: "Fascinating samples! Well, crystals." (happy) / failed: "We'll learn from it… next time." (sad) |
 | **Engineer** — Upgrade Bench | "Bring me credits and crystals and I'll make her sing." (happy) · "Plating, weapons, thrusters — pick one." (normal) · Reaction — success: "Haul's in. Let's upgrade." (excited) / failed: "Nothing came back with you. Not even scrap." (sleepy) |

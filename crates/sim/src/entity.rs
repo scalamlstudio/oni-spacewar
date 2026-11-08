@@ -252,11 +252,16 @@ pub struct Enemy {
     pub kind: EnemyKind,
     pub pos: FxVec2,
     pub hp: i32,
-    /// Ticks until it can attack again (contact or shot).
+    /// Ticks until it can attack again (contact, or a Spitter's next wind-up).
     pub cooldown: u32,
     /// Spitter strafing direction around its target: 1 counter-clockwise,
     /// -1 clockwise. Picked at spawn.
     pub orbit: i32,
+    /// Spitter wind-up: ticks left before it fires (0 = not winding up).
+    /// It holds still meanwhile; the client draws the glow and aim line.
+    pub windup: u32,
+    /// The shot's velocity (sub-px/tick), locked when the wind-up starts.
+    pub aim: FxVec2,
 }
 
 impl Enemy {
@@ -271,6 +276,8 @@ impl Enemy {
                 EnemyKind::Spitter => SPITTER_FIRST_SHOT,
             },
             orbit: 1,
+            windup: 0,
+            aim: FxVec2::ZERO,
         }
     }
 }

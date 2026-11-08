@@ -210,7 +210,7 @@ const BRIEFING: [Line; 3] = [
     line(
         Crew::Pilot,
         "normal",
-        "Forty kills clears it. They keep pouring out of void fissures.",
+        "A hundred kills clears it. They pour out of void fissures in packs.",
     ),
     line(
         Crew::Pilot,
