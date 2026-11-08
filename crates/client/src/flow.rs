@@ -2127,10 +2127,9 @@ mod tests {
     /// Demo Spec § Workshop upgrades: one successful mission buys about one
     /// upgrade. Checked on the autoplay pilot's won runs with both
     /// battleships. The autopilot is no player: it flies at the nearest
-    /// enemy, so it wakes every dormant group of the scattered start
-    /// (TAKOAI-130) and loses some 100-kill runs (over 40 seeds before the
-    /// scattered start: Kite 35, Bulwark 36 won; after: 37 and 28). Most of
-    /// these runs must still be won.
+    /// enemy, so it wakes dormant groups of the scattered start
+    /// (TAKOAI-130) and can lose some runs. Check the payout on wins and
+    /// require a majority of this fixed seed set to remain winnable.
     #[test]
     fn one_successful_mission_buys_an_upgrade() {
         for ship in [mission::KITE_ID, mission::BULWARK_ID] {

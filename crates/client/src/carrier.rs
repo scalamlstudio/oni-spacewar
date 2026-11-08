@@ -1153,7 +1153,7 @@ pub struct DockedShip {
     pub half: Vec2,
 }
 
-/// A berth's "Next: Elimination" line; it also reads "Selected" for the
+/// A berth's ship-inspection label; it also reads "Selected" for the
 /// ship the save will launch.
 #[derive(Component)]
 struct DockNext {
@@ -3153,9 +3153,9 @@ fn show_selected_ship(
     for (mut text, berth) in &mut next {
         let name = SHIPS[berth.ship].name;
         let value = if berth.ship == selected {
-            format!("{name} - Selected - Next: Elimination")
+            format!("{name} - Selected - Inspect ship")
         } else {
-            format!("{name} - Next: Elimination")
+            format!("{name} - Inspect ship")
         };
         if text.0 != value {
             text.0 = value;
@@ -3505,7 +3505,7 @@ fn sync_overlay(
                     ));
                     p.spawn((
                         Text::new(
-                            "Customization: coming with ship modules. \
+                            "Component refitting is not available yet. \
                              Launch missions from the Command Console on the Bridge.",
                         ),
                         font(14.0, Color::srgb(0.7, 0.76, 0.8)),
