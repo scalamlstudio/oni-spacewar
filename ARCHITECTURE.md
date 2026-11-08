@@ -55,7 +55,7 @@ crates/
     src/workshop.rs     Workshop rules: upgrade costs / levels / buy(), and Build mode's wallet side: build_room / build_item (pay up front) / remove_room / remove_item (full refund)
     src/save.rs         versioned JSON save data in the OS data directory (override: ONI_SAVE_DIR) + migration
     src/settings.rs     player settings (settings.json beside the save, not in it), the Settings screen and gear button, carrier floor / wall colour presets + contrast check, CarrierPalette (recoloured tile images)
-    src/codex.rs        the Codex (from Settings): content browser built from `core.codex` (assets/source/core/codex.json) — category tabs, scrolling thumbnail grid, detail panel; stats read from the catalogue / sim tuning; `discovered` hook
+    src/codex.rs        the Codex (from the Sample Analyzer station, or Settings): content browser built from `core.codex` (assets/source/core/codex.json) — category tabs, scrolling thumbnail grid, detail panel; stats read from the catalogue / sim tuning; `discovered` hook
     src/mission.rs      typed client mission config/result handoff into `sim::SimState`; reward rules (survives_failure)
     src/rollback.rs     SimWorld resource, rollback/checksum registration, GgrsSchedule (+ hands each step's events to fx::BattleEvents)
     src/fx.rs           battle hit / kill feedback from sim events: BattleEvents (dedupe by frame + key), hit flash, Art's spark / burst / impact strips and the role death / Bloater explosion key poses, damage numbers, screen shake, render-only hit-stop
@@ -474,9 +474,12 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   frame time is fine) and saves when a site finishes.
   **Scene:** `hotspots` gives the crew at their posts (`Carrier::crew_post`,
   recomputed after every edit, so crew follow their station) and every
-  finished station's use point: the Upgrade Bench (Workshop upgrades) and
+  finished station's use point: the Upgrade Bench (Workshop upgrades), the
+  Sample Analyzer (the Codex, `Hotspot::SampleAnalyzer`, TAKOAI-129) and
   one per berth (`Hotspot::Berth(ship)`, from the berth's `ship`). The
-  Command Console and Sample Analyzer are posts only in the demo. The Pilot
+  Command Console is a post only in the demo. `use_hotspot` is what E or
+  an arrived click does: `interact_with` for the Carrier's panels, and the
+  Sample Analyzer opens the Codex (`CodexScreen::open_from_station`). The Pilot
   spawns at the Command Console's use point, or after a mission at the
   launched ship's berth (`spawn_point`). **Walking** is unchanged from
   Revision 1 (TAKOAI-60/87), now over the tile rectangles: `find_path`
@@ -663,7 +666,10 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   one, quit to the Title, reload the save from disk and Continue (a restart
   inside the same process), then quit (saving). `--abandon` quits the last mission from the pause menu 20 s in;
   `--shots` saves a screenshot of every scene (including the Settings
-  screen over the first Title and over the last Carrier visit, and the
+  screen over the first Title and over the last Carrier visit, then on that
+  visit the Pilot click-to-moves to the Sample Analyzer: the Codex it opens
+  (`92-carrier-codex-station`) and the Carrier after closing it
+  (`92b-carrier-codex-closed`); the
   pause menu over that visit and, with `--abandon`, over the last battle,
   each also at `flow::SMALL_WINDOW`: `flow::pause_shots`). Use a scratch `ONI_SAVE_DIR`.
   The acceptance loop is `--missions 2` followed by `--continue --missions 0`.
@@ -705,11 +711,16 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   (`hull_tiles_recolour_their_floor_and_shell_apart`). A change rewrites those images in
   place (`apply_palette`), so the deck updates live without a redraw.
   Stations, scaffold, marker and characters keep their art.
-- **Codex** (`codex.rs`, TAKOAI-100): Settings › Open Codex opens a
-  full-screen view on top (`CodexScreen`, `GlobalZIndex` above the panel,
-  `FocusPolicy::Block`); Esc / Back returns to Settings (`codex_keys` runs
-  before `settings_keys` and uses the Esc up), and closing Settings closes
-  it. Its content is data, not UI code: the shipped `core.codex` JSON
+- **Codex** (`codex.rs`, TAKOAI-100): a full-screen view (`CodexScreen`,
+  `GlobalZIndex` above the Settings panel, `FocusPolicy::Block`) with two
+  ways in. The Sample Analyzer on the Carrier (TAKOAI-129, prompt
+  "[Click / E] Codex") opens it over the deck: `open_from_station` holds
+  the Carrier's pause itself (`PauseMenu::hold`; the pause menu stays
+  hidden and its hotkeys inert while the Codex is open), and Esc / Close
+  (`CodexScreen::leave`) releases it, back on the Carrier. Settings › Open
+  Codex opens it over Settings, and Esc / Close returns there; closing
+  Settings closes it. `codex_keys` runs before `settings_keys` and
+  `toggle_pause_menu` and uses the Esc up. Its content is data, not UI code: the shipped `core.codex` JSON
   (`assets/source/core/codex.json`) declares the tabs (`categories`, in
   order) and the entries (`id`, `category`, `image` content ID, `name`,
   `description`, `placeholder`). `CodexData::sections` groups entries into

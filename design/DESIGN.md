@@ -283,7 +283,9 @@ what makes it a bunk room or a lab is what the player puts in it.
 - **Stations** keep every function the demo has. The Command Console
   (where the Pilot starts), the Upgrade Bench (Workshop upgrades), one
   Berth per battleship (board, briefing, launch) and the Sample Analyzer
-  (the Researcher's post) are in the starting carrier: they can be moved
+  (the Researcher's post; using it opens the Codex, which closes back to
+  the Carrier; Settings › Codex stays a second way in) are in the starting
+  carrier: they can be moved
   but not removed. The Salvage Sorter and the Combat Simulator are bought
   once and carry the old Salvage Bay and Training Room effects.
 - **Furniture and decor** are cosmetic in the demo: beds, lockers, tables,

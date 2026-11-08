@@ -152,6 +152,9 @@ pub struct Autoplay {
     pub build_plan: (bool, bool),
     /// When (scene seconds) the Pilot boarded the ship this Carrier visit.
     pub boarded: Option<f32>,
+    /// When (scene seconds) the Codex opened from the Sample Analyzer on
+    /// the last Carrier visit.
+    pub codex_station: Option<f32>,
     /// Already quit to the Title and Continued from the reloaded save.
     pub reloaded: bool,
     /// Role telegraphs already shot this run (bit per `role_shot` index).
@@ -958,8 +961,9 @@ fn apply_pause_actions(
     mut next: ResMut<NextState<GameScreen>>,
     mut exit: MessageWriter<AppExit>,
     mut settings: ResMut<SettingsScreen>,
+    codex: Res<CodexScreen>,
 ) {
-    if !pause.open || settings.open {
+    if !pause.open || settings.open || codex.open {
         return;
     }
     if keys.just_pressed(KeyCode::KeyS)
@@ -1000,6 +1004,7 @@ fn sync_pause_menu(
     state: Res<State<GameScreen>>,
     mut pause: ResMut<PauseMenu>,
     settings: Res<SettingsScreen>,
+    codex: Res<CodexScreen>,
     entities: Query<Entity, With<PauseEntity>>,
 ) {
     if !pause.dirty {
@@ -1009,8 +1014,9 @@ fn sync_pause_menu(
     for entity in &entities {
         commands.entity(entity).despawn();
     }
-    // The Settings screen holds the pause without showing the menu.
-    if !pause.open || settings.open {
+    // The Settings screen, or the Codex opened from the Sample Analyzer,
+    // holds the pause without showing the menu.
+    if !pause.open || settings.open || codex.open {
         return;
     }
     let in_battle = *state.get() == GameScreen::Battle;
@@ -1433,8 +1439,57 @@ fn autoplay_flow(
                         settings_screen.close(&mut pause);
                         pause.hold(false);
                     }
+                    // Then click the Sample Analyzer (TAKOAI-129): the
+                    // Pilot walks there and its use opens the Codex over
+                    // the deck; closing it is back on the Carrier.
+                    if at(5.0) {
+                        autoplay.codex_station = None;
+                        let order = pilot.single().ok().and_then(|(tf, _)| {
+                            carrier::order_walk(
+                                &scene.walkable,
+                                &scene.hotspots,
+                                carrier::grid(tf.translation.truncate()),
+                                Vec2::ZERO,
+                                Some(Hotspot::SampleAnalyzer),
+                            )
+                        });
+                        match order {
+                            Some(o) => *walk = o,
+                            None => println!("autoplay: WARNING no path to the Sample Analyzer"),
+                        }
+                    }
+                    if *since >= 5.0 && autoplay.codex_station.is_none() {
+                        if codex.open {
+                            println!("autoplay: codex opened from the Sample Analyzer");
+                            autoplay.codex_station = Some(*since);
+                        } else if *since >= 25.0 {
+                            println!("autoplay: WARNING walk to the Sample Analyzer timed out");
+                            autoplay.codex_station = Some(*since);
+                        }
+                    }
                 }
-                let quit_at = if autoplay.reloaded { 5.1 } else { 2.5 };
+                let quit_at = if autoplay.reloaded {
+                    let Some(opened) = autoplay.codex_station else {
+                        return;
+                    };
+                    let after = |t: f32| before < opened + t && *since >= opened + t;
+                    if after(0.5) {
+                        autoplay.shoot(&mut commands, "92-carrier-codex-station");
+                    }
+                    if after(0.8) {
+                        codex.leave(&mut pause);
+                    }
+                    if after(1.1) {
+                        println!(
+                            "autoplay: codex closed: codex {} pause {} settings {}",
+                            codex.open, pause.open, settings_screen.open
+                        );
+                        autoplay.shoot(&mut commands, "92b-carrier-codex-closed");
+                    }
+                    opened + 1.4
+                } else {
+                    2.5
+                };
                 if at(quit_at) {
                     save.store();
                     if autoplay.reloaded {
@@ -2062,6 +2117,7 @@ mod tests {
             let mut world = World::new();
             world.insert_resource(State::new(screen));
             world.insert_resource(SettingsScreen::default());
+            world.insert_resource(CodexScreen::default());
             world.insert_resource(PauseMenu {
                 open: true,
                 dirty: true,
