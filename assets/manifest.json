@@ -6,7 +6,7 @@
       "id": "core",
       "version": "0.2.0",
       "gameplay_affecting": false,
-      "content_hash": "27be444238af8f46e105a0bd8f1cd7881bba8c27a51d324087edd14b5250bcdd",
+      "content_hash": "8c03179e93fae87c78c0ddc6467678c41ff7c82ff9d569a5f2da9c745fbcfc55",
       "assets": [
         {
           "id": "core.audio.music.battle",
@@ -887,7 +887,7 @@
           "source": "source/core/carrier/pilot/e/walk_1.png",
           "processed": "packs/core/processed/carrier/pilot/e/walk_1.png",
           "compressed": "packs/core/bundles/carrier/pilot/e/walk_1.png.zst",
-          "hash": "72e20f43b6030991e5f0adf35138128a92a92076fea582edbbd5de5720d0b3b0",
+          "hash": "86198998fa9b0b1d90081515e9927ec3881707e7456360f32f8c7eb86238ecb1",
           "gameplay_affecting": false
         },
         {
@@ -896,7 +896,7 @@
           "source": "source/core/carrier/pilot/e/walk_2.png",
           "processed": "packs/core/processed/carrier/pilot/e/walk_2.png",
           "compressed": "packs/core/bundles/carrier/pilot/e/walk_2.png.zst",
-          "hash": "d585f38bc32e9f5f949a1a61da9005787924bd0b34c592b298e585b26d70b2a8",
+          "hash": "71865540f207d6d1301a91d8b863c2259b8e7af52bb918e06bc049ce9d23b4bf",
           "gameplay_affecting": false
         },
         {
@@ -905,7 +905,7 @@
           "source": "source/core/carrier/pilot/e/walk_3.png",
           "processed": "packs/core/processed/carrier/pilot/e/walk_3.png",
           "compressed": "packs/core/bundles/carrier/pilot/e/walk_3.png.zst",
-          "hash": "5b15bd5d8a93a30a79d1a1baa81a09d59140064f002a236751be3820cc3fff87",
+          "hash": "59eca94bd57a8e952bda0c73ea091d9ec3b75a4341f27746164d3057493d1172",
           "gameplay_affecting": false
         },
         {
@@ -914,7 +914,7 @@
           "source": "source/core/carrier/pilot/e/walk_4.png",
           "processed": "packs/core/processed/carrier/pilot/e/walk_4.png",
           "compressed": "packs/core/bundles/carrier/pilot/e/walk_4.png.zst",
-          "hash": "bdecd9e7e736568feef13330759dea28765dcf1475315aaac47b060f5f77f925",
+          "hash": "e9ed03a2c87985714970e3d3dd17a6a3cca9c5aea6734aa038110b3e76a686fe",
           "gameplay_affecting": false
         },
         {

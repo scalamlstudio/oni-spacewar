@@ -57,6 +57,9 @@ const CAMERA_MARGIN: f32 = 2.0 * TILE;
 pub const CHARACTER_H: f32 = 56.0;
 /// Pilot walk cycle: a new frame every this many px walked.
 const STRIDE: f32 = 12.0;
+/// The authored side walk alternates planted/passing legs over a full
+/// 96 px stride (0.6 s at normal speed), rather than a rapid shuffle.
+const SIDE_STRIDE: f32 = 24.0;
 /// Walk-cycle frames after the idle one, per drawn direction.
 const PILOT_WALK: [&str; 4] = ["walk_1", "walk_2", "walk_3", "walk_4"];
 /// Rooms under construction wear this tileable overlay; station front
@@ -3168,7 +3171,8 @@ fn show_selected_ship(
 fn pilot_frame(facing: Facing, moving: bool, walked: f32) -> (String, bool) {
     let (dir, flip) = facing.art();
     let frame = if moving {
-        PILOT_WALK[(walked / STRIDE) as usize % PILOT_WALK.len()]
+        let stride = if dir == "e" { SIDE_STRIDE } else { STRIDE };
+        PILOT_WALK[(walked / stride) as usize % PILOT_WALK.len()]
     } else {
         "idle"
     };
@@ -4151,6 +4155,20 @@ mod tests {
         assert_eq!(frame(true, 0.0), "core.carrier.pilot.s.walk_1");
         assert_eq!(frame(true, STRIDE * 2.5), "core.carrier.pilot.s.walk_3");
         assert_eq!(frame(true, STRIDE * 5.0), "core.carrier.pilot.s.walk_2");
+    }
+
+    #[test]
+    fn sideways_stride_alternates_four_phases_and_mirrors_west() {
+        for phase in 0..8 {
+            let walked = SIDE_STRIDE * (phase as f32 + 0.5);
+            let id = format!("core.carrier.pilot.e.walk_{}", phase % 4 + 1);
+            assert_eq!(pilot_frame(Facing::E, true, walked), (id.clone(), false));
+            assert_eq!(pilot_frame(Facing::W, true, walked), (id, true));
+        }
+        assert_eq!(
+            pilot_frame(Facing::W, false, 100.0),
+            ("core.carrier.pilot.e.idle".into(), true)
+        );
     }
 
     #[test]
