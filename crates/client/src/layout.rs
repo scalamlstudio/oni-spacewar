@@ -848,7 +848,7 @@ pub const CATALOGUE: [ItemDef; 25] = [
         AgainstWall,
         Count::Exactly1,
         FREE,
-        "The Researcher's post",
+        "The Researcher's post. Use it to open the Codex",
     ),
     station(
         ItemId::SalvageSorter,

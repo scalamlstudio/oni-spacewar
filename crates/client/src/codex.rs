@@ -1,6 +1,12 @@
-//! The Codex (TAKOAI-100): a full-screen view, opened from the Settings
-//! screen, to browse every piece of game content with its image, name and
-//! description.
+//! The Codex (TAKOAI-100): a full-screen view to browse every piece of
+//! game content with its image, name and description.
+//!
+//! **Entries.** On the Carrier, the Sample Analyzer (the Researcher's post)
+//! is the Codex station (TAKOAI-129): using it (E or click,
+//! `carrier::Hotspot::SampleAnalyzer`) opens the Codex straight over the
+//! deck, holding the Carrier's pause, and closing it returns to the
+//! Carrier. The Settings screen's Codex section is a second way in, and
+//! closing from there returns to Settings.
 //!
 //! **Data-driven.** The entries come from one content asset, `core.codex`
 //! (`assets/source/core/codex.json`, shipped through the manifest like any
@@ -21,7 +27,7 @@
 //!
 //! Controls: click a tab or a thumbnail; mouse wheel scrolls the grid;
 //! arrow keys move the selection, Tab / Shift+Tab switch category, Esc or
-//! Close returns to Settings.
+//! Close returns to where it was opened from.
 
 use bevy::input::mouse::AccumulatedMouseScroll;
 use bevy::prelude::*;
@@ -29,6 +35,7 @@ use bevy::ui::FocusPolicy;
 use serde::Deserialize;
 
 use crate::art::ContentImages;
+use crate::flow::PauseMenu;
 use crate::layout::{Category, CATALOGUE};
 use crate::settings::{self, text, SettingsScreen, BUTTON_BG, MUTED, PANEL_BG, PANEL_BORDER, TEXT};
 
@@ -211,15 +218,36 @@ pub struct CodexScreen {
     dirty: Dirty,
     /// Keep the selection scrolled into view (keyboard moves).
     reveal: bool,
+    /// Opened from the Sample Analyzer: it holds the Carrier's pause itself
+    /// and closes back to the Carrier.
+    from_station: bool,
     data: Option<CodexData>,
 }
 
 impl CodexScreen {
+    /// Opens over the Settings screen, which holds the pause.
     pub fn open(&mut self) {
         self.open = true;
+        self.from_station = false;
         self.tab = 0;
         self.selected = 0;
         self.dirty = Dirty::All;
+    }
+
+    /// Opens from the Sample Analyzer, pausing the Carrier until closed.
+    pub fn open_from_station(&mut self, pause: &mut PauseMenu) {
+        self.open();
+        self.from_station = true;
+        pause.hold(true);
+    }
+
+    /// Closes back to where it was opened from: Settings, or the Carrier
+    /// (released from the pause) when opened from the station.
+    pub fn leave(&mut self, pause: &mut PauseMenu) {
+        if self.open && self.from_station {
+            pause.hold(false);
+        }
+        self.close();
     }
 
     /// Opens on `tab` with its `entry` selected (the autoplay's shots).
@@ -233,6 +261,7 @@ impl CodexScreen {
     pub fn close(&mut self) {
         if self.open {
             self.open = false;
+            self.from_station = false;
             self.dirty = Dirty::All;
         }
     }
@@ -291,14 +320,19 @@ impl Plugin for CodexPlugin {
     }
 }
 
-/// Esc closes the Codex back to Settings (and is used up); arrows move the
-/// selection; Tab / Shift+Tab switch category.
-fn codex_keys(mut keys: ResMut<ButtonInput<KeyCode>>, mut codex: ResMut<CodexScreen>) {
+/// Esc closes the Codex back to where it was opened from (and is used up,
+/// so it doesn't also pause or unpause); arrows move the selection; Tab /
+/// Shift+Tab switch category.
+fn codex_keys(
+    mut keys: ResMut<ButtonInput<KeyCode>>,
+    mut codex: ResMut<CodexScreen>,
+    mut pause: ResMut<PauseMenu>,
+) {
     if !codex.open {
         return;
     }
     if keys.just_pressed(KeyCode::Escape) {
-        codex.close();
+        codex.leave(&mut pause);
         keys.clear_just_pressed(KeyCode::Escape);
         return;
     }
@@ -337,10 +371,11 @@ fn codex_keys(mut keys: ResMut<ButtonInput<KeyCode>>, mut codex: ResMut<CodexScr
 fn codex_clicks(
     clicks: Query<(&Interaction, &CodexClick), Changed<Interaction>>,
     mut codex: ResMut<CodexScreen>,
+    mut pause: ResMut<PauseMenu>,
 ) {
     for (_, click) in clicks.iter().filter(|(i, _)| **i == Interaction::Pressed) {
         match *click {
-            CodexClick::Close => codex.close(),
+            CodexClick::Close => codex.leave(&mut pause),
             CodexClick::Tab(i) if i != codex.tab => {
                 codex.tab = i;
                 codex.selected = 0;
@@ -355,8 +390,8 @@ fn codex_clicks(
     }
 }
 
-/// The wheel scrolls the grid (the Settings screen holds the Carrier's
-/// pause, so the wheel doesn't also zoom the deck).
+/// The wheel scrolls the grid (the Codex, or the Settings screen under it,
+/// holds the Carrier's pause, so the wheel doesn't also zoom the deck).
 fn codex_wheel(
     scroll: Res<AccumulatedMouseScroll>,
     codex: Res<CodexScreen>,
@@ -413,14 +448,21 @@ fn sync_codex(
     mut commands: Commands,
     mut codex: ResMut<CodexScreen>,
     settings_screen: Res<SettingsScreen>,
+    pause: Res<PauseMenu>,
     mut art: ResMut<ContentImages>,
     mut images: ResMut<Assets<Image>>,
     entities: Query<Entity, With<CodexEntity>>,
     detail: Query<Entity, With<CodexDetail>>,
     mut cells: Query<(&CodexClick, &mut BorderColor)>,
 ) {
-    // Closing Settings (or leaving the screen) closes the Codex too.
-    if codex.open && !settings_screen.open {
+    // Closing Settings, or losing the pause it holds when opened from the
+    // station (leaving the screen), closes the Codex too.
+    let held = if codex.from_station {
+        pause.open
+    } else {
+        settings_screen.open
+    };
+    if codex.open && !held {
         codex.close();
     }
     let dirty = std::mem::take(&mut codex.dirty);
@@ -456,8 +498,14 @@ fn sync_codex(
         commands.entity(entity).despawn();
     }
     if codex.open {
+        let back = if codex.from_station {
+            "[Esc] Back to Carrier"
+        } else {
+            "[Esc] Back to Settings"
+        };
         spawn_codex(
             &mut commands,
+            back,
             &sections,
             codex.tab,
             codex.selected,
@@ -481,6 +529,7 @@ fn load(art: &mut ContentImages) -> CodexData {
 
 fn spawn_codex(
     commands: &mut Commands,
+    back: &str,
     sections: &[Section],
     tab: usize,
     selected: usize,
@@ -518,7 +567,7 @@ fn spawn_codex(
                     13.0,
                     MUTED,
                 ));
-                button(row, CodexClick::Close, "[Esc] Back to Settings", false);
+                button(row, CodexClick::Close, back, false);
             });
             // Category tabs.
             p.spawn(Node {

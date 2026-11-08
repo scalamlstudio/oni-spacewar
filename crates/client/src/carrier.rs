@@ -23,6 +23,7 @@ use sim::tuning::{
 use sim::{Loadout, ShipKind, ShipSheet, Upgrades};
 
 use crate::art::{self, icon_node, ContentImages};
+use crate::codex::CodexScreen;
 use crate::flow::{self, GameScreen, PauseMenu, SaveSlot, ScreenEntity};
 use crate::input::{self, MovePress};
 use crate::layout::{
@@ -446,6 +447,8 @@ pub enum Hotspot {
     Crew(Crew),
     /// The Upgrade Bench: the Workshop upgrades.
     UpgradeBench,
+    /// The Sample Analyzer: the Codex station (TAKOAI-129).
+    SampleAnalyzer,
     /// The battleship on the berth holding `SHIPS[n]`.
     Berth(usize),
 }
@@ -455,6 +458,7 @@ impl Hotspot {
         match self {
             Hotspot::Crew(_) => "Talk".into(),
             Hotspot::UpgradeBench => "Use".into(),
+            Hotspot::SampleAnalyzer => "Codex".into(),
             Hotspot::Berth(i) => format!("Board {}", SHIPS[i].name),
         }
     }
@@ -508,7 +512,7 @@ const POSTED: [(Crew, layout::Crew); 3] = [
 /// Every interactable thing on the carrier and where (grid px): each crew
 /// member's feet at their post (the post tile's centre), and the use point
 /// of every finished station that does something in the demo, the Upgrade
-/// Bench and each berth with its ship. Recomputed after every edit, so
+/// Bench, the Sample Analyzer and each berth with its ship. Recomputed after every edit, so
 /// crew follow their station when it moves.
 pub fn hotspots(carrier: &Carrier) -> Vec<(Hotspot, Vec2)> {
     let mut out: Vec<(Hotspot, Vec2)> = POSTED
@@ -530,6 +534,7 @@ pub fn hotspots(carrier: &Carrier) -> Vec<(Hotspot, Vec2)> {
 fn station_hotspot(item: &Item) -> Option<Hotspot> {
     match item.id {
         ItemId::UpgradeBench => Some(Hotspot::UpgradeBench),
+        ItemId::SampleAnalyzer => Some(Hotspot::SampleAnalyzer),
         ItemId::Berth => Some(Hotspot::Berth(ship_index(item.ship.as_deref()?))),
         _ => None,
     }
@@ -2037,7 +2042,8 @@ fn carrier_input(
     keys: Res<ButtonInput<KeyCode>>,
     clicks: Query<(&Interaction, &Click), Changed<Interaction>>,
     time: Res<Time>,
-    pause: Res<PauseMenu>,
+    mut pause: ResMut<PauseMenu>,
+    mut codex: ResMut<CodexScreen>,
     scene: Res<CarrierScene>,
     mut view: ResMut<CarrierView>,
     mut save: ResMut<SaveSlot>,
@@ -2104,9 +2110,7 @@ fn carrier_input(
                             .find(|(x, at)| *x == h && at.distance(feet) <= INTERACT_RANGE)
                     });
                     if let Some(&(hotspot, _)) = target {
-                        let mut o = Overlay::None;
-                        interact_with(hotspot, save.game.as_mut(), &mut o);
-                        next = Some(o);
+                        next = Some(use_hotspot(hotspot, &mut save, &mut codex, &mut pause));
                     }
                     *order = WalkOrder::default();
                 }
@@ -2116,9 +2120,7 @@ fn carrier_input(
             if interact {
                 *order = WalkOrder::default();
                 if let Some((hotspot, _)) = nearest_hotspot(&scene.hotspots, feet) {
-                    let mut o = Overlay::None;
-                    interact_with(hotspot, save.game.as_mut(), &mut o);
-                    next = Some(o);
+                    next = Some(use_hotspot(hotspot, &mut save, &mut codex, &mut pause));
                 }
             } else if build_key || clicked == Some(Click::Build) {
                 // Build mode from anywhere aboard; the Pilot stops.
@@ -2407,9 +2409,27 @@ fn build_click(
     *message = out.message;
 }
 
+/// Using `hotspot` from the deck: [`interact_with`] for the Carrier's own
+/// panels, and the Sample Analyzer opens the full-screen Codex (no panel),
+/// which pauses the Carrier until it is closed.
+fn use_hotspot(
+    hotspot: Hotspot,
+    save: &mut SaveSlot,
+    codex: &mut CodexScreen,
+    pause: &mut PauseMenu,
+) -> Overlay {
+    let mut o = Overlay::None;
+    interact_with(hotspot, save.game.as_mut(), &mut o);
+    if hotspot == Hotspot::SampleAnalyzer {
+        codex.open_from_station(pause);
+    }
+    o
+}
+
 /// Using `hotspot`: talk to crew, open the Workshop upgrades at the Upgrade
 /// Bench, or board a docked battleship, which selects it and starts the
-/// briefing before launch.
+/// briefing before launch. The Sample Analyzer opens no panel here: the
+/// Codex is its own screen ([`use_hotspot`]).
 pub fn interact_with(hotspot: Hotspot, game: Option<&mut SaveGame>, overlay: &mut Overlay) {
     let last = game.as_ref().map(|g| g.last_result).unwrap_or_default();
     *overlay = match hotspot {
@@ -2429,6 +2449,7 @@ pub fn interact_with(hotspot: Hotspot, game: Option<&mut SaveGame>, overlay: &mu
             }
         }
         Hotspot::UpgradeBench => Overlay::workshop(0, String::new()),
+        Hotspot::SampleAnalyzer => Overlay::None,
     };
 }
 
@@ -3156,7 +3177,7 @@ fn update_prompt(
             // feet (the station fills the space above its use point).
             let pos = match hotspot {
                 Hotspot::Crew(_) => world(at) + Vec2::Y * (CHARACTER_H + 28.0),
-                Hotspot::Berth(_) | Hotspot::UpgradeBench => {
+                Hotspot::Berth(_) | Hotspot::UpgradeBench | Hotspot::SampleAnalyzer => {
                     pilot.translation.truncate() - Vec2::Y * 16.0
                 }
             };
@@ -4029,7 +4050,11 @@ mod tests {
             at(&spots, Hotspot::Berth(1)),
             Some(Vec2::new(10.0 * TILE, 12.0 * TILE + 24.0))
         );
-        assert_eq!(spots.len(), 6);
+        assert_eq!(
+            at(&spots, Hotspot::SampleAnalyzer),
+            Some(Vec2::new(18.0 * TILE, 2.0 * TILE + 24.0))
+        );
+        assert_eq!(spots.len(), 7);
         // Somewhere the Pilot can stand reaches each with E.
         for &(h, p) in &spots {
             let reachable = (-7..=7).any(|i| {
@@ -4054,6 +4079,37 @@ mod tests {
         let bench = moved.find(ItemId::UpgradeBench).unwrap();
         moved.items[bench].build_left_ms = Some(100);
         assert_eq!(at(&hotspots(&moved), Hotspot::UpgradeBench), None);
+    }
+
+    /// E at the Sample Analyzer opens the Codex over the deck, pausing the
+    /// Carrier with no pause menu or panel; closing it goes back to the
+    /// Carrier, not to Settings (TAKOAI-129).
+    #[test]
+    fn the_sample_analyzer_opens_the_codex() {
+        let (_, _, spots) = starting();
+        let at = spots
+            .iter()
+            .find(|s| s.0 == Hotspot::SampleAnalyzer)
+            .unwrap()
+            .1;
+        assert_eq!(
+            nearest_hotspot(&spots, at).map(|h| h.0),
+            Some(Hotspot::SampleAnalyzer)
+        );
+        assert_eq!(Hotspot::SampleAnalyzer.verb(), "Codex");
+        let mut save = SaveSlot::scratch("codex-station", SaveGame::default());
+        let mut codex = CodexScreen::default();
+        let mut pause = PauseMenu::default();
+        let overlay = use_hotspot(Hotspot::SampleAnalyzer, &mut save, &mut codex, &mut pause);
+        assert_eq!(overlay, Overlay::None);
+        assert!(codex.open && pause.open);
+        codex.leave(&mut pause);
+        assert!(!codex.open && !pause.open);
+        // From Settings, closing leaves the pause to the Settings screen.
+        codex.open();
+        pause.hold(true);
+        codex.leave(&mut pause);
+        assert!(!codex.open && pause.open);
     }
 
     #[test]
@@ -4105,6 +4161,11 @@ mod tests {
         assert_eq!(
             clicked_hotspot(&spots, &c, tile_centre((10, 10))),
             Some(Hotspot::Berth(1))
+        );
+        // The Sample Analyzer, the Codex station.
+        assert_eq!(
+            clicked_hotspot(&spots, &c, tile_centre((17, 1))),
+            Some(Hotspot::SampleAnalyzer)
         );
         // A station with nothing to use yet, and bare floor.
         assert_eq!(clicked_hotspot(&spots, &c, tile_centre((3, 1))), None);
@@ -4600,7 +4661,7 @@ mod tests {
         world.run_system_once(sync_layout).unwrap();
 
         let scene = world.resource::<CarrierScene>();
-        assert_eq!(scene.hotspots.len(), 6);
+        assert_eq!(scene.hotspots.len(), 7);
         assert!(!scene.walkable.is_empty());
         let items = Carrier::starting().items.len();
         let mut sprites = world.query::<(&ItemSprite, &Sprite)>();
