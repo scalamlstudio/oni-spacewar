@@ -12,6 +12,14 @@ tool), using that facing's previous idle frame on white at 4× as the
 character and style reference. The exact prompt is saved beside it as
 `pilot-walk-<dir>-prompt.txt`. W, SW and NW mirror E, SE and NE in the client.
 
+Arms follow the walk (TAKOAI-130 review): only one hand is forward at a
+time, opposite to the leg on its side, and hands stay at or below belly
+height. In the E side view the far arm is hidden behind the body and not
+drawn. The SE sheet was regenerated with two references, the SE idle frame
+and the previous SE sheet (`pilot-walk-se.png` at commit `de1673a`), to keep
+its alternating leg poses while redrawing the arms; regenerating it from
+text alone repeatedly gave the same foot forward in both contact frames.
+
 `pilot_walk_import` keys out the magenta, cuts the five drawings at the empty
 columns between them, and scales the whole sheet once so idle is 150 px tall.
 It places each frame on the 165×192 canvas with its feet on row 181 and its

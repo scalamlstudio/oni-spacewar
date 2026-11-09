@@ -81,6 +81,10 @@ step.
 - **Keep the proportions.** New poses keep the character's established head,
   body and leg ratio. Walk cycles alternate: each leg takes its turn in front
   in every facing, diagonals included.
+- **Arms counter the legs.** Only one hand is forward at a time, opposite
+  to the leg on its side, and hands stay at or below belly height. On a
+  round body seen from the side, the far arm is hidden behind the body and
+  is not drawn.
 - **Keep the source.** Commit the generated or painted sheet and its exact
   prompt next to it (`assets/authoring/`), together with the importer that
   turns it into runtime frames, so it can be redrawn and re-imported.
