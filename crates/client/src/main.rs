@@ -59,7 +59,7 @@ const USAGE: &str = "\
 usage:
   oni-spacewar [--autoplay [--ship kite|bulwark] [--missions N] [--continue] [--abandon]
                 [--shots DIR [--clip]]] [--kill-target N]
-                --autoplay battles end at 10 kills; normal play rolls 1-100
+                --autoplay battles end at 10 kills; normal play rolls 40-100
                 per mission; --kill-target N (1-100) overrides either
   oni-spacewar synctest [--minutes M] [--check-distance D] [--headless] [--bot]
   oni-spacewar p2p [--room ws://127.0.0.1:3536/oni?next=2]

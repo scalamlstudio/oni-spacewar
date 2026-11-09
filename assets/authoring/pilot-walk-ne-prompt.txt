@@ -1,0 +1,9 @@
+A game sprite sheet of the attached chibi orange tabby cat pilot (teal jumpsuit, cream belly, orange bow tie, teal goggles on the forehead, black backpack, striped orange tail), painted in exactly the same soft-shaded painted style. Camera: three-quarter back view, body turned away from the viewer toward the upper right, exactly as in the reference, identical in all 5 cells. 5 equal-width cells in ONE horizontal row, each cell a complete, whole character drawing painted in one piece:
+cell 1: idle standing pose, matching the reference.
+cells 2-5: a 4-frame walk cycle, every frame redrawn as a whole body (head, torso, arms, legs, tail drawn together, legs attached naturally to the body, no seams):
+  cell 2 contact: near leg (closer to viewer) stepping forward, far leg back, far arm swinging forward;
+  cell 3 passing: legs together under the body, far foot lifted slightly;
+  cell 4 contact: far leg forward, near leg back (legs visibly exchanged compared with cell 2), near arm swinging forward;
+  cell 5 passing: legs together under the body, near foot lifted slightly.
+Keep the character's ORIGINAL chibi proportions in every cell: big head about 45% of total height, short stubby legs, the same head size, the same total height and the same ground line in all 5 cells. Do not lengthen the legs or slim the body. Small natural steps; the two legs clearly take turns being in front.
+Background: perfectly flat solid pure magenta (#FF00FF) everywhere, no gradient, no floor, no shadow, no text, no labels, no borders, no grid lines. Generous margin around each character; characters must not touch or overlap.

@@ -1819,6 +1819,7 @@ mod tests {
         w.mission.collected.credits = 35;
         w.ships[0].w_cooldown = 90;
         w.frame = 75 * 60;
+        w.enemies.clear();
         w.enemies
             .push(sim::Enemy::new(EnemyKind::Swarmer, FxVec2::ZERO));
         let hud = battle_hud(&w, 0);

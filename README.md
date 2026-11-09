@@ -4,7 +4,7 @@ A Rust/Bevy game: manage a modular carrier ship and its Oni crew
 (Oxygen Not Included-style base building), then take a battleship out on
 Warframe-style missions with League of Legends-style click-to-move combat.
 
-The First Playable Demo is in: Title → Carrier → Dock → Battle (Elimination)
+The First Playable Demo is in: Title → Carrier → Mission station → Battle (Elimination)
 → Result → Carrier → Workshop upgrades → go again. It is a Cargo workspace
 under [`crates/`](crates/), separate from the design docs — see
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
@@ -13,16 +13,18 @@ under [`crates/`](crates/), separate from the design docs — see
 
  - `cargo run --release --bin oni-spacewar` — the demo (Title screen → New Game / Continue)
    - Carrier: left-click the floor to walk there (WASD / arrows also walk),
-     left-click a crew member, the Upgrade Bench or a docked battleship to
-     walk up and use it (or walk up and press E), mouse wheel zoom; board a
-     battleship at its berth, then launch
+     left-click a crew member or station to walk up and use it (or walk up
+     and press E), mouse wheel zoom. Use the Command Console on the Bridge
+     for mission selection: pick Kite / Bulwark (1 / 2), choose Launch prep,
+     then advance the Pilot briefing with E to launch. Docked battleships
+     open ship inspection and selection; component refitting follows later
    - Building: B (or the HUD's Build button) opens Build mode: pick a room
      or an item from Rooms / Stations / Furniture / Decor, then left-click
      to start building it (the ghost says why not); Move and Remove (full
      refund) work on what is there; WASD / arrows pan, mouse wheel zooms,
      right click / Esc drops the pick, Esc / B again leaves
    - Battle: left-click to move, auto-fire, Q / W skills, Esc pause;
-     destroy 100 enemies (they come in packs; Spitters glow and
+     destroy the displayed seeded target of 40–100 enemies (they come in packs; Spitters glow and
      show an aim line before they fire; as kills rise, Lancers draw a
      charge line, Bloaters burst a second after they die or touch you,
      Broods release Swarmers and Wardens shield nearby monsters; later

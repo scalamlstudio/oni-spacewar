@@ -56,7 +56,7 @@ const CAMERA_MARGIN: f32 = 2.0 * TILE;
 /// it at 112 px at 2× (design/READINESS.md § Carrier › Art spec).
 pub const CHARACTER_H: f32 = 56.0;
 /// Pilot walk cycle: a new frame every this many px walked.
-const STRIDE: f32 = 12.0;
+const STRIDE: f32 = 24.0;
 /// Walk-cycle frames after the idle one, per drawn direction.
 const PILOT_WALK: [&str; 4] = ["walk_1", "walk_2", "walk_3", "walk_4"];
 /// Rooms under construction wear this tileable overlay; station front
@@ -445,6 +445,9 @@ pub fn ship_index(id: &str) -> usize {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Hotspot {
     Crew(Crew),
+    /// The Command Console: the mission station (TAKOAI-130). Pick a
+    /// mission and a battleship, then the briefing and launch.
+    CommandConsole,
     /// The Upgrade Bench: the Workshop upgrades.
     UpgradeBench,
     /// The Sample Analyzer: the Codex station (TAKOAI-129).
@@ -457,9 +460,10 @@ impl Hotspot {
     fn verb(self) -> String {
         match self {
             Hotspot::Crew(_) => "Talk".into(),
+            Hotspot::CommandConsole => "Missions".into(),
             Hotspot::UpgradeBench => "Use".into(),
             Hotspot::SampleAnalyzer => "Codex".into(),
-            Hotspot::Berth(i) => format!("Board {}", SHIPS[i].name),
+            Hotspot::Berth(i) => format!("Inspect {}", SHIPS[i].name),
         }
     }
 }
@@ -511,8 +515,9 @@ const POSTED: [(Crew, layout::Crew); 3] = [
 
 /// Every interactable thing on the carrier and where (grid px): each crew
 /// member's feet at their post (the post tile's centre), and the use point
-/// of every finished station that does something in the demo, the Upgrade
-/// Bench, the Sample Analyzer and each berth with its ship. Recomputed after every edit, so
+/// of every finished station that does something in the demo, the Command
+/// Console, the Upgrade Bench, the Sample Analyzer and each berth with its
+/// ship. Recomputed after every edit, so
 /// crew follow their station when it moves.
 pub fn hotspots(carrier: &Carrier) -> Vec<(Hotspot, Vec2)> {
     let mut out: Vec<(Hotspot, Vec2)> = POSTED
@@ -533,6 +538,7 @@ pub fn hotspots(carrier: &Carrier) -> Vec<(Hotspot, Vec2)> {
 /// The hotspot a station is, if using it does something.
 fn station_hotspot(item: &Item) -> Option<Hotspot> {
     match item.id {
+        ItemId::CommandConsole => Some(Hotspot::CommandConsole),
         ItemId::UpgradeBench => Some(Hotspot::UpgradeBench),
         ItemId::SampleAnalyzer => Some(Hotspot::SampleAnalyzer),
         ItemId::Berth => Some(Hotspot::Berth(ship_index(item.ship.as_deref()?))),
@@ -848,15 +854,21 @@ pub fn cost_text(c: Cost) -> String {
 pub enum Overlay {
     #[default]
     None,
-    /// Dialogue lines; a briefing (`launch` = the boarded ship) continues
-    /// into the launch panel.
+    /// Dialogue lines; a briefing (`launch` = the chosen ship) launches
+    /// the mission after its last line.
     Dialogue {
         lines: Vec<Line>,
         index: usize,
         launch: Option<usize>,
     },
-    /// Confirm and launch the battleship in [`SHIPS`]`[index]`.
-    Launch { index: usize },
+    /// The Command Console's mission select (TAKOAI-130): the mission, and
+    /// the battleship [`SHIPS`]`[ship]` to fly it. Launch prep runs the
+    /// Pilot's briefing, then launches.
+    Missions { ship: usize },
+    /// A berth's battleship panel: its stats and "fly this ship". The
+    /// berth is where ship customization goes (TAKOAI-122); for now it only
+    /// selects the ship. `message` is the last action's feedback.
+    Ship { index: usize, message: String },
     /// The Upgrade Bench's Workshop panel: the selected upgrade row and the
     /// last purchase's feedback.
     Workshop { index: usize, message: String },
@@ -1141,7 +1153,7 @@ pub struct DockedShip {
     pub half: Vec2,
 }
 
-/// A berth's "Next: Elimination" line; it also reads "Selected" for the
+/// A berth's ship-inspection label; it also reads "Selected" for the
 /// ship the save will launch.
 #[derive(Component)]
 struct DockNext {
@@ -1187,8 +1199,10 @@ enum Click {
     Next,
     /// Leave / Back / Close (X; Esc in Build mode).
     Leave,
-    /// The launch confirm's Launch (E).
+    /// Mission select's Launch prep, the ship panel's Fly this ship (E).
     Launch,
+    /// Mission select: pick the battleship [`SHIPS`]`[n]` (1-9).
+    Pick(usize),
     /// A Workshop row: buy the upgrade (E on that row).
     Row(usize),
     /// The HUD's Build button (B).
@@ -2050,7 +2064,7 @@ fn carrier_input(
     mut overlay: ResMut<Overlay>,
     mut order: ResMut<WalkOrder>,
     mut pilot: Query<&mut Transform, With<Pilot>>,
-    mut launch: MessageWriter<MissionRequest>,
+    mut requests: MessageWriter<MissionRequest>,
 ) {
     if pause.open {
         return;
@@ -2139,19 +2153,43 @@ fn carrier_input(
                 if *index + 1 < lines.len() {
                     *index += 1;
                 } else if let Some(ship) = *launch {
-                    next = Some(Overlay::Launch { index: ship });
+                    requests.write(MissionRequest {
+                        battleship_id: SHIPS[ship].id.to_string(),
+                    });
                 } else {
                     next = Some(Overlay::None);
                 }
             }
         }
-        Overlay::Launch { index } => {
+        Overlay::Missions { ship } => {
+            let n = SHIPS.len();
+            let left = keys.any_just_pressed([KeyCode::KeyA, KeyCode::ArrowLeft]);
+            let right = keys.any_just_pressed([KeyCode::KeyD, KeyCode::ArrowRight]);
+            let pick = match clicked {
+                Some(Click::Pick(i)) => Some(i),
+                _ => digit,
+            }
+            .filter(|&i| i < n);
+            if back || leave {
+                next = Some(Overlay::None);
+            } else if let Some(i) = pick {
+                *ship = i;
+            } else if left {
+                *ship = (*ship + n - 1) % n;
+            } else if right {
+                *ship = (*ship + 1) % n;
+            } else if confirm || clicked == Some(Click::Launch) {
+                next = Some(launch_prep(*ship, save.game.as_mut()));
+            }
+        }
+        Overlay::Ship { index, message } => {
             if back || leave {
                 next = Some(Overlay::None);
             } else if confirm || clicked == Some(Click::Launch) {
-                launch.write(MissionRequest {
-                    battleship_id: SHIPS[*index].id.to_string(),
-                });
+                if let Some(game) = &mut save.game {
+                    game.selected_battleship = SHIPS[*index].id.to_string();
+                }
+                *message = format!("The {} flies the next mission.", SHIPS[*index].name);
             }
         }
         Overlay::Workshop { index, message } => {
@@ -2426,10 +2464,11 @@ fn use_hotspot(
     o
 }
 
-/// Using `hotspot`: talk to crew, open the Workshop upgrades at the Upgrade
-/// Bench, or board a docked battleship, which selects it and starts the
-/// briefing before launch. The Sample Analyzer opens no panel here: the
-/// Codex is its own screen ([`use_hotspot`]).
+/// Using `hotspot`: talk to crew, open mission select at the Command
+/// Console (the selected battleship picked), the Workshop upgrades at the
+/// Upgrade Bench, or a docked battleship's panel at its berth. The Sample
+/// Analyzer opens no panel here: the Codex is its own screen
+/// ([`use_hotspot`]).
 pub fn interact_with(hotspot: Hotspot, game: Option<&mut SaveGame>, overlay: &mut Overlay) {
     let last = game.as_ref().map(|g| g.last_result).unwrap_or_default();
     *overlay = match hotspot {
@@ -2438,19 +2477,32 @@ pub fn interact_with(hotspot: Hotspot, game: Option<&mut SaveGame>, overlay: &mu
             index: 0,
             launch: None,
         },
-        Hotspot::Berth(ship) => {
-            if let Some(game) = game {
-                game.selected_battleship = SHIPS[ship].id.to_string();
-            }
-            Overlay::Dialogue {
-                lines: crew_lines(Crew::Pilot, last),
-                index: 0,
-                launch: Some(ship),
-            }
-        }
+        Hotspot::CommandConsole => Overlay::Missions {
+            ship: game
+                .map(|g| ship_index(&g.selected_battleship))
+                .unwrap_or(0),
+        },
+        Hotspot::Berth(index) => Overlay::Ship {
+            index,
+            message: String::new(),
+        },
         Hotspot::UpgradeBench => Overlay::workshop(0, String::new()),
         Hotspot::SampleAnalyzer => Overlay::None,
     };
+}
+
+/// Mission select's Launch prep: the chosen battleship becomes the
+/// selected one and the Pilot's briefing starts; its last line launches.
+pub fn launch_prep(ship: usize, game: Option<&mut SaveGame>) -> Overlay {
+    let last = game.as_ref().map(|g| g.last_result).unwrap_or_default();
+    if let Some(game) = game {
+        game.selected_battleship = SHIPS[ship].id.to_string();
+    }
+    Overlay::Dialogue {
+        lines: crew_lines(Crew::Pilot, last),
+        index: 0,
+        launch: Some(ship),
+    }
 }
 
 fn cursor_world(
@@ -3101,9 +3153,9 @@ fn show_selected_ship(
     for (mut text, berth) in &mut next {
         let name = SHIPS[berth.ship].name;
         let value = if berth.ship == selected {
-            format!("{name} - Selected - Next: Elimination")
+            format!("{name} - Selected - Inspect ship")
         } else {
-            format!("{name} - Next: Elimination")
+            format!("{name} - Inspect ship")
         };
         if text.0 != value {
             text.0 = value;
@@ -3177,9 +3229,10 @@ fn update_prompt(
             // feet (the station fills the space above its use point).
             let pos = match hotspot {
                 Hotspot::Crew(_) => world(at) + Vec2::Y * (CHARACTER_H + 28.0),
-                Hotspot::Berth(_) | Hotspot::UpgradeBench | Hotspot::SampleAnalyzer => {
-                    pilot.translation.truncate() - Vec2::Y * 16.0
-                }
+                Hotspot::CommandConsole
+                | Hotspot::Berth(_)
+                | Hotspot::UpgradeBench
+                | Hotspot::SampleAnalyzer => pilot.translation.truncate() - Vec2::Y * 16.0,
             };
             tf.translation = pos.extend(Z_LABEL + 1.0);
             *vis = Visibility::Visible;
@@ -3245,7 +3298,7 @@ fn sync_overlay(
             let more = if *index + 1 < lines.len() {
                 "[Click / E] Next"
             } else if launch.is_some() {
-                "[Click / E] Launch prep"
+                "[Click / E] Launch"
             } else {
                 "[Click / E] Close"
             };
@@ -3316,8 +3369,22 @@ fn sync_overlay(
                     });
                 });
         }
-        Overlay::Launch { index } => {
-            let ship = &SHIPS[*index];
+        Overlay::Missions { ship } => {
+            let chosen = &SHIPS[*ship];
+            let card = |selected: bool| {
+                (
+                    BackgroundColor(if selected {
+                        Color::srgb(0.10, 0.22, 0.28)
+                    } else {
+                        Color::srgb(0.07, 0.08, 0.10)
+                    }),
+                    BorderColor::all(if selected {
+                        Color::srgb(0.5, 0.9, 1.0)
+                    } else {
+                        Color::srgb(0.25, 0.3, 0.34)
+                    }),
+                )
+            };
             commands
                 .spawn((
                     ScreenEntity,
@@ -3326,7 +3393,99 @@ fn sync_overlay(
                     border,
                     Node {
                         position_type: PositionType::Absolute,
-                        // Beside the boarded ship, not over it.
+                        left: px(60),
+                        right: px(60),
+                        top: px(84),
+                        flex_direction: FlexDirection::Column,
+                        padding: UiRect::all(px(14)),
+                        row_gap: px(10),
+                        border: UiRect::all(px(1)),
+                        ..default()
+                    },
+                ))
+                .with_children(|p| {
+                    p.spawn(Node {
+                        column_gap: px(24),
+                        ..default()
+                    })
+                    .with_children(|title| {
+                        title.spawn((Text::new("Mission select"), font(22.0, Color::WHITE)));
+                        text_button(title, Click::Leave, "[Click / X] Close");
+                    });
+                    // The one mission there is today, already picked.
+                    p.spawn((
+                        card(true),
+                        Node {
+                            flex_direction: FlexDirection::Column,
+                            padding: UiRect::axes(px(10), px(6)),
+                            border: UiRect::all(px(1)),
+                            row_gap: px(4),
+                            ..default()
+                        },
+                    ))
+                    .with_children(|m| {
+                        m.spawn((Text::new("Elimination"), font(19.0, Color::WHITE)));
+                        m.spawn((
+                            Text::new(format!(
+                                "Clear {} kills, then the Fissure Guardian comes out. Beat it to win.",
+                                kill_target.for_mission(&game)
+                            )),
+                            font(15.0, Color::srgb(0.95, 0.85, 0.45)),
+                        ));
+                    });
+                    p.spawn((
+                        Text::new("Battleship  [1-2 / A D]"),
+                        font(15.0, Color::srgb(0.7, 0.76, 0.8)),
+                    ));
+                    p.spawn(Node {
+                        column_gap: px(10),
+                        ..default()
+                    })
+                    .with_children(|row| {
+                        for (i, info) in SHIPS.iter().enumerate() {
+                            row.spawn((
+                                Button,
+                                Click::Pick(i),
+                                card(i == *ship),
+                                Node {
+                                    padding: UiRect::axes(px(12), px(5)),
+                                    border: UiRect::all(px(1)),
+                                    ..default()
+                                },
+                            ))
+                            .with_children(|b| {
+                                b.spawn((
+                                    Text::new(format!("{} {}", i + 1, info.name)),
+                                    font(17.0, Color::WHITE),
+                                ));
+                            });
+                        }
+                    });
+                    p.spawn((
+                        Text::new(ship_card(chosen, levels)),
+                        font(14.0, Color::srgb(0.82, 0.86, 0.9)),
+                    ));
+                    p.spawn(Node {
+                        column_gap: px(10),
+                        ..default()
+                    })
+                    .with_children(|row| {
+                        text_button(row, Click::Launch, "[Click / E] Launch prep");
+                    });
+                });
+        }
+        Overlay::Ship { index, message } => {
+            let ship = &SHIPS[*index];
+            let selected = ship_index(&game.selected_battleship) == *index;
+            commands
+                .spawn((
+                    ScreenEntity,
+                    OverlayUi,
+                    panel_bg,
+                    border,
+                    Node {
+                        position_type: PositionType::Absolute,
+                        // Beside the ship, not over it.
                         left: if *index % 2 == 1 { px(30) } else { auto() },
                         right: if *index % 2 == 0 { px(30) } else { auto() },
                         top: px(100),
@@ -3339,28 +3498,37 @@ fn sync_overlay(
                     },
                 ))
                 .with_children(|p| {
-                    p.spawn((
-                        Text::new(format!("Launch the {}?", ship.name)),
-                        font(22.0, Color::WHITE),
-                    ));
-                    p.spawn((
-                        Text::new(format!(
-                            "Elimination: {} kills clears it",
-                            kill_target.for_mission(&game)
-                        )),
-                        font(17.0, Color::srgb(0.95, 0.85, 0.45)),
-                    ));
+                    p.spawn((Text::new(ship.name), font(22.0, Color::WHITE)));
                     p.spawn((
                         Text::new(ship_card(ship, levels)),
                         font(14.0, Color::srgb(0.82, 0.86, 0.9)),
                     ));
+                    p.spawn((
+                        Text::new(
+                            "Component refitting is not available yet. \
+                             Launch missions from the Command Console on the Bridge.",
+                        ),
+                        font(14.0, Color::srgb(0.7, 0.76, 0.8)),
+                    ));
+                    let status = if !message.is_empty() {
+                        message.clone()
+                    } else if selected {
+                        format!("The {} flies the next mission.", ship.name)
+                    } else {
+                        String::new()
+                    };
+                    if !status.is_empty() {
+                        p.spawn((Text::new(status), font(15.0, Color::srgb(0.5, 0.9, 1.0))));
+                    }
                     p.spawn(Node {
                         column_gap: px(10),
                         ..default()
                     })
                     .with_children(|row| {
-                        text_button(row, Click::Launch, "[Click / E] Launch");
-                        text_button(row, Click::Leave, "[Click / X] Back");
+                        if !selected {
+                            text_button(row, Click::Launch, "[Click / E] Fly this ship");
+                        }
+                        text_button(row, Click::Leave, "[Click / X] Close");
                     });
                 });
         }
@@ -3986,6 +4154,22 @@ mod tests {
     }
 
     #[test]
+    fn every_facing_uses_the_full_alternating_stride() {
+        for facing in Facing::BY_ANGLE {
+            let (dir, flip) = facing.art();
+            for phase in 0..8 {
+                let walked = STRIDE * (phase as f32 + 0.5);
+                let id = format!("core.carrier.pilot.{dir}.walk_{}", phase % 4 + 1);
+                assert_eq!(pilot_frame(facing, true, walked), (id, flip));
+            }
+        }
+        assert_eq!(
+            pilot_frame(Facing::W, false, 100.0),
+            ("core.carrier.pilot.e.idle".into(), true)
+        );
+    }
+
+    #[test]
     fn pilot_faces_8_directions_mirroring_the_west_ones() {
         let cases = [
             ((1.0, 0.0), Facing::E, "e", false),
@@ -4062,7 +4246,11 @@ mod tests {
             at(&spots, Hotspot::SampleAnalyzer),
             Some(Vec2::new(18.0 * TILE, 2.0 * TILE + 24.0))
         );
-        assert_eq!(spots.len(), 7);
+        assert_eq!(
+            at(&spots, Hotspot::CommandConsole),
+            Some(Vec2::new(4.0 * TILE, 2.0 * TILE + 24.0))
+        );
+        assert_eq!(spots.len(), 8);
         // Somewhere the Pilot can stand reaches each with E.
         for &(h, p) in &spots {
             let reachable = (-7..=7).any(|i| {
@@ -4175,8 +4363,12 @@ mod tests {
             clicked_hotspot(&spots, &c, tile_centre((17, 1))),
             Some(Hotspot::SampleAnalyzer)
         );
-        // A station with nothing to use yet, and bare floor.
-        assert_eq!(clicked_hotspot(&spots, &c, tile_centre((3, 1))), None);
+        // The Command Console, the mission station (TAKOAI-130).
+        assert_eq!(
+            clicked_hotspot(&spots, &c, tile_centre((3, 1))),
+            Some(Hotspot::CommandConsole)
+        );
+        // Bare floor.
         assert_eq!(clicked_hotspot(&spots, &c, tile_centre((10, 13))), None);
     }
 
@@ -4265,7 +4457,11 @@ mod tests {
         let console = c.find(ItemId::CommandConsole).unwrap();
         assert_eq!(new_game, Vec2::from(c.items[console].use_point()));
         assert!(layout::can_stand(&rects, new_game.x, new_game.y));
-        assert_eq!(nearest_hotspot(&spots, new_game), None);
+        // A new game starts at the mission station.
+        assert_eq!(
+            nearest_hotspot(&spots, new_game).map(|h| h.0),
+            Some(Hotspot::CommandConsole)
+        );
         for (i, ship) in SHIPS.iter().enumerate() {
             let p = spawn_point(&c, Some(ship.id));
             assert!(layout::can_stand(&rects, p.x, p.y), "{}", ship.id);
@@ -4669,7 +4865,7 @@ mod tests {
         world.run_system_once(sync_layout).unwrap();
 
         let scene = world.resource::<CarrierScene>();
-        assert_eq!(scene.hotspots.len(), 7);
+        assert_eq!(scene.hotspots.len(), 8);
         assert!(!scene.walkable.is_empty());
         let items = Carrier::starting().items.len();
         let mut sprites = world.query::<(&ItemSprite, &Sprite)>();
@@ -4770,19 +4966,52 @@ mod tests {
         assert!(bulwark.contains("CD 7.65 s"), "{bulwark}");
     }
 
+    /// TAKOAI-130: missions launch from the Command Console, not the
+    /// berths. It opens mission select on the selected battleship; Launch
+    /// prep selects the chosen one and starts the Pilot's briefing, whose
+    /// last line launches.
     #[test]
-    fn boarding_a_ship_selects_it_and_briefs_before_launch() {
-        let mut game = SaveGame::default();
+    fn the_command_console_is_the_mission_station() {
+        let mut game = SaveGame {
+            selected_battleship: "bulwark".into(),
+            ..SaveGame::default()
+        };
         let mut overlay = Overlay::None;
-        interact_with(Hotspot::Berth(1), Some(&mut game), &mut overlay);
-        assert_eq!(game.selected_battleship, "bulwark");
+        interact_with(Hotspot::CommandConsole, Some(&mut game), &mut overlay);
+        assert_eq!(overlay, Overlay::Missions { ship: 1 });
+        assert_eq!(Hotspot::CommandConsole.verb(), "Missions");
+        let overlay = launch_prep(0, Some(&mut game));
+        assert_eq!(game.selected_battleship, "kite");
         assert!(matches!(
             overlay,
             Overlay::Dialogue {
-                launch: Some(1),
+                index: 0,
+                launch: Some(0),
                 ..
             }
         ));
+        // The starting carrier's console is a hotspot at its use point.
+        let spots = hotspots(&Carrier::starting());
+        assert!(spots.iter().any(|(h, _)| *h == Hotspot::CommandConsole));
+    }
+
+    /// A berth no longer launches: it opens its ship's panel (where ship
+    /// customization will go) without changing the selection.
+    #[test]
+    fn a_berth_opens_its_ship_panel() {
+        let mut game = SaveGame::default();
+        let before = game.selected_battleship.clone();
+        let mut overlay = Overlay::None;
+        interact_with(Hotspot::Berth(1), Some(&mut game), &mut overlay);
+        assert_eq!(game.selected_battleship, before);
+        assert_eq!(
+            overlay,
+            Overlay::Ship {
+                index: 1,
+                message: String::new()
+            }
+        );
+        assert_eq!(Hotspot::Berth(1).verb(), "Inspect Bulwark");
     }
 
     #[test]

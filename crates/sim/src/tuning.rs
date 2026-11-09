@@ -250,7 +250,32 @@ pub const FISSURE_MIN_GAP: i32 = 600;
 /// Enemies appear on a ring this far from a fissure's centre.
 pub const FISSURE_SPAWN_RING: i32 = 60;
 
-/// First pack this long after the mission starts.
+/// Scattered start (TAKOAI-130, Wei's Playtest #2): the field isn't empty
+/// when a mission starts. `START_GROUPS_MIN..=START_GROUPS_MAX` small
+/// dormant groups sit on a ring `START_RING_MIN..=START_RING_MAX` px round
+/// the ships' start (the origin), at seeded angles, at least
+/// `START_GROUP_GAP` px apart. The ring's inner edge keeps them far from
+/// every ship's spawn (spawns are within 90 px of the origin) and outside
+/// `START_WAKE_RANGE`, so nothing is awake on the first tick.
+pub const START_GROUPS_MIN: i32 = 3;
+pub const START_GROUPS_MAX: i32 = 5;
+pub const START_RING_MIN: i32 = 480;
+pub const START_RING_MAX: i32 = 1000;
+pub const START_GROUP_GAP: i32 = 280;
+/// Each group is `START_SWARMERS_MIN..=START_SWARMERS_MAX` Swarmers on a
+/// ring `START_GROUP_RING` px round its centre, plus a Spitter
+/// `START_SPITTER_PCT`% of the time. Plain enemies only: roles, elites and
+/// the Guardian keep coming from the fissures as before.
+pub const START_SWARMERS_MIN: i32 = 2;
+pub const START_SWARMERS_MAX: i32 = 3;
+pub const START_SPITTER_PCT: i32 = 25;
+pub const START_GROUP_RING: i32 = 36;
+/// A dormant enemy wakes when a ship comes within this many px, when it is
+/// hit, or when something is hit or killed within `START_ALERT_RANGE` px of
+/// it (its group wakes together).
+pub const START_WAKE_RANGE: i32 = 320;
+pub const START_ALERT_RANGE: i32 = 160;
+
 pub const SPAWN_FIRST: u32 = ticks(2, 1);
 /// The director releases a pack out of one fissure on a pulse
 /// (TAKOAI-113, design/BATTLE.md #2) instead of one enemy at a time. The
