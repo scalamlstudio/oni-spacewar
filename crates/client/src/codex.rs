@@ -170,10 +170,7 @@ pub fn stats(image: &str) -> Vec<(&'static str, String)> {
         let sheet = sim::ShipSheet::new(sim::Loadout { ship, ..default() });
         rows.push(("Hull", sheet.hull.to_string()));
         rows.push(("Speed", format!("{} px/s", sheet.speed)));
-        rows.push((
-            "Basic attack",
-            format!("{} dmg, range {} px", sheet.basic_damage, sheet.basic_range),
-        ));
+        rows.push(("Main gun", "either gun (chosen at the Berth)".to_string()));
     } else if let Some(rest) = image.strip_prefix("core.portraits.") {
         use crate::layout::Crew;
         let post = match rest.split('.').next() {

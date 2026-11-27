@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
 use bevy::ui::FocusPolicy;
 use bevy::window::PrimaryWindow;
-use sim::input::{INPUT_MOVE, INPUT_SKILL_Q, INPUT_SKILL_W};
+use sim::input::{INPUT_FIRE, INPUT_SKILL_1, INPUT_SKILL_2};
 use sim::{FxVec2, NetInput, SimState, SUB};
 
 use crate::art::ContentImages;
@@ -15,7 +15,7 @@ use crate::carrier::{
     PilotDrag, Tool, WalkOrder,
 };
 use crate::codex::CodexScreen;
-use crate::input::{self, MovePress};
+use crate::input;
 use crate::layout::{ItemId, RoomSize};
 use crate::mission::{self, MissionOutcome, MissionRequest, MissionResult};
 use crate::rollback::SimWorld;
@@ -679,7 +679,7 @@ fn enter_battle(
     commands.insert_resource(SimWorld(mission::launch_sim(&config)));
     commands.spawn((
         ScreenEntity,
-        Text::new("Left click move    Q / W skills    Esc pause"),
+        Text::new("WASD move    Mouse aim, left click fire    1 / 2 skills    Esc pause"),
         text_style(16.0, Color::srgb(0.7, 0.75, 0.8)),
         Node {
             position_type: PositionType::Absolute,
@@ -1185,18 +1185,8 @@ fn step_demo_battle(
     let input = if autoplay.is_some() {
         autopilot(&world)
     } else {
-        let mut buttons = 0;
-        if MovePress::read(&mouse).held() {
-            buttons |= INPUT_MOVE;
-        }
-        if keys.pressed(KeyCode::KeyQ) {
-            buttons |= INPUT_SKILL_Q;
-        }
-        if keys.pressed(KeyCode::KeyW) {
-            buttons |= INPUT_SKILL_W;
-        }
         NetInput {
-            buttons,
+            buttons: input::battle_buttons(&keys, &mouse),
             target_x: last_cursor.x,
             target_y: last_cursor.y,
         }
@@ -1234,60 +1224,83 @@ fn step_demo_battle(
 }
 
 /// Scripted pilot for `--autoplay`: circles the nearest enemy at range,
-/// uses W when one gets close (Q too on Bulwark), and picks up loot when
-/// the coast is clear; against the Guardian, see `guardian_pilot`.
-/// Input-only, like a player.
+/// shooting it, uses skill 2 when one gets close (1 too on Bulwark), and
+/// picks up loot when the coast is clear; against the Guardian, see
+/// `guardian_pilot`. Input-only, like a player: WASD toward a goal, the
+/// cursor on the nearest enemy.
 fn autopilot(world: &SimState) -> NetInput {
-    let mut input = NetInput::default();
     let Some(ship) = world.ships.first() else {
-        return input;
+        return NetInput::default();
     };
     if let Some(input) = guardian_pilot(world, ship) {
         return input;
     }
     let me = ship.pos;
-    let mut aim_at = |p: FxVec2, buttons: u8| {
-        input.buttons |= buttons;
-        input.target_x = p.x / SUB;
-        input.target_y = p.y / SUB;
-    };
     let nearest = world
         .enemies
         .iter()
         .min_by_key(|e| (e.pos - me).length_squared())
         .map(|e| e.pos);
     let dist = nearest.map_or(i64::MAX, |e| (e - me).length() / SUB as i64);
-    if let Some(e) = nearest.filter(|_| dist <= 300) {
+    let mut buttons = 0;
+    let goal = if let Some(e) = nearest.filter(|_| dist <= 300) {
         let away = me - e;
         let side = FxVec2::new(-away.y, away.x).scale_to(100 * SUB);
         if dist < 140 && world.frame % 10 == 5 {
-            let q = if ship.kind == sim::ShipKind::Bulwark {
-                INPUT_SKILL_Q
-            } else {
-                0
-            };
-            aim_at(e, INPUT_SKILL_W | q);
-        } else if world.frame.is_multiple_of(10) {
-            let goal = if dist < 150 {
-                me + away.scale_to(120 * SUB) + side
-            } else {
-                me + side
-            };
-            aim_at(goal, INPUT_MOVE);
+            buttons |= INPUT_SKILL_2;
+            if ship.kind == sim::ShipKind::Bulwark {
+                buttons |= INPUT_SKILL_1;
+            }
+        }
+        if dist < 70 && ship.kind == sim::ShipKind::Kite && ship.skill1_cooldown == 0 {
+            // Cornered: Afterburn out, aimed away (this tick's cursor).
+            let out = me + (away.scale_to(160 * SUB) + side);
+            return pilot_input(ship, out, out, INPUT_SKILL_1, false);
+        }
+        if dist < 180 {
+            me + away.scale_to(120 * SUB) + side
+        } else {
+            me + side
         }
     } else if let Some(p) = world.pickups.first() {
-        aim_at(p.pos, INPUT_MOVE);
-    } else if let Some(e) = nearest {
-        aim_at(e, INPUT_MOVE);
+        p.pos
+    } else {
+        nearest.unwrap_or(me)
+    };
+    let aim = nearest.unwrap_or(goal);
+    pilot_input(
+        ship,
+        goal,
+        aim,
+        buttons,
+        dist <= ship.stats.basic_range as i64,
+    )
+}
+
+/// WASD toward `goal`, the cursor on `aim`, and the gun on `shoot`: held
+/// for the semi-auto; the heavy is let go once fully charged.
+fn pilot_input(ship: &sim::Ship, goal: FxVec2, aim: FxVec2, buttons: u16, shoot: bool) -> NetInput {
+    let mut buttons = buttons
+        | NetInput::toward(
+            (ship.pos.x / SUB, ship.pos.y / SUB),
+            (goal.x / SUB, goal.y / SUB),
+            4,
+        );
+    if shoot && !ship.fully_charged() {
+        buttons |= INPUT_FIRE;
     }
-    input
+    NetInput {
+        buttons,
+        target_x: aim.x / SUB,
+        target_y: aim.y / SUB,
+    }
 }
 
 /// The autopilot against the Fissure Guardian, reading its telegraphs the
 /// way a player would: through a ring's wind-up it flies to the nearer gap
-/// (just outside its basic range of the Guardian's centre), off a charge
+/// (just outside its gun range of the Guardian's centre), off a charge
 /// line it steps sideways, and otherwise it circles the Guardian inside
-/// its range, using W when chaff gets close.
+/// its range, shooting it and using skill 2 when chaff gets close.
 fn guardian_pilot(world: &SimState, ship: &sim::Ship) -> Option<NetInput> {
     use sim::trig::{cos_q16, sin_q16, ANGLE_STEPS};
     use sim::BossAttack;
@@ -1323,22 +1336,19 @@ fn guardian_pilot(world: &SimState, ship: &sim::Ship) -> Option<NetInput> {
         BossAttack::Charge => me + FxVec2::new(-g.aim.y, g.aim.x).scale_to(160 * SUB),
         BossAttack::Summon => g.pos + away.scale_to(range),
     };
-    // Chaff close by: W at it (on a frame it isn't steering).
+    // Chaff close by: shoot it and use skill 2 on it.
     let chaff = world
         .enemies
         .iter()
         .filter(|e| e.boss.is_none())
         .map(|e| e.pos)
         .find(|p| (*p - me).length() < 120 * SUB as i64);
-    let (buttons, at) = match chaff {
-        Some(p) if world.frame % 10 == 5 => (INPUT_SKILL_W, p),
-        _ => (INPUT_MOVE, goal),
+    let (buttons, aim) = match chaff {
+        Some(p) if world.frame % 10 == 5 => (INPUT_SKILL_2, p),
+        Some(p) => (0, p),
+        None => (0, g.pos),
     };
-    Some(NetInput {
-        buttons,
-        target_x: at.x / SUB,
-        target_y: at.y / SUB,
-    })
+    Some(pilot_input(ship, goal, aim, buttons, true))
 }
 
 /// A smaller window than `DEFAULT_WINDOW`, for the pause-menu shots.
@@ -1913,7 +1923,10 @@ fn autoplay_flow(
                 autoplay.shoot(&mut commands, &format!("{:02}-dock-berths", 13 + n * 10));
             }
             if after(1.8) {
-                *overlay = Overlay::Launch { index: berth };
+                *overlay = Overlay::Launch {
+                    index: berth,
+                    gun: sim::MainGun::SemiAuto,
+                };
             }
             if after(2.3) {
                 autoplay.shoot(&mut commands, &format!("{:02}-dock-launch", 14 + n * 10));
@@ -2076,12 +2089,22 @@ mod tests {
 
     /// Flies one mission with the `--autoplay` pilot, headless.
     fn autoplayed(ship: &str, upgrades: &[&str], seed: u64) -> (MissionResult, i32) {
+        autoplayed_with(ship, upgrades, seed, sim::MainGun::SemiAuto)
+    }
+
+    fn autoplayed_with(
+        ship: &str,
+        upgrades: &[&str],
+        seed: u64,
+        gun: sim::MainGun,
+    ) -> (MissionResult, i32) {
         let config = mission::MissionConfig {
             mission_type: mission::MissionType::Elimination,
             ship_loadouts: vec![mission::ShipLoadout {
                 player_handle: 0,
                 battleship_id: ship.to_string(),
                 upgrade_ids: upgrades.iter().map(|s| s.to_string()).collect(),
+                gun,
             }],
             seed,
             kill_target: sim::tuning::KILL_TARGET_MAX,
@@ -2098,6 +2121,22 @@ mod tests {
             }
         }
         panic!("mission did not end");
+    }
+
+    /// The heavy gun plays a whole mission on both ships: the pilot charges
+    /// fully and lets go. Its win rate is for the controls playtest to tune
+    /// (TAKOAI-131), so this only checks the gun kills and can win.
+    #[test]
+    fn the_autopilot_plays_missions_with_the_heavy_gun() {
+        let mut wins = 0;
+        for ship in [mission::KITE_ID, mission::BULWARK_ID] {
+            for seed in 10_000..10_004 {
+                let (r, _) = autoplayed_with(ship, &[], seed, sim::MainGun::Heavy);
+                assert!(r.kills >= 40, "{ship} {seed}: {} kills", r.kills);
+                wins += r.outcome.success() as u32;
+            }
+        }
+        assert!(wins >= 2, "{wins} wins");
     }
 
     /// Demo Spec § Workshop upgrades: one successful mission buys about one

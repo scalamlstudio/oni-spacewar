@@ -31,6 +31,10 @@ pub struct SaveGame {
     pub resources: BTreeMap<String, u32>,
     pub purchased_upgrades: BTreeSet<String>,
     pub selected_battleship: String,
+    /// The main gun the next mission launches with, chosen at the Berth
+    /// (design/BATTLE.md B8). Older saves default to the semi-auto.
+    #[serde(default)]
+    pub main_gun: sim::MainGun,
     /// Missions played (also seeds the next mission).
     pub mission_count: u32,
     /// Outcome of the most recent mission; drives the crew's reaction lines.
@@ -90,6 +94,7 @@ impl Default for SaveGame {
             resources,
             purchased_upgrades: BTreeSet::new(),
             selected_battleship: crate::mission::KITE_ID.to_string(),
+            main_gun: sim::MainGun::SemiAuto,
             mission_count: 0,
             last_result: LastResult::None,
             missions_won: 0,

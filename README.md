@@ -2,7 +2,7 @@
 
 A Rust/Bevy game: manage a modular carrier ship and its Oni crew
 (Oxygen Not Included-style base building), then take a battleship out on
-Warframe-style missions with League of Legends-style click-to-move combat.
+Warframe-style missions with twin-stick battleship combat.
 
 The First Playable Demo is in: Title → Carrier → Dock → Battle (Elimination)
 → Result → Carrier → Workshop upgrades → go again. It is a Cargo workspace
@@ -21,7 +21,10 @@ under [`crates/`](crates/), separate from the design docs — see
      to start building it (the ghost says why not); Move and Remove (full
      refund) work on what is there; WASD / arrows pan, mouse wheel zooms,
      right click / Esc drops the pick, Esc / B again leaves
-   - Battle: left-click to move, auto-fire, Q / W skills, Esc pause;
+   - Battle: WASD to move, the mouse aims, hold left click to fire
+     (semi-auto) or hold and release to fire a charged shot (heavy),
+     1 / 2 skills, Esc pause; pick the gun at the Berth's launch panel
+     (G or click "Gun");
      destroy 100 enemies (they come in packs; Spitters glow and
      show an aim line before they fire; as kills rise, Lancers draw a
      charge line, Bloaters burst a second after they die or touch you,

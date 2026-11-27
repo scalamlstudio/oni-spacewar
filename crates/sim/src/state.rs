@@ -1,7 +1,8 @@
 //! The whole rolled-back simulation state and its fixed-timestep step.
 //!
-//! One Elimination mission (design/READINESS.md § Demo Spec): click-to-move
-//! battleships with an auto-firing basic attack and two skills each, void
+//! One Elimination mission (design/READINESS.md § Demo Spec): twin-stick
+//! battleships (WASD, a cursor-aimed main gun that fires only when the
+//! player shoots, design/BATTLE.md B8) with two skills each, void
 //! monster packs pouring out of void fissures (Swarmers and Spitters, and from
 //! TAKOAI-116 the Lancer, Bloater, Brood and Warden roles; from TAKOAI-117
 //! elite pack leaders with affixes), loot drops, and a win/lose result.
@@ -22,7 +23,7 @@ use crate::collision::{overlaps, separation};
 use crate::entity::*;
 use crate::event::{Attack, SimEvent, Skill};
 use crate::fixed::{mul_q16, FxVec2, SUB};
-use crate::input::{NetInput, INPUT_MOVE, INPUT_SKILL_Q, INPUT_SKILL_W};
+use crate::input::{NetInput, INPUT_FIRE, INPUT_SKILL_1, INPUT_SKILL_2};
 use crate::mission::{rolled_kill_target, Mission, MissionOutcome, MissionStage, MissionStatus};
 use crate::rng::SimRng;
 use crate::trig::{cos_q16, sin_q16, ANGLE_STEPS};
@@ -256,7 +257,7 @@ impl SimState {
             self.direct_spawns();
             self.apply_inputs(inputs);
             self.move_ships();
-            self.basic_attacks();
+            self.main_guns(inputs);
             self.enemy_behaviour();
             self.elite_affixes();
             self.move_projectiles();
@@ -406,41 +407,53 @@ impl SimState {
         }
     }
 
-    /// Click-to-move sets the target while held; Q / W use the ship's skills
-    /// toward the cursor once per key press (the tick the button goes down)
-    /// when off cooldown. A press during the cooldown is spent, so holding a
-    /// key never re-fires a skill by itself.
+    /// WASD sets the ship's thrust and the cursor its aim; 1 / 2 use the
+    /// ship's skills toward the cursor once per key press (the tick the
+    /// button goes down) when off cooldown. A press during the cooldown is
+    /// spent, so holding a key never re-fires a skill by itself. The main
+    /// gun fires after movement (`main_guns`).
     fn apply_inputs(&mut self, inputs: &[NetInput]) {
         for i in 0..self.ships.len() {
             let ship = &mut self.ships[i];
             ship.basic_cooldown = ship.basic_cooldown.saturating_sub(1);
-            ship.q_cooldown = ship.q_cooldown.saturating_sub(1);
-            ship.w_cooldown = ship.w_cooldown.saturating_sub(1);
+            ship.skill1_cooldown = ship.skill1_cooldown.saturating_sub(1);
+            ship.skill2_cooldown = ship.skill2_cooldown.saturating_sub(1);
             ship.shield_ticks = ship.shield_ticks.saturating_sub(1);
             ship.chill = ship.chill.saturating_sub(1);
             if ship.shield_ticks == 0 {
                 ship.shield = 0;
             }
             if !ship.alive() {
+                ship.thrust = (0, 0);
+                ship.charge = 0;
                 continue;
             }
             let input = inputs[ship.handle];
             let down = input.buttons & !ship.prev_buttons;
             ship.prev_buttons = input.buttons;
             let aim = FxVec2::from_px(input.target_x, input.target_y);
-            if input.pressed(INPUT_MOVE) {
-                ship.target = aim;
+            let (tx, ty) = input.thrust();
+            ship.thrust = (tx as i8, ty as i8);
+            ship.aim = aim;
+            // The heavy gun charges while fire is held (once recovered), so
+            // the slow-down applies from the first tick; it fires on release
+            // in `main_guns`.
+            if ship.stats.gun == MainGun::Heavy
+                && input.pressed(INPUT_FIRE)
+                && ship.basic_cooldown == 0
+            {
+                ship.charge = (ship.charge + 1).min(HEAVY_CHARGE_TICKS);
             }
-            if down & INPUT_SKILL_Q != 0 && ship.q_cooldown == 0 {
-                self.skill_q(i, aim);
+            if down & INPUT_SKILL_1 != 0 && ship.skill1_cooldown == 0 {
+                self.skill_1(i, aim);
             }
-            if down & INPUT_SKILL_W != 0 && self.ships[i].w_cooldown == 0 {
-                self.skill_w(i, aim);
+            if down & INPUT_SKILL_2 != 0 && self.ships[i].skill2_cooldown == 0 {
+                self.skill_2(i, aim);
             }
         }
     }
 
-    fn skill_q(&mut self, i: usize, aim: FxVec2) {
+    fn skill_1(&mut self, i: usize, aim: FxVec2) {
         let ship = &mut self.ships[i];
         match ship.kind {
             ShipKind::Kite => {
@@ -452,7 +465,7 @@ impl SimState {
                 }
                 ship.dash_vel = vel;
                 ship.dash_ticks = AFTERBURN_TICKS;
-                ship.q_cooldown = ship.stats.q_cooldown;
+                ship.skill1_cooldown = ship.stats.skill1_cooldown;
                 self.events.push(SimEvent::SkillUsed {
                     ship: ship.handle,
                     skill: Skill::Afterburn,
@@ -463,7 +476,7 @@ impl SimState {
                 // Bastion: absorb the next N damage for a while.
                 ship.shield = BASTION_SHIELD;
                 ship.shield_ticks = BASTION_DURATION;
-                ship.q_cooldown = ship.stats.q_cooldown;
+                ship.skill1_cooldown = ship.stats.skill1_cooldown;
                 self.events.push(SimEvent::SkillUsed {
                     ship: ship.handle,
                     skill: Skill::Bastion,
@@ -473,7 +486,7 @@ impl SimState {
         }
     }
 
-    fn skill_w(&mut self, i: usize, aim: FxVec2) {
+    fn skill_2(&mut self, i: usize, aim: FxVec2) {
         let ship = &self.ships[i];
         match ship.kind {
             ShipKind::Kite => {
@@ -496,9 +509,11 @@ impl SimState {
                         radius: SCATTER_RADIUS,
                         attack: Attack::Scatter,
                         chill: false,
+                        pierce: false,
+                        pierced: Vec::new(),
                     });
                 }
-                self.ships[i].w_cooldown = self.ships[i].stats.w_cooldown;
+                self.ships[i].skill2_cooldown = self.ships[i].stats.skill2_cooldown;
                 self.events.push(SimEvent::SkillUsed {
                     ship: owner,
                     skill: Skill::Scatter,
@@ -542,52 +557,70 @@ impl SimState {
                     };
                     e.pos = e.pos + push;
                 }
-                self.ships[i].w_cooldown = self.ships[i].stats.w_cooldown;
+                self.ships[i].skill2_cooldown = self.ships[i].stats.skill2_cooldown;
             }
         }
     }
 
+    /// Ships move along their WASD thrust at their speed (diagonals too),
+    /// slowed by a Chilling hit and by charging the heavy gun, and stop as
+    /// soon as no key is held. An Afterburn dash overrides the thrust.
     fn move_ships(&mut self) {
         for ship in self.ships.iter_mut().filter(|s| s.alive()) {
             if ship.dash_ticks > 0 {
                 ship.pos = ship.pos + ship.dash_vel;
                 ship.dash_ticks -= 1;
-                if ship.dash_ticks == 0 {
-                    // Stop where the dash ends instead of walking back.
-                    ship.target = ship.pos;
-                }
                 continue;
             }
-            let speed = if ship.chill > 0 {
-                ship.stats.speed * CHILL_SPEED_PCT / 100
-            } else {
-                ship.stats.speed
-            };
-            let d = ship.target - ship.pos;
-            ship.pos = if d.length() <= speed as i64 {
-                ship.target
-            } else {
-                ship.pos + d.scale_to(speed)
-            };
+            let (tx, ty) = ship.thrust;
+            if (tx, ty) == (0, 0) {
+                continue;
+            }
+            let mut speed = ship.stats.speed;
+            if ship.chill > 0 {
+                speed = speed * CHILL_SPEED_PCT / 100;
+            }
+            if ship.charging() {
+                speed = speed * HEAVY_CHARGE_SPEED_PCT / 100;
+            }
+            let dir = FxVec2::new(tx as i32 * SUB, ty as i32 * SUB);
+            ship.pos = ship.pos + dir.scale_to(speed);
         }
     }
 
-    /// Each living ship fires a bolt at the nearest living enemy in range.
-    fn basic_attacks(&mut self) {
+    /// The main gun, toward the cursor; it never fires on its own.
+    /// - Semi-auto: while fire is held, a bolt every `basic_interval`.
+    /// - Heavy: while fire is held (and the gun has recovered) the charge
+    ///   builds to `HEAVY_CHARGE_TICKS` and holds there; on release the shot
+    ///   goes out with `charge_pct` of the damage, size and knock-back, and a
+    ///   full charge pierces. Then the gun recovers for `basic_interval`.
+    ///
+    /// No shot goes out while the cursor is on the ship's centre (no
+    /// direction); a heavy charge is kept for the next release.
+    fn main_guns(&mut self, inputs: &[NetInput]) {
         for ship in self.ships.iter_mut().filter(|s| s.alive()) {
-            if ship.basic_cooldown > 0 {
-                continue;
-            }
-            let range = px(ship.stats.basic_range) as i64;
-            let Some(e) = self
-                .enemies
-                .iter()
-                .filter(|e| e.hp > 0 && (e.pos - ship.pos).length_squared() <= range * range)
-                .min_by_key(|e| (e.pos - ship.pos).length_squared())
-            else {
-                continue;
+            let held = inputs[ship.handle].pressed(INPUT_FIRE);
+            let (damage, radius, pierce, attack) = match ship.stats.gun {
+                MainGun::SemiAuto => {
+                    if !held || ship.basic_cooldown > 0 {
+                        continue;
+                    }
+                    (ship.stats.basic_damage, BOLT_RADIUS, false, Attack::Bolt)
+                }
+                MainGun::Heavy => {
+                    if held || !ship.charging() {
+                        continue;
+                    }
+                    let pct = ship.charge_pct();
+                    (
+                        (ship.stats.basic_damage * pct / 100).max(1),
+                        (HEAVY_RADIUS * pct / 100).max(1),
+                        ship.fully_charged(),
+                        Attack::Heavy,
+                    )
+                }
             };
-            let vel = (e.pos - ship.pos).scale_to(px_per_tick(BOLT_SPEED));
+            let vel = (ship.aim - ship.pos).scale_to(px_per_tick(BOLT_SPEED));
             if vel == FxVec2::ZERO {
                 continue;
             }
@@ -598,12 +631,15 @@ impl SimState {
                 pos: ship.pos,
                 vel,
                 ttl: (ship.stats.basic_range * TICKS_PER_SEC / BOLT_SPEED) as u32 + 2,
-                damage: ship.stats.basic_damage,
-                radius: BOLT_RADIUS,
-                attack: Attack::Bolt,
+                damage,
+                radius,
+                attack,
                 chill: false,
+                pierce,
+                pierced: Vec::new(),
             });
             ship.basic_cooldown = ship.stats.basic_interval;
+            ship.charge = 0;
             self.events.push(SimEvent::Fired {
                 ship: ship.handle,
                 shot: id,
@@ -684,6 +720,8 @@ impl SimState {
                                 radius: SPIT_RADIUS,
                                 attack: Attack::Bolt,
                                 chill: e.has(Affix::Chilling),
+                                pierce: false,
+                                pierced: Vec::new(),
                             });
                             e.cooldown = SPITTER_FIRE_INTERVAL - SPITTER_WINDUP;
                         }
@@ -886,6 +924,8 @@ impl SimState {
                                             radius: GUARDIAN_SHOT_RADIUS,
                                             attack: Attack::Bolt,
                                             chill: false,
+                                            pierce: false,
+                                            pierced: Vec::new(),
                                         });
                                     }
                                     self.events
@@ -1067,21 +1107,27 @@ impl SimState {
         }
     }
 
-    /// Each shot damages the first living target it overlaps and is spent.
-    /// A ship's shot also knocks the enemy back a little along its flight.
+    /// Each shot damages the first living target it overlaps and is spent;
+    /// a piercing shot (full heavy charge) instead hits every enemy it
+    /// overlaps, each once, and flies on. A ship's shot also knocks the
+    /// enemy back a little along its flight.
     fn projectile_hits(&mut self) {
         for p in &mut self.projectiles {
-            let hit = self
-                .enemies
-                .iter()
-                .position(|e| e.hp > 0 && overlaps(p.pos, px(p.radius), e.pos, px(e.radius())));
-            if let Some(i) = hit {
+            loop {
+                let hit = self.enemies.iter().position(|e| {
+                    e.hp > 0
+                        && !p.pierced.contains(&e.id)
+                        && overlaps(p.pos, px(p.radius), e.pos, px(e.radius()))
+                });
+                let Some(i) = hit else {
+                    break;
+                };
                 let dealt = damage_to(&self.enemies, i, p.damage);
                 let e = &mut self.enemies[i];
                 e.hp -= dealt;
-                p.ttl = 0;
                 let knockback = match p.attack {
                     Attack::Scatter => SCATTER_KNOCKBACK,
+                    Attack::Heavy => (HEAVY_KNOCKBACK * p.radius / HEAVY_RADIUS).max(1),
                     _ => BOLT_KNOCKBACK,
                 };
                 if e.boss.is_none() {
@@ -1095,6 +1141,11 @@ impl SimState {
                     amount: dealt,
                     pos: e.pos,
                 });
+                if !p.pierce {
+                    p.ttl = 0;
+                    break;
+                }
+                p.pierced.push(e.id);
             }
         }
         for p in &mut self.enemy_projectiles {
@@ -1520,26 +1571,35 @@ mod tests {
             thruster: 0,
             training: 0,
         },
+        gun: MainGun::SemiAuto,
     };
     const BULWARK: Loadout = Loadout {
         ship: ShipKind::Bulwark,
         ..KITE
     };
 
-    /// Deterministic pseudo-players: re-target every 40 ticks, use skills in bursts.
+    /// Deterministic pseudo-players: a new WASD heading and aim point every
+    /// 40 ticks, the gun held in bursts (so heavies charge and release),
+    /// skills in bursts.
     fn scripted_inputs(frame: u32, players: usize) -> Vec<NetInput> {
         (0..players)
             .map(|p| {
                 let k = (frame / 40) as i32 + p as i32 * 7;
-                let mut buttons = 0;
-                if frame.is_multiple_of(40) {
-                    buttons |= INPUT_MOVE;
+                let mut buttons = [
+                    0,
+                    INPUT_UP,
+                    INPUT_DOWN | INPUT_LEFT,
+                    INPUT_RIGHT,
+                    INPUT_LEFT | INPUT_UP,
+                ][(k % 5) as usize];
+                if !(frame / 20 + p as u32).is_multiple_of(4) {
+                    buttons |= INPUT_FIRE;
                 }
                 if !(frame / 25 + p as u32).is_multiple_of(3) {
-                    buttons |= INPUT_SKILL_Q;
+                    buttons |= INPUT_SKILL_1;
                 }
                 if (frame / 30 + p as u32).is_multiple_of(2) {
-                    buttons |= INPUT_SKILL_W;
+                    buttons |= INPUT_SKILL_2;
                 }
                 NetInput {
                     buttons,
@@ -1550,17 +1610,43 @@ mod tests {
             .collect()
     }
 
-    /// Mixed fleet: even handles Kite, odd Bulwark.
+    /// `scripted_inputs` with each ship aiming at the nearest enemy, so the
+    /// guns kill things and the mission moves on.
+    fn hunting_inputs(s: &SimState, frame: u32) -> Vec<NetInput> {
+        let mut inputs = scripted_inputs(frame, s.ships.len());
+        for (input, ship) in inputs.iter_mut().zip(&s.ships) {
+            if let Some(e) = s
+                .enemies
+                .iter()
+                .min_by_key(|e| (e.pos - ship.pos).length_squared())
+            {
+                input.target_x = e.pos.x / SUB;
+                input.target_y = e.pos.y / SUB;
+            }
+        }
+        inputs
+    }
+
+    /// Mixed fleet: even handles Kite with the semi-auto, odd Bulwark with
+    /// the heavy gun.
     fn mixed(players: usize) -> Vec<Loadout> {
         (0..players)
-            .map(|h| if h % 2 == 0 { KITE } else { BULWARK })
+            .map(|h| if h % 2 == 0 { KITE } else { HEAVY_BULWARK })
             .collect()
     }
+
+    const HEAVY_BULWARK: Loadout = Loadout {
+        gun: MainGun::Heavy,
+        ..BULWARK
+    };
 
     fn run(players: usize, frames: u32) -> SimState {
         let mut s = SimState::with_loadouts(7, &mixed(players));
         for f in 0..frames {
-            s.step(&scripted_inputs(f, players));
+            {
+                let inputs = hunting_inputs(&s, f);
+                s.step(&inputs);
+            }
         }
         s
     }
@@ -1569,7 +1655,7 @@ mod tests {
         vec![NetInput::default(); n]
     }
 
-    fn input(buttons: u8, x: i32, y: i32) -> NetInput {
+    fn input(buttons: u16, x: i32, y: i32) -> NetInput {
         NetInput {
             buttons,
             target_x: x,
@@ -1601,12 +1687,18 @@ mod tests {
         let mut s = run(4, 500);
         let snapshot = s.clone();
         for f in 500..600 {
-            s.step(&scripted_inputs(f, 4));
+            {
+                let inputs = hunting_inputs(&s, f);
+                s.step(&inputs);
+            }
         }
         let ahead = s.checksum();
         let mut s = snapshot;
         for f in 500..600 {
-            s.step(&scripted_inputs(f, 4));
+            {
+                let inputs = hunting_inputs(&s, f);
+                s.step(&inputs);
+            }
         }
         assert_eq!(s.checksum(), ahead);
     }
@@ -1655,33 +1747,42 @@ mod tests {
             upgrades: up(1),
             ..BULWARK
         });
-        assert_eq!((b1.max_hull, b1.basic_damage), (175, 10));
+        assert_eq!((b1.max_hull, b1.basic_damage), (175, 5));
         assert_eq!(b1.speed, px_per_tick(161));
         assert_eq!(b1.skill_damage(SHOCKWAVE_DAMAGE), 18);
     }
 
     #[test]
-    fn click_to_move_keeps_going_after_release() {
+    fn wasd_moves_at_ship_speed_and_stops_on_release() {
         let mut s = quiet(&[BULWARK]);
-        s.step(&[input(INPUT_MOVE, 100, 0)]);
-        // 140 px/s = 597 sub-px/tick, so 100 px takes 43 ticks.
-        for _ in 0..41 {
-            s.step(&idle(1));
-        }
-        assert_ne!(s.ships[0].pos, FxVec2::from_px(100, 0));
+        let speed = s.ships[0].stats.speed;
+        // The cursor doesn't steer: only the keys do.
+        s.step(&[input(INPUT_RIGHT, -500, 900)]);
+        assert_eq!(s.ships[0].pos, FxVec2::new(speed, 0));
+        s.step(&[input(INPUT_UP, 0, 0)]);
+        assert_eq!(s.ships[0].pos, FxVec2::new(speed, speed));
+        // Released: it stops at once.
+        let at = s.ships[0].pos;
         s.step(&idle(1));
-        assert_eq!(s.ships[0].pos, FxVec2::from_px(100, 0));
+        assert_eq!(s.ships[0].pos, at);
+        // Opposite keys cancel.
+        s.step(&[input(INPUT_LEFT | INPUT_RIGHT, 0, 0)]);
+        assert_eq!(s.ships[0].pos, at);
+        // A diagonal is no faster than a straight line.
+        s.step(&[input(INPUT_DOWN | INPUT_LEFT, 0, 0)]);
+        let d = (s.ships[0].pos - at).length();
+        assert!((d - speed as i64).abs() <= 1, "{d} vs {speed}");
+        assert!(s.ships[0].pos.x < at.x && s.ships[0].pos.y < at.y);
     }
 
     #[test]
     fn no_arena_edge_blocks_movement() {
         // Far past where the old 2000 × 1160 arena ended.
         let mut s = quiet(&[KITE]);
-        s.step(&[input(INPUT_MOVE, 3000, -2000)]);
         for _ in 0..ticks(20, 1) {
-            s.step(&idle(1));
+            s.step(&[input(INPUT_RIGHT | INPUT_DOWN, 0, 0)]);
         }
-        assert_eq!(s.ships[0].pos, FxVec2::from_px(3000, -2000));
+        assert!(s.ships[0].pos.x > px(3000) && s.ships[0].pos.y < px(-2000));
         // Enemies spawned out there aren't pulled in either.
         s.enemies.push(enemy(EnemyKind::Spitter, -5000, 4000));
         s.step(&idle(1));
@@ -1689,41 +1790,204 @@ mod tests {
     }
 
     #[test]
-    fn basic_attack_auto_fires_at_nearest_enemy_in_range() {
+    fn the_main_gun_never_fires_on_its_own() {
+        for loadout in [KITE, BULWARK, HEAVY_BULWARK] {
+            let mut s = quiet(&[loadout]);
+            s.enemies.push(enemy(EnemyKind::Spitter, 100, 0));
+            for _ in 0..ticks(3, 1) {
+                // Moving, aiming at it and using skills: still no gun.
+                s.step(&[input(INPUT_UP, 100, 0)]);
+                assert!(
+                    s.projectiles
+                        .iter()
+                        .all(|p| !matches!(p.attack, Attack::Bolt | Attack::Heavy)),
+                    "{loadout:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn semi_auto_fires_toward_the_cursor_while_held_at_its_rate() {
         let mut s = quiet(&[BULWARK]);
-        // A Swarmer flies straight in, so the bolt can't miss it.
-        s.enemies.push(enemy(EnemyKind::Swarmer, 230, 0));
-        s.enemies.push(enemy(EnemyKind::Spitter, 0, 500)); // out of range
-        s.step(&idle(1));
-        assert_eq!(s.projectiles.len(), 1);
-        assert!(s.projectiles[0].vel.x > 0 && s.projectiles[0].vel.y == 0);
-        // Next shot only after the interval.
-        for _ in 0..BULWARK_BASIC_INTERVAL - 1 {
+        s.ships[0].hull = 100_000;
+        let fire = input(INPUT_FIRE, 0, -300);
+        let mut shots = Vec::new();
+        for f in 0..ticks(2, 1) {
+            s.step(&[fire]);
+            for e in &s.events {
+                if let SimEvent::Fired { shot, .. } = e {
+                    shots.push(f);
+                    let p = s.projectiles.iter().find(|p| p.id == *shot).unwrap();
+                    // Straight down at the cursor, whatever is nearest.
+                    assert!(p.vel.x == 0 && p.vel.y < 0, "{:?}", p.vel);
+                    assert_eq!(
+                        (p.attack, p.damage, p.pierce),
+                        (Attack::Bolt, SEMI_DAMAGE, false)
+                    );
+                }
+            }
+        }
+        // The first shot on the press, then one per interval.
+        assert_eq!(shots[0], 0);
+        assert!(
+            shots.windows(2).all(|w| w[1] - w[0] == SEMI_INTERVAL),
+            "{shots:?}"
+        );
+        assert_eq!(shots.len() as u32, ticks(2, 1).div_ceil(SEMI_INTERVAL));
+        // Released: it stops.
+        let before = s.mission.spawned + s.next_id;
+        for _ in 0..ticks(1, 1) {
             s.step(&idle(1));
         }
-        // One bolt, one dead Swarmer; the next shot waits for the Spitter.
-        assert_eq!(s.mission.kills, 1);
-        assert_eq!(s.enemies.len(), 1);
-        s.step(&idle(1));
+        assert_eq!(s.mission.spawned + s.next_id, before, "no more shots");
+        // The bolt flies its range and is gone.
         assert!(s.projectiles.is_empty());
+    }
+
+    #[test]
+    fn heavy_charge_scales_damage_and_size_from_30_to_100_percent() {
+        // Release after `held` ticks: the shot's damage and radius.
+        let shot = |held: u32| {
+            let mut s = quiet(&[HEAVY_BULWARK]);
+            for _ in 0..held {
+                s.step(&[input(INPUT_FIRE, 300, 0)]);
+                assert!(s.projectiles.is_empty(), "no shot while held");
+            }
+            s.step(&[input(0, 300, 0)]);
+            assert_eq!(s.projectiles.len(), 1);
+            let p = s.projectiles[0].clone();
+            assert_eq!(p.attack, Attack::Heavy);
+            assert!(p.vel.x > 0 && p.vel.y == 0);
+            (p.damage, p.radius, p.pierce)
+        };
+        // A tap: 30% (rounded down), still a one-hit Swarmer kill.
+        let tap = shot(1);
+        assert_eq!(tap.0, HEAVY_DAMAGE * (HEAVY_MIN_PCT + 1) / 100);
+        assert!(tap.0 >= SWARMER_HP && !tap.2);
+        assert_eq!(tap.1, HEAVY_RADIUS * (HEAVY_MIN_PCT + 1) / 100);
+        // Half charge: about 65%, no pierce.
+        let half = shot(HEAVY_CHARGE_TICKS / 2);
+        assert_eq!(half.0, HEAVY_DAMAGE * 65 / 100);
+        assert!(!half.2);
+        // Just short of full: no pierce yet.
+        assert!(!shot(HEAVY_CHARGE_TICKS - 1).2);
+        // Full charge in 1.0 s: full damage and size, pierces.
+        assert_eq!(shot(HEAVY_CHARGE_TICKS), (HEAVY_DAMAGE, HEAVY_RADIUS, true));
+        // Held as long as you like: the full charge waits.
+        assert_eq!(shot(ticks(10, 1)), (HEAVY_DAMAGE, HEAVY_RADIUS, true));
+        // Damage only grows with the charge.
+        let dmg: Vec<i32> = (1..=HEAVY_CHARGE_TICKS).map(|t| shot(t).0).collect();
+        assert!(dmg.windows(2).all(|w| w[0] <= w[1]));
+    }
+
+    #[test]
+    fn heavy_recovers_before_it_charges_again() {
+        let mut s = quiet(&[HEAVY_BULWARK]);
+        s.step(&[input(INPUT_FIRE, 300, 0)]);
+        s.step(&[input(0, 300, 0)]);
+        assert_eq!(s.projectiles.len(), 1);
+        // Holding through the recovery doesn't charge.
+        for _ in 0..HEAVY_RECOVERY - 1 {
+            s.step(&[input(INPUT_FIRE, 300, 0)]);
+            assert!(!s.ships[0].charging());
+        }
+        s.step(&[input(INPUT_FIRE, 300, 0)]);
+        assert!(s.ships[0].charging());
+    }
+
+    #[test]
+    fn a_full_heavy_charge_pierces_and_a_partial_one_does_not() {
+        let line = |held: u32| {
+            let mut s = quiet(&[HEAVY_BULWARK]);
+            for _ in 0..held {
+                s.step(&[input(INPUT_FIRE, 300, 0)]);
+            }
+            // Lined up just before the release (they'd wander off while
+            // it charges).
+            for x in [80, 130, 180] {
+                let mut e = enemy(EnemyKind::Spitter, x, 0);
+                e.id = x as u32;
+                e.cooldown = u32::MAX;
+                s.enemies.push(e);
+            }
+            for _ in 0..ticks(1, 2) {
+                s.step(&[input(0, 300, 0)]);
+            }
+            s.enemies
+                .iter()
+                .map(|e| SPITTER_HP - e.hp)
+                .collect::<Vec<_>>()
+        };
+        // Full: every enemy in the line takes the full hit, once.
+        assert_eq!(line(HEAVY_CHARGE_TICKS), [HEAVY_DAMAGE; 3]);
+        // Partial: only the first one is hit.
+        let partial = line(HEAVY_CHARGE_TICKS / 2);
+        assert!(partial[0] > 0 && partial[1..] == [0, 0], "{partial:?}");
+    }
+
+    #[test]
+    fn charging_the_heavy_slows_the_ship_to_60_percent() {
+        let mut s = quiet(&[HEAVY_BULWARK]);
+        let speed = s.ships[0].stats.speed;
+        s.step(&[input(INPUT_RIGHT, 300, 0)]);
+        assert_eq!(s.ships[0].pos.x, speed);
+        for _ in 0..ticks(3, 1) {
+            let x = s.ships[0].pos.x;
+            s.step(&[input(INPUT_RIGHT | INPUT_FIRE, 300, 0)]);
+            assert_eq!(s.ships[0].pos.x - x, speed * HEAVY_CHARGE_SPEED_PCT / 100);
+        }
+        // Released: the shot goes and full speed is back.
+        s.step(&[input(INPUT_RIGHT, 300, 0)]);
+        let x = s.ships[0].pos.x;
+        s.step(&[input(INPUT_RIGHT, 300, 0)]);
+        assert_eq!(s.ships[0].pos.x - x, speed);
+        // The semi-auto never slows the ship.
+        let mut s = quiet(&[BULWARK]);
+        s.step(&[input(INPUT_RIGHT | INPUT_FIRE, 300, 0)]);
+        assert_eq!(s.ships[0].pos.x, speed);
+    }
+
+    #[test]
+    fn either_ship_carries_either_gun() {
+        for ship in [ShipKind::Kite, ShipKind::Bulwark] {
+            for gun in [MainGun::SemiAuto, MainGun::Heavy] {
+                let l = Loadout { ship, gun, ..KITE };
+                let st = ShipStats::new(l);
+                assert_eq!(st.gun, gun);
+                let mut s = quiet(&[l]);
+                s.step(&[input(INPUT_FIRE, 300, 0)]);
+                s.step(&[input(0, 300, 0)]);
+                let expect = match gun {
+                    MainGun::SemiAuto => Attack::Bolt,
+                    MainGun::Heavy => Attack::Heavy,
+                };
+                assert_eq!(s.projectiles[0].attack, expect, "{l:?}");
+            }
+        }
     }
 
     #[test]
     fn kite_afterburn_dashes_toward_cursor() {
         let mut s = quiet(&[KITE]);
-        s.step(&[input(INPUT_SKILL_Q, 1000, 0)]);
+        s.step(&[input(INPUT_SKILL_1, 1000, 0)]);
         for _ in 0..AFTERBURN_TICKS {
             s.step(&idle(1));
         }
         assert_eq!(s.ships[0].pos, FxVec2::from_px(AFTERBURN_DISTANCE, 0));
-        assert_eq!(s.ships[0].target, s.ships[0].pos);
-        assert_eq!(s.ships[0].q_cooldown, AFTERBURN_COOLDOWN - AFTERBURN_TICKS);
+        // It stops where the dash ends.
+        s.step(&idle(1));
+        assert_eq!(s.ships[0].pos, FxVec2::from_px(AFTERBURN_DISTANCE, 0));
+        assert_eq!(
+            s.ships[0].skill1_cooldown,
+            AFTERBURN_COOLDOWN - AFTERBURN_TICKS - 1
+        );
     }
 
     #[test]
     fn held_q_dashes_once_and_a_new_press_dashes_again() {
         let mut s = quiet(&[KITE]);
-        let q = input(INPUT_SKILL_Q, 1000, 0);
+        let q = input(INPUT_SKILL_1, 1000, 0);
         let mut dashes = 0;
         let mut was_dashing = false;
         // Hold Q for 10 s: more than two Afterburn cooldowns.
@@ -1740,7 +2004,7 @@ mod tests {
         s.step(&[q]);
         // The dash starts this tick (its first step is already taken).
         assert_eq!(s.ships[0].dash_ticks, AFTERBURN_TICKS - 1);
-        assert_eq!(s.ships[0].q_cooldown, AFTERBURN_COOLDOWN);
+        assert_eq!(s.ships[0].skill1_cooldown, AFTERBURN_COOLDOWN);
     }
 
     #[test]
@@ -1750,10 +2014,10 @@ mod tests {
             let mut s = quiet(&[loadout]);
             let (mut q_uses, mut w_uses) = (0, 0);
             for _ in 0..ticks(30, 1) {
-                s.step(&[input(INPUT_SKILL_Q | INPUT_SKILL_W, 0, 300)]);
+                s.step(&[input(INPUT_SKILL_1 | INPUT_SKILL_2, 0, 300)]);
                 let ship = &s.ships[0];
-                q_uses += (ship.q_cooldown == ship.q_cooldown_max()) as u32;
-                w_uses += (ship.w_cooldown == ship.w_cooldown_max()) as u32;
+                q_uses += (ship.skill1_cooldown == ship.skill1_cooldown_max()) as u32;
+                w_uses += (ship.skill2_cooldown == ship.skill2_cooldown_max()) as u32;
             }
             assert_eq!((q_uses, w_uses), (1, 1), "{loadout:?}");
         }
@@ -1777,24 +2041,24 @@ mod tests {
     #[test]
     fn kite_scatter_fires_a_cone() {
         let mut s = quiet(&[KITE]);
-        s.step(&[input(INPUT_SKILL_W, 0, 300)]);
+        s.step(&[input(INPUT_SKILL_2, 0, 300)]);
         assert_eq!(s.projectiles.len(), SCATTER_BOLTS as usize);
         let xs: Vec<i32> = s.projectiles.iter().map(|p| p.vel.x).collect();
         assert!(xs[0] > 0 && xs[2] == 0 && xs[4] < 0, "{xs:?}");
-        assert_eq!(s.ships[0].w_cooldown, SCATTER_COOLDOWN);
+        assert_eq!(s.ships[0].skill2_cooldown, SCATTER_COOLDOWN);
     }
 
     #[test]
     fn bulwark_bastion_absorbs_damage() {
         let mut s = quiet(&[BULWARK]);
-        s.step(&[input(INPUT_SKILL_Q, 0, 0)]);
+        s.step(&[input(INPUT_SKILL_1, 0, 0)]);
         s.ships[0].take_damage(30);
         assert_eq!((s.ships[0].hull, s.ships[0].shield), (BULWARK_HULL, 10));
         s.ships[0].take_damage(30);
         assert_eq!((s.ships[0].hull, s.ships[0].shield), (BULWARK_HULL - 20, 0));
         // The shield expires.
-        s.step(&[input(INPUT_SKILL_Q, 0, 0)]);
-        assert!(s.ships[0].q_cooldown > 0);
+        s.step(&[input(INPUT_SKILL_1, 0, 0)]);
+        assert!(s.ships[0].skill1_cooldown > 0);
         s.ships[0].shield = 5;
         s.ships[0].shield_ticks = 1;
         s.step(&idle(1));
@@ -1806,7 +2070,7 @@ mod tests {
         let mut s = quiet(&[BULWARK]);
         s.enemies.push(enemy(EnemyKind::Spitter, 100, 0));
         s.enemies.push(enemy(EnemyKind::Spitter, 400, 0));
-        s.step(&[input(INPUT_SKILL_W, 0, 0)]);
+        s.step(&[input(INPUT_SKILL_2, 0, 0)]);
         assert_eq!(s.enemies[0].hp, SPITTER_HP - SHOCKWAVE_DAMAGE);
         assert!(s.enemies[0].pos.x >= px(195));
         assert_eq!(s.enemies[1].hp, SPITTER_HP);
@@ -1999,18 +2263,20 @@ mod tests {
     }
 
     #[test]
-    fn one_basic_hit_kills_a_swarmer_from_any_ship() {
+    fn one_main_gun_hit_kills_a_swarmer_from_any_ship_and_gun() {
         for loadout in [KITE, BULWARK] {
             let stats = ShipStats::new(loadout);
             assert!(stats.basic_damage >= SWARMER_HP, "{loadout:?}");
         }
+        // The heavy's weakest shot too.
+        const { assert!(HEAVY_DAMAGE * HEAVY_MIN_PCT / 100 >= SWARMER_HP) };
         let mut s = quiet(&[KITE]);
         s.enemies.push(enemy(EnemyKind::Swarmer, 200, 0));
         let mut f = 0;
         while s.mission.kills == 0 {
-            s.step(&idle(1));
+            s.step(&[input(INPUT_FIRE, 200, 0)]);
             f += 1;
-            assert!(f < KITE_BASIC_INTERVAL, "killed by the first bolt");
+            assert!(f < SEMI_INTERVAL, "killed by the first bolt");
         }
     }
 
@@ -2063,7 +2329,7 @@ mod tests {
             s.step(&idle(1));
         }
         for _ in 0..ticks(3, 1) {
-            s.step(&[input(INPUT_MOVE, 0, 2000)]);
+            s.step(&[input(INPUT_UP, 0, 2000)]);
         }
         assert_eq!(s.ships[0].hull, BULWARK_HULL, "dodged");
     }
@@ -2188,7 +2454,7 @@ mod tests {
         assert!(s.enemies.is_empty() && s.pickups.is_empty());
         // The world is frozen afterwards.
         let frozen = s.clone();
-        s.step(&[input(INPUT_MOVE, 300, 0)]);
+        s.step(&[input(INPUT_RIGHT | INPUT_FIRE, 300, 0)]);
         assert_eq!(s.ships, frozen.ships);
         assert_eq!(s.mission.end_frame, frozen.frame - 1);
     }
@@ -2205,7 +2471,7 @@ mod tests {
                     assert!(s.mission.kills < AUTOPLAY_KILL_TARGET);
                 }
                 let e = s.enemies.first().map(|e| e.pos).unwrap_or_default();
-                let buttons = if f % 30 == 0 { INPUT_SKILL_W } else { 0 };
+                let buttons = INPUT_FIRE | if f % 30 == 0 { INPUT_SKILL_2 } else { 0 };
                 s.step(&[input(buttons, e.x / SUB, e.y / SUB)]);
                 f += 1;
             }
@@ -2255,7 +2521,10 @@ mod tests {
                     for sh in &mut s.ships {
                         sh.hull = sh.hull.max(1000);
                     }
-                    s.step(&scripted_inputs(f, 2));
+                    {
+                        let inputs = hunting_inputs(&s, f);
+                        s.step(&inputs);
+                    }
                     f += 1;
                 }
                 let out = s.outcome().expect("mission over");
@@ -2311,7 +2580,7 @@ mod tests {
             while s.outcome().is_none() && f < 60 * 300 {
                 s.ships[0].hull = 10_000;
                 let e = s.enemies.first().map(|e| e.pos).unwrap_or_default();
-                let buttons = if f % 30 == 0 { INPUT_SKILL_W } else { 0 };
+                let buttons = INPUT_FIRE | if f % 30 == 0 { INPUT_SKILL_2 } else { 0 };
                 s.step(&[input(buttons, e.x / SUB, e.y / SUB)]);
                 f += 1;
             }
@@ -2336,9 +2605,8 @@ mod tests {
         s.step(&idle(1));
         assert_eq!(s.pickups[0].pos, pos);
         // Fly over it.
-        s.step(&[input(INPUT_MOVE, 300, 0)]);
         for _ in 0..120 {
-            s.step(&idle(1));
+            s.step(&[input(INPUT_RIGHT, 0, 0)]);
         }
         assert!(s.pickups.is_empty());
         assert_eq!(s.mission.collected.credits, SWARMER_CREDITS);
@@ -2422,7 +2690,10 @@ mod tests {
         let mut s = SimState::with_loadouts(7, &mixed(4));
         let mut seen: std::collections::BTreeMap<u32, &'static str> = Default::default();
         for f in 0..3000 {
-            s.step(&scripted_inputs(f, 4));
+            {
+                let inputs = hunting_inputs(&s, f);
+                s.step(&inputs);
+            }
             let ids = s
                 .enemies
                 .iter()
@@ -2457,7 +2728,7 @@ mod tests {
         let mut hit = None;
         for _ in 0..20 {
             let before = s.enemies[0].pos;
-            s.step(&idle(1));
+            s.step(&[input(INPUT_FIRE, 100, 0)]);
             for ev in &s.events {
                 match *ev {
                     SimEvent::Fired { ship: 0, shot } if fired.is_none() => fired = Some(shot),
@@ -2480,7 +2751,7 @@ mod tests {
         let shot = fired.expect("the ship fired");
         assert_eq!(
             hit,
-            Some((42, 0, Attack::Bolt, shot, KITE_BASIC_DAMAGE)),
+            Some((42, 0, Attack::Bolt, shot, SEMI_DAMAGE)),
             "{:?}",
             s.events
         );
@@ -2512,7 +2783,7 @@ mod tests {
         let mut e = enemy(EnemyKind::Spitter, 100, 0);
         e.id = 8;
         s.enemies.push(e);
-        s.step(&[input(INPUT_SKILL_W, 0, 0)]);
+        s.step(&[input(INPUT_SKILL_2, 0, 0)]);
         assert!(s.events.contains(&SimEvent::SkillUsed {
             ship: 0,
             skill: Skill::Shockwave,
@@ -2534,12 +2805,13 @@ mod tests {
         e.id = 9;
         s.enemies.push(e);
         s.step(&idle(1));
+        // (Reported where the ship was when hit, before separation.)
         assert!(s.events.contains(&SimEvent::ShipDamaged {
             ship: 0,
             source: 9,
             amount: SWARMER_CONTACT_DAMAGE,
             hull_lost: SWARMER_CONTACT_DAMAGE,
-            pos: s.ships[0].pos,
+            pos: FxVec2::ZERO,
         }));
 
         // Mission end: reported on the tick it ends, then never again.
@@ -2566,14 +2838,20 @@ mod tests {
         let snapshot = s.clone();
         let mut first = Vec::new();
         for f in 1500..1800 {
-            s.step(&scripted_inputs(f, 4));
+            {
+                let inputs = hunting_inputs(&s, f);
+                s.step(&inputs);
+            }
             first.extend(s.events.iter().map(|e| (f, e.key())));
         }
         assert!(first.len() > 20, "{}", first.len());
         let mut s = snapshot;
         let mut again = Vec::new();
         for f in 1500..1800 {
-            s.step(&scripted_inputs(f, 4));
+            {
+                let inputs = hunting_inputs(&s, f);
+                s.step(&inputs);
+            }
             again.extend(s.events.iter().map(|e| (f, e.key())));
         }
         assert_eq!(first, again);
@@ -2627,7 +2905,7 @@ mod tests {
             s.step(&idle(1));
         }
         for _ in 0..ticks(2, 1) {
-            s.step(&[input(INPUT_MOVE, 0, 2000)]);
+            s.step(&[input(INPUT_UP, 0, 2000)]);
         }
         assert_eq!(s.ships[0].hull, BULWARK_HULL, "sidestepped");
     }
@@ -2737,8 +3015,8 @@ mod tests {
         assert_eq!(warden_of(&s.enemies, 0), Some(1));
         assert_eq!(warden_of(&s.enemies, 1), None, "not itself");
         assert_eq!(warden_of(&s.enemies, 2), None, "out of range");
-        s.ships[0].w_cooldown = 0;
-        s.step(&[input(INPUT_SKILL_W, 0, 0)]);
+        s.ships[0].skill2_cooldown = 0;
+        s.step(&[input(INPUT_SKILL_2, 0, 0)]);
         let hit = |id: usize| {
             s.events.iter().find_map(|e| match *e {
                 SimEvent::Hit { enemy, amount, .. } if enemy == s.enemies[id].id => Some(amount),
@@ -2794,7 +3072,10 @@ mod tests {
                 for sh in &mut s.ships {
                     sh.hull = sh.hull.max(1000);
                 }
-                s.step(&scripted_inputs(f, 2));
+                {
+                    let inputs = hunting_inputs(&s, f);
+                    s.step(&inputs);
+                }
             }
             s
         };
@@ -2808,12 +3089,18 @@ mod tests {
         let mut s = go(1800);
         let snapshot = s.clone();
         for f in 1800..2000 {
-            s.step(&scripted_inputs(f, 2));
+            {
+                let inputs = hunting_inputs(&s, f);
+                s.step(&inputs);
+            }
         }
         let ahead = s.checksum();
         let mut s = snapshot;
         for f in 1800..2000 {
-            s.step(&scripted_inputs(f, 2));
+            {
+                let inputs = hunting_inputs(&s, f);
+                s.step(&inputs);
+            }
         }
         assert_eq!(s.checksum(), ahead);
     }
@@ -3041,7 +3328,7 @@ mod tests {
         assert_eq!(s.ships[0].chill, CHILL_DURATION);
         s.enemies.clear();
         let from = s.ships[0].pos;
-        s.step(&[input(INPUT_MOVE, 2000, 0)]);
+        s.step(&[input(INPUT_RIGHT, 2000, 0)]);
         let moved = (s.ships[0].pos - from).length();
         let slow = (KITE_SPEED * CHILL_SPEED_PCT / 100) as i64 * SUB as i64 / 60;
         assert!((moved - slow).abs() <= 2, "{moved} vs {slow}");
@@ -3062,7 +3349,10 @@ mod tests {
                 for sh in &mut s.ships {
                     sh.hull = sh.hull.max(1000);
                 }
-                s.step(&scripted_inputs(f, 2));
+                {
+                    let inputs = hunting_inputs(&s, f);
+                    s.step(&inputs);
+                }
             }
             s
         };
@@ -3072,12 +3362,18 @@ mod tests {
         let mut s = go(1800);
         let snapshot = s.clone();
         for f in 1800..2000 {
-            s.step(&scripted_inputs(f, 2));
+            {
+                let inputs = hunting_inputs(&s, f);
+                s.step(&inputs);
+            }
         }
         let ahead = s.checksum();
         let mut s = snapshot;
         for f in 1800..2000 {
-            s.step(&scripted_inputs(f, 2));
+            {
+                let inputs = hunting_inputs(&s, f);
+                s.step(&inputs);
+            }
         }
         assert_eq!(s.checksum(), ahead);
     }
@@ -3224,10 +3520,14 @@ mod tests {
         b.step = 1;
         s.step(&idle(1));
         assert!(guardian_of(&s).windup > 0);
-        // Sidestep as soon as the line shows.
-        s.step(&[input(INPUT_MOVE, 120, 0)]);
-        for _ in 0..GUARDIAN_CHARGE_WINDUP + GUARDIAN_CHARGE_TICKS {
-            s.step(&idle(1));
+        // Sidestep 120 px as soon as the line shows.
+        for _ in 0..GUARDIAN_CHARGE_WINDUP + GUARDIAN_CHARGE_TICKS + 1 {
+            let keys = if s.ships[0].pos.x < px(120) {
+                INPUT_RIGHT
+            } else {
+                0
+            };
+            s.step(&[input(keys, 0, 0)]);
         }
         assert_eq!(s.ships[0].hull, BULWARK_HULL);
     }
@@ -3239,14 +3539,13 @@ mod tests {
         s.enemies.iter_mut().find(|e| e.id == id).unwrap().cooldown = u32::MAX;
         let at = guardian_of(&s).pos;
         s.ships[0].basic_cooldown = 0;
-        s.step(&[input(INPUT_SKILL_W, 0, 0)]);
+        s.step(&[input(INPUT_SKILL_2, 0, 0)]);
         s.step(&idle(1));
         assert_eq!(guardian_of(&s).pos, at);
         assert!(guardian_of(&s).hp < guardian_of(&s).max_hp());
         // Flying into it: the ship slides off, the Guardian stays.
-        s.step(&[input(INPUT_MOVE, 0, 100)]);
-        for _ in 0..60 {
-            s.step(&idle(1));
+        for _ in 0..61 {
+            s.step(&[input(INPUT_UP, 0, 100)]);
         }
         assert_eq!(guardian_of(&s).pos, at);
         let gap = (s.ships[0].pos - at).length();
@@ -3261,7 +3560,10 @@ mod tests {
                 for sh in &mut s.ships {
                     sh.hull = sh.hull.max(1000);
                 }
-                s.step(&scripted_inputs(f, 2));
+                {
+                    let inputs = hunting_inputs(&s, f);
+                    s.step(&inputs);
+                }
             }
             s
         };
@@ -3272,12 +3574,18 @@ mod tests {
         assert!(s.guardian().is_some() || s.mission.stage != MissionStage::Guardian);
         let snapshot = s.clone();
         for f in 2000..2300 {
-            s.step(&scripted_inputs(f, 2));
+            {
+                let inputs = hunting_inputs(&s, f);
+                s.step(&inputs);
+            }
         }
         let ahead = s.checksum();
         let mut s = snapshot;
         for f in 2000..2300 {
-            s.step(&scripted_inputs(f, 2));
+            {
+                let inputs = hunting_inputs(&s, f);
+                s.step(&inputs);
+            }
         }
         assert_eq!(s.checksum(), ahead);
     }

@@ -427,8 +427,9 @@ fn bar(gizmos: &mut Gizmos, c: Vec2, width: f32, frac: f32, color: Color) {
     );
 }
 
-/// Gizmo effects for one ship: shield, shockwave, dash trail, hull bar and
-/// (our own ship) the move marker. The ship itself is a sprite.
+/// Gizmo effects for one ship: shield, shockwave, dash trail, hull bar,
+/// the main gun's aim line and the heavy gun's charge ring. The ship itself
+/// is a sprite.
 fn draw_ship_fx(gizmos: &mut Gizmos, ship: &Ship, me: usize) {
     if !ship.alive() {
         return;
@@ -440,9 +441,9 @@ fn draw_ship_fx(gizmos: &mut Gizmos, ship: &Ship, me: usize) {
         gizmos.circle_2d(p, r + 6.0, Color::srgb(0.5, 0.8, 1.0));
         gizmos.circle_2d(p, r + 8.0, Color::srgba(0.5, 0.8, 1.0, 0.4));
     }
-    if ship.kind == ShipKind::Bulwark && ship.w_cooldown + 12 > ship.w_cooldown_max() {
+    if ship.kind == ShipKind::Bulwark && ship.skill2_cooldown + 12 > ship.skill2_cooldown_max() {
         // Shockwave: a ring that expands over the first 12 ticks.
-        let age = (ship.w_cooldown_max() - ship.w_cooldown) as f32 / 12.0;
+        let age = (ship.skill2_cooldown_max() - ship.skill2_cooldown) as f32 / 12.0;
         gizmos.circle_2d(
             p,
             SHOCKWAVE_RADIUS as f32 * age.min(1.0),
@@ -460,13 +461,40 @@ fn draw_ship_fx(gizmos: &mut Gizmos, ship: &Ship, me: usize) {
         ship.hull as f32 / ship.stats.max_hull as f32,
         Color::srgb(0.3, 1.0, 0.4),
     );
-    // Click-to-move destination marker for our own ship.
-    if ship.handle == me && ship.target != ship.pos {
-        move_marker(gizmos, to_world(ship.target), color);
+    // Aim: a short line from the hull toward the cursor (longer for our own
+    // ship).
+    let aim = to_world(ship.aim) - p;
+    if aim.length_squared() > 1.0 {
+        let len = if ship.handle == me {
+            r + 26.0
+        } else {
+            r + 12.0
+        };
+        let dir = aim.normalize();
+        gizmos.line_2d(p + dir * (r + 2.0), p + dir * len, color.with_alpha(0.7));
+    }
+    // Heavy charge (client-only, from sim state): a ring that closes in as
+    // the charge builds and turns gold when full (the shot will pierce).
+    if ship.charging() {
+        let pct = ship.charge_pct() as f32 / 100.0;
+        let full = ship.fully_charged();
+        let ring = Color::srgb(1.0, 0.85, 0.35);
+        gizmos.circle_2d(
+            p,
+            r + 4.0 + 18.0 * (1.0 - pct),
+            if full {
+                ring
+            } else {
+                ring.with_alpha(0.3 + 0.5 * pct)
+            },
+        );
+        if full {
+            gizmos.circle_2d(p, r + 6.0, ring.with_alpha(0.5));
+        }
     }
 }
 
-/// The click-to-move destination marker (battle and Carrier): a small X.
+/// The Carrier's click-to-move destination marker: a small X.
 pub fn move_marker(gizmos: &mut Gizmos, t: Vec2, color: Color) {
     gizmos.line_2d(t - Vec2::splat(4.0), t + Vec2::splat(4.0), color);
     gizmos.line_2d(t + Vec2::new(-4.0, 4.0), t + Vec2::new(4.0, -4.0), color);
@@ -658,10 +686,11 @@ fn draw_sprites(
         state.facing.resize(world.ships.len(), 0.0);
         for (i, ship) in world.ships.iter().enumerate() {
             let p = to_world(ship.pos);
+            // Faces where it aims (twin-stick), or along an Afterburn dash.
             let moving = if ship.dash_ticks > 0 {
                 to_world(ship.dash_vel)
             } else {
-                to_world(ship.target) - p
+                to_world(ship.aim) - p
             };
             if moving.length_squared() > 1.0 {
                 state.facing[i] = heading(moving);
@@ -1422,6 +1451,16 @@ fn follow_camera(
     cam.translation = (next + follow.shake).extend(cam.translation.z);
 }
 
+/// The main gun's name, and the heavy's charge while it charges.
+fn gun_status(ship: &Ship) -> String {
+    match ship.stats.gun {
+        sim::MainGun::SemiAuto => "Semi-auto".to_string(),
+        sim::MainGun::Heavy if ship.fully_charged() => "Heavy FULL".to_string(),
+        sim::MainGun::Heavy if ship.charging() => format!("Heavy {}%", ship.charge_pct()),
+        sim::MainGun::Heavy => "Heavy".to_string(),
+    }
+}
+
 fn cooldown_text(ticks: u32) -> String {
     if ticks == 0 {
         "ready".to_string()
@@ -1430,8 +1469,8 @@ fn cooldown_text(ticks: u32) -> String {
     }
 }
 
-/// Battle HUD: hull, kills/objective, mission time and live enemies, Q/W
-/// cooldowns, loot so far.
+/// Battle HUD: hull, kills/objective, mission time and live enemies, the
+/// gun and skill 1/2 cooldowns, loot so far.
 pub fn battle_hud(world: &SimState, me: usize) -> String {
     let m = &world.mission;
     let mut s = String::new();
@@ -1450,9 +1489,10 @@ pub fn battle_hud(world: &SimState, me: usize) -> String {
         }
         let (q, w) = skill_names(ship.kind);
         s += &format!(
-            "\nQ {q}: {}    W {w}: {}",
-            cooldown_text(ship.q_cooldown),
-            cooldown_text(ship.w_cooldown)
+            "\n1 {q}: {}    2 {w}: {}    Gun: {}",
+            cooldown_text(ship.skill1_cooldown),
+            cooldown_text(ship.skill2_cooldown),
+            gun_status(ship)
         );
     }
     let secs = world.frame / TICKS_PER_SEC as u32;
@@ -1817,7 +1857,7 @@ mod tests {
         );
         w.mission.kills = 7;
         w.mission.collected.credits = 35;
-        w.ships[0].w_cooldown = 90;
+        w.ships[0].skill2_cooldown = 90;
         w.frame = 75 * 60;
         w.enemies
             .push(sim::Enemy::new(EnemyKind::Swarmer, FxVec2::ZERO));
@@ -1828,9 +1868,16 @@ mod tests {
         assert!(hud.contains("Time 1:15   Enemies 1"), "{hud}");
         assert!(!hud.contains("Wave"), "{hud}");
         assert!(
-            hud.contains("Q Bastion: ready") && hud.contains("W Shockwave: 1.5s"),
+            hud.contains("1 Bastion: ready") && hud.contains("2 Shockwave: 1.5s"),
             "{hud}"
         );
+        assert!(hud.contains("Gun: Semi-auto"), "{hud}");
+        // The heavy's charge shows while it builds.
+        w.ships[0].stats.gun = sim::MainGun::Heavy;
+        w.ships[0].charge = sim::tuning::HEAVY_CHARGE_TICKS / 2;
+        assert!(battle_hud(&w, 0).contains("Gun: Heavy 65%"));
+        w.ships[0].charge = sim::tuning::HEAVY_CHARGE_TICKS;
+        assert!(battle_hud(&w, 0).contains("Gun: Heavy FULL"));
         assert!(hud.contains("35 credits"), "{hud}");
     }
 

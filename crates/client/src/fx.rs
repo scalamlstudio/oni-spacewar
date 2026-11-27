@@ -714,7 +714,7 @@ fn clear_when_battle_ends(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sim::input::{NetInput, INPUT_SKILL_W};
+    use sim::input::{NetInput, INPUT_SKILL_2};
     use sim::{Loadout, ShipKind};
 
     fn bulwark_battle() -> SimState {
@@ -736,7 +736,7 @@ mod tests {
             .push(sim::Enemy::new(EnemyKind::Swarmer, FxVec2::from_px(100, 0)));
         let before = world.clone();
         let w = NetInput {
-            buttons: INPUT_SKILL_W,
+            buttons: INPUT_SKILL_2,
             ..Default::default()
         };
         let mut events = BattleEvents::default();

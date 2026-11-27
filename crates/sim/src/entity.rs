@@ -11,11 +11,25 @@ use crate::tuning::*;
 /// Which battleship a player flies (Demo Spec § Battleships).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default, Serialize, Deserialize)]
 pub enum ShipKind {
-    /// Fast, fragile, short cooldowns. Q Afterburn, W Scatter.
+    /// Fast, fragile, short cooldowns. 1 Afterburn, 2 Scatter.
     #[default]
     Kite,
-    /// Slow, tanky, stronger basic attack. Q Bastion, W Shockwave.
+    /// Slow, tanky. 1 Bastion, 2 Shockwave.
     Bulwark,
+}
+
+/// The battleship's main gun (design/BATTLE.md B8). Either ship can carry
+/// either gun: the ship decides only its skills. Fires only when the
+/// player shoots, toward the cursor.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default, Serialize, Deserialize)]
+pub enum MainGun {
+    /// Hold to fire at the gun's fire rate; release to stop.
+    #[default]
+    SemiAuto,
+    /// Press to charge, release to fire: damage and shot size 30%..100%
+    /// over 1 s, a full charge pierces and can be held; the ship moves at
+    /// 60% speed while charging.
+    Heavy,
 }
 
 /// Workshop upgrade levels (0..=`MAX_UPGRADE_LEVEL`), applied to every ship.
@@ -24,7 +38,7 @@ pub struct Upgrades {
     pub hull: u8,
     pub weapon: u8,
     pub thruster: u8,
-    /// Training Room (0 or 1): shorter Q / W cooldowns. A carrier room, not
+    /// Training Room (0 or 1): shorter skill 1 / 2 cooldowns. A carrier room, not
     /// a Workshop purchase, but it reaches the sim the same way.
     #[serde(default)]
     pub training: u8,
@@ -35,6 +49,8 @@ pub struct Upgrades {
 pub struct Loadout {
     pub ship: ShipKind,
     pub upgrades: Upgrades,
+    /// Chosen at the Berth and saved with the loadout.
+    pub gun: MainGun,
 }
 
 /// A ship's numbers after upgrades in human units (px, px/s, ticks), the
@@ -46,29 +62,30 @@ pub struct ShipSheet {
     /// px/s.
     pub speed: i32,
     pub radius: i32,
+    /// The main gun and its numbers (after Weapon Tuning): per shot for
+    /// the semi-auto, per full charge for the heavy.
+    pub gun: MainGun,
     pub basic_damage: i32,
-    /// Ticks between basic attacks.
+    /// Ticks between semi-auto shots; the heavy's recovery after a shot.
     pub basic_interval: u32,
+    /// How far a shot flies, px.
     pub basic_range: i32,
-    /// W damage after Weapon Tuning: Kite Scatter per bolt, Bulwark
-    /// Shockwave. (Neither Q deals damage.)
-    pub w_damage: i32,
-    pub q_cooldown: u32,
-    pub w_cooldown: u32,
+    /// Skill 2 damage after Weapon Tuning: Kite Scatter per bolt, Bulwark
+    /// Shockwave. (Neither skill 1 deals damage.)
+    pub skill2_damage: i32,
+    pub skill1_cooldown: u32,
+    pub skill2_cooldown: u32,
 }
 
 impl ShipSheet {
     pub fn new(loadout: Loadout) -> Self {
         let up = loadout.upgrades;
         let weapon = |base| upgraded(base, WEAPON_PCT_PER_LEVEL, up.weapon);
-        let (hull, speed, radius, dmg, interval, range, w_dmg, q_cd, w_cd) = match loadout.ship {
+        let (hull, speed, radius, skill2_dmg, cd1, cd2) = match loadout.ship {
             ShipKind::Kite => (
                 KITE_HULL,
                 KITE_SPEED,
                 KITE_RADIUS,
-                KITE_BASIC_DAMAGE,
-                KITE_BASIC_INTERVAL,
-                KITE_BASIC_RANGE,
                 SCATTER_DAMAGE,
                 AFTERBURN_COOLDOWN,
                 SCATTER_COOLDOWN,
@@ -77,24 +94,26 @@ impl ShipSheet {
                 BULWARK_HULL,
                 BULWARK_SPEED,
                 BULWARK_RADIUS,
-                BULWARK_BASIC_DAMAGE,
-                BULWARK_BASIC_INTERVAL,
-                BULWARK_BASIC_RANGE,
                 SHOCKWAVE_DAMAGE,
                 BASTION_COOLDOWN,
                 SHOCKWAVE_COOLDOWN,
             ),
         };
+        let (dmg, interval, range) = match loadout.gun {
+            MainGun::SemiAuto => (SEMI_DAMAGE, SEMI_INTERVAL, SEMI_RANGE),
+            MainGun::Heavy => (HEAVY_DAMAGE, HEAVY_RECOVERY, HEAVY_RANGE),
+        };
         Self {
             hull: upgraded(hull, HULL_PCT_PER_LEVEL, up.hull),
             speed: upgraded(speed, THRUSTER_PCT_PER_LEVEL, up.thruster),
             radius,
+            gun: loadout.gun,
             basic_damage: weapon(dmg),
             basic_interval: interval,
             basic_range: range,
-            w_damage: weapon(w_dmg),
-            q_cooldown: trained(q_cd, up.training),
-            w_cooldown: trained(w_cd, up.training),
+            skill2_damage: weapon(skill2_dmg),
+            skill1_cooldown: trained(cd1, up.training),
+            skill2_cooldown: trained(cd2, up.training),
         }
     }
 }
@@ -107,15 +126,16 @@ pub struct ShipStats {
     pub speed: i32,
     /// Pixels.
     pub radius: i32,
+    pub gun: MainGun,
     pub basic_damage: i32,
     pub basic_interval: u32,
     /// Pixels.
     pub basic_range: i32,
     /// Weapon Tuning level, applied to skill damage.
     pub weapon_level: u8,
-    /// Q / W cooldowns in ticks (Training Room applied).
-    pub q_cooldown: u32,
-    pub w_cooldown: u32,
+    /// Skill 1 / 2 cooldowns in ticks (Training Room applied).
+    pub skill1_cooldown: u32,
+    pub skill2_cooldown: u32,
 }
 
 impl ShipStats {
@@ -125,12 +145,13 @@ impl ShipStats {
             max_hull: sheet.hull,
             speed: px_per_tick(sheet.speed),
             radius: sheet.radius,
+            gun: sheet.gun,
             basic_damage: sheet.basic_damage,
             basic_interval: sheet.basic_interval,
             basic_range: sheet.basic_range,
             weapon_level: loadout.upgrades.weapon,
-            q_cooldown: sheet.q_cooldown,
-            w_cooldown: sheet.w_cooldown,
+            skill1_cooldown: sheet.skill1_cooldown,
+            skill2_cooldown: sheet.skill2_cooldown,
         }
     }
 
@@ -149,14 +170,20 @@ pub struct Ship {
     pub kind: ShipKind,
     pub stats: ShipStats,
     pub pos: FxVec2,
-    /// Click-to-move destination; the ship stops when it gets there.
-    pub target: FxVec2,
+    /// WASD thrust this tick, each axis -1..=1 (0, 0 = coasting to a stop:
+    /// the ship stops at once, it has no inertia).
+    pub thrust: (i8, i8),
+    /// Where the player is aiming (the cursor), sub-pixels.
+    pub aim: FxVec2,
     pub hull: i32,
-    /// Ticks until the basic attack can fire again.
+    /// Ticks until the main gun can fire (semi-auto) or charge (heavy) again.
     pub basic_cooldown: u32,
-    /// Ticks until Q / W can be used again.
-    pub q_cooldown: u32,
-    pub w_cooldown: u32,
+    /// Heavy gun: ticks charged so far, up to `HEAVY_CHARGE_TICKS`; 0 = not
+    /// charging.
+    pub charge: u32,
+    /// Ticks until skill 1 / 2 can be used again.
+    pub skill1_cooldown: u32,
+    pub skill2_cooldown: u32,
     /// Bastion: damage the shield still absorbs, and ticks it has left.
     pub shield: i32,
     pub shield_ticks: u32,
@@ -167,7 +194,7 @@ pub struct Ship {
     pub chill: u32,
     /// `NetInput::buttons` from the previous tick. Skills fire on the tick
     /// their button goes down (edge), not while it is held.
-    pub prev_buttons: u8,
+    pub prev_buttons: u16,
 }
 
 impl Ship {
@@ -178,11 +205,13 @@ impl Ship {
             kind: loadout.ship,
             stats,
             pos,
-            target: pos,
+            thrust: (0, 0),
+            aim: pos,
             hull: stats.max_hull,
             basic_cooldown: 0,
-            q_cooldown: 0,
-            w_cooldown: 0,
+            charge: 0,
+            skill1_cooldown: 0,
+            skill2_cooldown: 0,
             shield: 0,
             shield_ticks: 0,
             dash_vel: FxVec2::ZERO,
@@ -196,13 +225,33 @@ impl Ship {
         self.hull > 0
     }
 
-    /// Full cooldown of Q / W in ticks (for HUDs).
-    pub fn q_cooldown_max(&self) -> u32 {
-        self.stats.q_cooldown
+    /// Whether the heavy gun is charging (the ship is slowed).
+    pub fn charging(&self) -> bool {
+        self.charge > 0
     }
 
-    pub fn w_cooldown_max(&self) -> u32 {
-        self.stats.w_cooldown
+    /// The heavy gun's charge as a percentage of full damage and size,
+    /// `HEAVY_MIN_PCT..=100` (rounded down); 0 when not charging.
+    pub fn charge_pct(&self) -> i32 {
+        if self.charge == 0 {
+            return 0;
+        }
+        let c = self.charge.min(HEAVY_CHARGE_TICKS) as i32;
+        HEAVY_MIN_PCT + (100 - HEAVY_MIN_PCT) * c / HEAVY_CHARGE_TICKS as i32
+    }
+
+    /// The heavy gun is fully charged: the shot will pierce.
+    pub fn fully_charged(&self) -> bool {
+        self.charge >= HEAVY_CHARGE_TICKS
+    }
+
+    /// Full cooldown of skill 1 / 2 in ticks (for HUDs).
+    pub fn skill1_cooldown_max(&self) -> u32 {
+        self.stats.skill1_cooldown
+    }
+
+    pub fn skill2_cooldown_max(&self) -> u32 {
+        self.stats.skill2_cooldown
     }
 
     /// Apply incoming damage: the shield absorbs first, then the hull.
@@ -661,6 +710,10 @@ pub struct Projectile {
     pub radius: i32,
     /// What kind of attack it is (ship shots; enemy shots: `Bolt`, unused).
     pub attack: Attack,
+    /// A fully charged heavy shot: it goes through enemies, hitting each
+    /// once (`pierced` holds the IDs it has hit), until its range runs out.
+    pub pierce: bool,
+    pub pierced: Vec<u32>,
     /// Enemy shots: fired by a Chilling elite, so a hit slows the ship.
     pub chill: bool,
 }
@@ -714,6 +767,7 @@ mod tests {
                 thruster,
                 training: 0,
             },
+            gun: MainGun::SemiAuto,
         })
     }
 
@@ -732,10 +786,28 @@ mod tests {
             .map(|l| sheet(ShipKind::Kite, 0, l, 0).basic_damage)
             .collect();
         assert_eq!(dmg, [4, 5, 6]);
+        // The gun, not the ship, sets the main-gun numbers (B8).
         let dmg: Vec<_> = (0..=2)
             .map(|l| sheet(ShipKind::Bulwark, 0, l, 0).basic_damage)
             .collect();
-        assert_eq!(dmg, [8, 10, 12]);
+        assert_eq!(dmg, [4, 5, 6]);
+        let heavy: Vec<_> = (0..=2)
+            .map(|l| {
+                ShipSheet::new(Loadout {
+                    gun: MainGun::Heavy,
+                    ..Loadout {
+                        ship: ShipKind::Kite,
+                        upgrades: Upgrades {
+                            weapon: l,
+                            ..Default::default()
+                        },
+                        gun: MainGun::SemiAuto,
+                    }
+                })
+                .basic_damage
+            })
+            .collect();
+        assert_eq!(heavy, [14, 17, 21]);
         let speed: Vec<_> = (0..=2)
             .map(|l| sheet(ShipKind::Kite, 0, 0, l).speed)
             .collect();
@@ -756,20 +828,21 @@ mod tests {
                 thruster: 1,
                 training: 0,
             },
+            gun: MainGun::Heavy,
         };
         let (sheet, stats) = (ShipSheet::new(loadout), ShipStats::new(loadout));
         assert_eq!(stats.max_hull, sheet.hull);
         assert_eq!(stats.speed, px_per_tick(sheet.speed));
         assert_eq!(stats.basic_damage, sheet.basic_damage);
-        assert_eq!(stats.skill_damage(SHOCKWAVE_DAMAGE), sheet.w_damage);
+        assert_eq!(stats.skill_damage(SHOCKWAVE_DAMAGE), sheet.skill2_damage);
         assert_eq!(
-            (stats.q_cooldown, stats.w_cooldown),
-            (sheet.q_cooldown, sheet.w_cooldown)
+            (stats.skill1_cooldown, stats.skill2_cooldown),
+            (sheet.skill1_cooldown, sheet.skill2_cooldown)
         );
     }
 
     #[test]
-    fn training_room_cuts_q_and_w_cooldowns_by_15_percent() {
+    fn training_room_cuts_skill_cooldowns_by_15_percent() {
         let trained = |ship| {
             let s = ShipSheet::new(Loadout {
                 ship,
@@ -777,13 +850,14 @@ mod tests {
                     training: 1,
                     ..Default::default()
                 },
+                ..Default::default()
             });
-            (s.q_cooldown, s.w_cooldown)
+            (s.skill1_cooldown, s.skill2_cooldown)
         };
-        // Kite Q 4 -> 3.4 s, W 6 -> 5.1 s; Bulwark Q 12 -> 10.2 s, W 9 -> 7.65 s.
+        // Kite 1: 4 -> 3.4 s, 2: 6 -> 5.1 s; Bulwark 1: 12 -> 10.2 s, 2: 9 -> 7.65 s.
         assert_eq!(trained(ShipKind::Kite), (204, 306));
         assert_eq!(trained(ShipKind::Bulwark), (612, 459));
         let base = sheet(ShipKind::Kite, 0, 0, 0);
-        assert_eq!((base.q_cooldown, base.w_cooldown), (240, 360));
+        assert_eq!((base.skill1_cooldown, base.skill2_cooldown), (240, 360));
     }
 }

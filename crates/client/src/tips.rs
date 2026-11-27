@@ -15,7 +15,7 @@ pub const TIPS: &[&str] = &[
     "Press B on the Carrier to build rooms, stations like the Salvage Sorter, and furniture.",
     "In Build mode, pick a room or an item, then click to build. Rooms open into their neighbours. Keep the front of a station clear.",
     "Click or hold to move. Your guns fire on their own.",
-    "Q / W use skills. Watch the cooldowns.",
+    "WASD to move, aim with the mouse, left click to fire. 1 / 2 use skills.",
     "Fly over drops to collect them.",
 ];
 

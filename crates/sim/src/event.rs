@@ -16,8 +16,10 @@ use crate::fixed::FxVec2;
 /// Which attack hit an enemy.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub enum Attack {
-    /// Basic-attack bolt.
+    /// Semi-auto main-gun bolt.
     Bolt,
+    /// Heavy main-gun shot (any charge).
+    Heavy,
     /// One of Kite's Scatter bolts.
     Scatter,
     /// Bulwark's Shockwave.

@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
-use sim::{Loadout, Loot, ShipKind, SimState, Upgrades};
+use sim::{Loadout, Loot, MainGun, ShipKind, SimState, Upgrades};
 
 use crate::layout::ItemId;
 use crate::save::SaveGame;
@@ -27,6 +27,9 @@ pub struct ShipLoadout {
     pub player_handle: usize,
     pub battleship_id: String,
     pub upgrade_ids: Vec<String>,
+    /// The main gun chosen at the Berth (design/BATTLE.md B8).
+    #[serde(default)]
+    pub gun: MainGun,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -159,6 +162,7 @@ pub fn config_from_save(save: &SaveGame, kill_target: Option<u32>) -> MissionCon
             player_handle: 0,
             battleship_id: save.selected_battleship.clone(),
             upgrade_ids: upgrade_ids(save),
+            gun: save.main_gun,
         }],
         seed,
         kill_target,
@@ -173,6 +177,7 @@ pub fn sim_loadouts(config: &MissionConfig) -> Vec<Loadout> {
         .map(|l| Loadout {
             ship: ship_kind(&l.battleship_id),
             upgrades: upgrade_levels(&l.upgrade_ids),
+            gun: l.gun,
         })
         .collect()
 }
@@ -251,6 +256,7 @@ mod tests {
                 player_handle: 0,
                 battleship_id: ship.to_string(),
                 upgrade_ids: upgrades.iter().map(|s| s.to_string()).collect(),
+                gun: MainGun::SemiAuto,
             }],
             seed: 1,
             kill_target: sim::tuning::KILL_TARGET_MAX,
@@ -298,7 +304,7 @@ mod tests {
         assert_eq!(config.ship_loadouts[0].upgrade_ids, ["combat_simulator_1"]);
         assert_eq!(sim_loadouts(&config)[0].upgrades.training, 1);
         let sim = launch_sim(&config);
-        assert_eq!(sim.ships[0].q_cooldown_max(), 204);
+        assert_eq!(sim.ships[0].skill1_cooldown_max(), 204);
         // Clamped to the one level the room has.
         assert_eq!(
             upgrade_levels(&["combat_simulator_3".to_string()]).training,
