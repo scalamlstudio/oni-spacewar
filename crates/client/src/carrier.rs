@@ -17,10 +17,10 @@ use bevy::ui::FocusPolicy;
 use bevy::window::PrimaryWindow;
 
 use sim::tuning::{
-    AFTERBURN_DISTANCE, BASTION_DURATION, BASTION_SHIELD, SCATTER_BOLTS, SHOCKWAVE_PUSH,
-    SHOCKWAVE_RADIUS, TICKS_PER_SEC,
+    AFTERBURN_DISTANCE, BASTION_DURATION, BASTION_SHIELD, HEAVY_CHARGE_TICKS, HEAVY_MIN_PCT,
+    SCATTER_BOLTS, SHOCKWAVE_PUSH, SHOCKWAVE_RADIUS, TICKS_PER_SEC,
 };
-use sim::{Loadout, ShipKind, ShipSheet, Upgrades};
+use sim::{Loadout, MainGun, ShipKind, ShipSheet, Upgrades};
 
 use crate::art::{self, icon_node, ContentImages};
 use crate::codex::CodexScreen;
@@ -328,18 +328,35 @@ pub const SHIPS: [ShipInfo; 2] = [
     ShipInfo {
         id: "bulwark",
         name: "Bulwark",
-        role: "slow, tanky, stronger basic attack",
+        role: "slow, tanky, defensive skills",
         kind: ShipKind::Bulwark,
         image_id: crate::render::ids::SHIP_BULWARK,
         berth_len: 210.0,
     },
 ];
 
-fn sheet(kind: ShipKind, upgrades: Upgrades) -> ShipSheet {
+fn sheet(kind: ShipKind, upgrades: Upgrades, gun: MainGun) -> ShipSheet {
     ShipSheet::new(Loadout {
         ship: kind,
         upgrades,
+        gun,
     })
+}
+
+/// The Berth's name for a main gun.
+pub fn gun_name(gun: MainGun) -> &'static str {
+    match gun {
+        MainGun::SemiAuto => "Semi-auto",
+        MainGun::Heavy => "Heavy",
+    }
+}
+
+/// The other main gun (the Berth's toggle; there are two).
+pub fn other_gun(gun: MainGun) -> MainGun {
+    match gun {
+        MainGun::SemiAuto => MainGun::Heavy,
+        MainGun::Heavy => MainGun::SemiAuto,
+    }
 }
 
 /// `value`, plus how much upgrades added to it.
@@ -356,49 +373,62 @@ fn secs(ticks: u32) -> String {
     s.trim_end_matches('0').trim_end_matches('.').to_string()
 }
 
-/// The Dock's stat card for a battleship with Workshop `upgrades` applied.
-pub fn ship_card(ship: &ShipInfo, upgrades: Upgrades) -> String {
-    let s = sheet(ship.kind, upgrades);
-    let b = sheet(ship.kind, Upgrades::default());
+/// The Dock's stat card for a battleship with Workshop `upgrades` applied,
+/// carrying main gun `gun`.
+pub fn ship_card(ship: &ShipInfo, upgrades: Upgrades, gun: MainGun) -> String {
+    let s = sheet(ship.kind, upgrades, gun);
+    let b = sheet(ship.kind, Upgrades::default(), gun);
     let (q, w) = match ship.kind {
         ShipKind::Kite => (
             format!(
                 "Afterburn: dash {AFTERBURN_DISTANCE} px toward the cursor. CD {} s",
-                secs(s.q_cooldown)
+                secs(s.skill1_cooldown)
             ),
             format!(
                 "Scatter: {SCATTER_BOLTS} bolts in a 40 deg cone, {} dmg each. CD {} s",
-                with_bonus(s.w_damage, b.w_damage),
-                secs(s.w_cooldown)
+                with_bonus(s.skill2_damage, b.skill2_damage),
+                secs(s.skill2_cooldown)
             ),
         ),
         ShipKind::Bulwark => (
             format!(
                 "Bastion: shield absorbs the next {BASTION_SHIELD} dmg for {} s. CD {} s",
                 secs(BASTION_DURATION),
-                secs(s.q_cooldown)
+                secs(s.skill1_cooldown)
             ),
             format!(
                 "Shockwave: {} dmg within {SHOCKWAVE_RADIUS} px, pushes {SHOCKWAVE_PUSH} px. CD {} s",
-                with_bonus(s.w_damage, b.w_damage),
-                secs(s.w_cooldown)
+                with_bonus(s.skill2_damage, b.skill2_damage),
+                secs(s.skill2_cooldown)
             ),
         ),
     };
+    let gun_line = match gun {
+        MainGun::SemiAuto => format!(
+            "Gun: Semi-auto, hold to fire. {} dmg every {} s, range {} px",
+            with_bonus(s.basic_damage, b.basic_damage),
+            secs(s.basic_interval),
+            s.basic_range,
+        ),
+        MainGun::Heavy => format!(
+            "Gun: Heavy, hold to charge, release to fire. {}-{} dmg over {} s, full charge pierces, range {} px",
+            s.basic_damage * HEAVY_MIN_PCT / 100,
+            with_bonus(s.basic_damage, b.basic_damage),
+            secs(HEAVY_CHARGE_TICKS),
+            s.basic_range,
+        ),
+    };
     format!(
-        "{}\nHull {}    Speed {} px/s    Radius {} px\nBasic: {} dmg every {} s, range {} px\nQ {q}\nW {w}",
+        "{}\nHull {}    Speed {} px/s    Radius {} px\n{gun_line}\n1 {q}\n2 {w}",
         ship.role,
         with_bonus(s.hull, b.hull),
         with_bonus(s.speed, b.speed),
         s.radius,
-        with_bonus(s.basic_damage, b.basic_damage),
-        secs(s.basic_interval),
-        s.basic_range,
     )
 }
 
 /// What buying the next level of `upgrade` changes, one line per battleship.
-pub fn upgrade_preview(upgrade: Upgrade, current: Upgrades) -> Vec<String> {
+pub fn upgrade_preview(upgrade: Upgrade, current: Upgrades, gun: MainGun) -> Vec<String> {
     let mut next = current;
     let slot = match upgrade {
         Upgrade::HullPlating => &mut next.hull,
@@ -412,14 +442,14 @@ pub fn upgrade_preview(upgrade: Upgrade, current: Upgrades) -> Vec<String> {
     SHIPS
         .iter()
         .map(|ship| {
-            let (a, b) = (sheet(ship.kind, current), sheet(ship.kind, next));
+            let (a, b) = (sheet(ship.kind, current, gun), sheet(ship.kind, next, gun));
             let change = match upgrade {
                 Upgrade::HullPlating => format!("hull {} -> {}", a.hull, b.hull),
                 Upgrade::ThrusterTuning => {
                     format!("speed {} -> {} px/s", a.speed, b.speed)
                 }
                 Upgrade::WeaponTuning => format!(
-                    "basic {} -> {} dmg, {} {} -> {} dmg",
+                    "gun {} -> {} dmg, {} {} -> {} dmg",
                     a.basic_damage,
                     b.basic_damage,
                     if ship.kind == ShipKind::Kite {
@@ -427,8 +457,8 @@ pub fn upgrade_preview(upgrade: Upgrade, current: Upgrades) -> Vec<String> {
                     } else {
                         "Shockwave"
                     },
-                    a.w_damage,
-                    b.w_damage
+                    a.skill2_damage,
+                    b.skill2_damage
                 ),
             };
             format!("{:<8} {change}", ship.name)
@@ -855,8 +885,10 @@ pub enum Overlay {
         index: usize,
         launch: Option<usize>,
     },
-    /// Confirm and launch the battleship in [`SHIPS`]`[index]`.
-    Launch { index: usize },
+    /// Confirm and launch the battleship in [`SHIPS`]`[index]`, with the
+    /// main gun `gun` (switched here, saved with the loadout; the Step 6
+    /// component UI takes this over).
+    Launch { index: usize, gun: MainGun },
     /// The Upgrade Bench's Workshop panel: the selected upgrade row and the
     /// last purchase's feedback.
     Workshop { index: usize, message: String },
@@ -1189,6 +1221,8 @@ enum Click {
     Leave,
     /// The launch confirm's Launch (E).
     Launch,
+    /// The launch confirm's main-gun switch (G).
+    Gun,
     /// A Workshop row: buy the upgrade (E on that row).
     Row(usize),
     /// The HUD's Build button (B).
@@ -2139,15 +2173,20 @@ fn carrier_input(
                 if *index + 1 < lines.len() {
                     *index += 1;
                 } else if let Some(ship) = *launch {
-                    next = Some(Overlay::Launch { index: ship });
+                    let gun = save.game.as_ref().map(|g| g.main_gun).unwrap_or_default();
+                    next = Some(Overlay::Launch { index: ship, gun });
                 } else {
                     next = Some(Overlay::None);
                 }
             }
         }
-        Overlay::Launch { index } => {
+        Overlay::Launch { index, gun } => {
             if back || leave {
                 next = Some(Overlay::None);
+            } else if keys.just_pressed(KeyCode::KeyG) || clicked == Some(Click::Gun) {
+                *gun = switch_gun(save.game.as_mut());
+                // Saved with the loadout, like the ship choice.
+                save.store();
             } else if confirm || clicked == Some(Click::Launch) {
                 launch.write(MissionRequest {
                     battleship_id: SHIPS[*index].id.to_string(),
@@ -2409,6 +2448,18 @@ fn build_click(
     *message = out.message;
 }
 
+/// The Berth's main-gun switch: the save's gun becomes the other one.
+/// Returns the new gun (the default with no save).
+pub fn switch_gun(game: Option<&mut SaveGame>) -> MainGun {
+    match game {
+        Some(game) => {
+            game.main_gun = other_gun(game.main_gun);
+            game.main_gun
+        }
+        None => MainGun::default(),
+    }
+}
+
 /// Using `hotspot` from the deck: [`interact_with`] for the Carrier's own
 /// panels, and the Sample Analyzer opens the full-screen Codex (no panel),
 /// which pauses the Carrier until it is closed.
@@ -2564,7 +2615,7 @@ fn drag_pilot(
     drag.ordered = Some(cursor);
 }
 
-/// The click-to-move destination marker, the same one the battle draws.
+/// The click-to-move destination marker.
 fn draw_walk_marker(order: Res<WalkOrder>, mut gizmos: Gizmos) {
     if let Some(at) = order.marker {
         crate::render::move_marker(&mut gizmos, world(at), Crew::Pilot.color());
@@ -3316,7 +3367,7 @@ fn sync_overlay(
                     });
                 });
         }
-        Overlay::Launch { index } => {
+        Overlay::Launch { index, gun } => {
             let ship = &SHIPS[*index];
             commands
                 .spawn((
@@ -3351,7 +3402,7 @@ fn sync_overlay(
                         font(17.0, Color::srgb(0.95, 0.85, 0.45)),
                     ));
                     p.spawn((
-                        Text::new(ship_card(ship, levels)),
+                        Text::new(ship_card(ship, levels, *gun)),
                         font(14.0, Color::srgb(0.82, 0.86, 0.9)),
                     ));
                     p.spawn(Node {
@@ -3360,6 +3411,11 @@ fn sync_overlay(
                     })
                     .with_children(|row| {
                         text_button(row, Click::Launch, "[Click / E] Launch");
+                        text_button(
+                            row,
+                            Click::Gun,
+                            &format!("[Click / G] Gun: {}", gun_name(*gun)),
+                        );
                         text_button(row, Click::Leave, "[Click / X] Back");
                     });
                 });
@@ -3474,7 +3530,7 @@ fn sync_overlay(
                             Text::new(format!(
                                 "{} next level:\n  {}",
                                 upgrade.name(),
-                                upgrade_preview(upgrade, levels).join("\n  ")
+                                upgrade_preview(upgrade, levels, game.main_gun).join("\n  ")
                             )),
                             font(15.0, Color::srgb(0.82, 0.86, 0.9)),
                         ));
@@ -4762,12 +4818,25 @@ mod tests {
             training: 1,
             ..Default::default()
         };
-        let kite = ship_card(&SHIPS[0], up);
+        let kite = ship_card(&SHIPS[0], up, MainGun::SemiAuto);
         assert!(kite.contains("CD 3.4 s"), "{kite}");
         assert!(kite.contains("CD 5.1 s"), "{kite}");
-        let bulwark = ship_card(&SHIPS[1], up);
+        let bulwark = ship_card(&SHIPS[1], up, MainGun::SemiAuto);
         assert!(bulwark.contains("CD 10.2 s"), "{bulwark}");
         assert!(bulwark.contains("CD 7.65 s"), "{bulwark}");
+    }
+
+    #[test]
+    fn the_berth_switches_the_saved_gun() {
+        let mut game = SaveGame::default();
+        assert_eq!(game.main_gun, MainGun::SemiAuto);
+        assert_eq!(switch_gun(Some(&mut game)), MainGun::Heavy);
+        assert_eq!(game.main_gun, MainGun::Heavy);
+        // It reaches the sim through the loadout.
+        let config = crate::mission::config_from_save(&game, Some(1));
+        let sim = crate::mission::launch_sim(&config);
+        assert_eq!(sim.ships[0].stats.gun, MainGun::Heavy);
+        assert_eq!(switch_gun(Some(&mut game)), MainGun::SemiAuto);
     }
 
     #[test]
@@ -4836,12 +4905,22 @@ mod tests {
 
     #[test]
     fn dock_card_reads_sim_stats_with_upgrades() {
-        let base = ship_card(&SHIPS[0], Upgrades::default());
+        let base = ship_card(&SHIPS[0], Upgrades::default(), MainGun::SemiAuto);
         assert!(base.contains("Hull 60 "), "{base}");
         assert!(base.contains("Speed 220 px/s"), "{base}");
         assert!(
-            base.contains("Basic: 4 dmg every 0.35 s, range 220 px"),
+            base.contains("Gun: Semi-auto, hold to fire. 4 dmg every 0.35 s, range 220 px"),
             "{base}"
+        );
+        assert!(
+            base.contains("\n1 Afterburn") && base.contains("\n2 Scatter"),
+            "{base}"
+        );
+        // Either ship carries either gun; the card follows the gun.
+        let heavy = ship_card(&SHIPS[1], Upgrades::default(), MainGun::Heavy);
+        assert!(
+            heavy.contains("Gun: Heavy, hold to charge, release to fire. 4-14 dmg over 1 s, full charge pierces, range 240 px"),
+            "{heavy}"
         );
         let up = Upgrades {
             hull: 1,
@@ -4849,26 +4928,35 @@ mod tests {
             thruster: 2,
             training: 0,
         };
-        let kite = ship_card(&SHIPS[0], up);
+        let kite = ship_card(&SHIPS[0], up, MainGun::SemiAuto);
         assert!(kite.contains("Hull 75 (+15)"), "{kite}");
         assert!(kite.contains("Speed 286 (+66) px/s"), "{kite}");
-        assert!(kite.contains("Basic: 5 (+1) dmg"), "{kite}");
-        let bulwark = ship_card(&SHIPS[1], up);
+        assert!(kite.contains("5 (+1) dmg every"), "{kite}");
+        let bulwark = ship_card(&SHIPS[1], up, MainGun::SemiAuto);
         assert!(bulwark.contains("Hull 175 (+35)"), "{bulwark}");
         assert!(bulwark.contains("Shockwave: 18 (+3) dmg"), "{bulwark}");
     }
 
     #[test]
     fn upgrade_preview_shows_both_ships() {
-        let p = upgrade_preview(Upgrade::WeaponTuning, Upgrades::default());
+        let p = upgrade_preview(
+            Upgrade::WeaponTuning,
+            Upgrades::default(),
+            MainGun::SemiAuto,
+        );
         assert_eq!(p.len(), 2);
-        assert!(p[0].contains("basic 4 -> 5"), "{p:?}");
-        assert!(p[1].contains("basic 8 -> 10"), "{p:?}");
+        assert!(p[0].contains("gun 4 -> 5"), "{p:?}");
+        assert!(p[1].contains("gun 4 -> 5"), "{p:?}");
+        let p = upgrade_preview(Upgrade::WeaponTuning, Upgrades::default(), MainGun::Heavy);
+        assert!(p[1].contains("gun 14 -> 17"), "{p:?}");
         let maxed = Upgrades {
             hull: 2,
             ..Default::default()
         };
-        assert_eq!(upgrade_preview(Upgrade::HullPlating, maxed).len(), 1);
+        assert_eq!(
+            upgrade_preview(Upgrade::HullPlating, maxed, MainGun::SemiAuto).len(),
+            1
+        );
     }
 
     #[test]

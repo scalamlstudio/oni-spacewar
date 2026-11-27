@@ -47,19 +47,40 @@ pub const SHIP_SPAWN_GAP: i32 = 60;
 pub const KITE_HULL: i32 = 60;
 pub const KITE_SPEED: i32 = 220;
 pub const KITE_RADIUS: i32 = 14;
-pub const KITE_BASIC_DAMAGE: i32 = 4;
-/// Basic attack interval as seconds `num/den`: 0.35 s.
-pub const KITE_BASIC_INTERVAL: u32 = ticks(35, 100);
-pub const KITE_BASIC_RANGE: i32 = 220;
 
 pub const BULWARK_HULL: i32 = 140;
 pub const BULWARK_SPEED: i32 = 140;
 pub const BULWARK_RADIUS: i32 = 20;
-pub const BULWARK_BASIC_DAMAGE: i32 = 8;
-pub const BULWARK_BASIC_INTERVAL: u32 = ticks(6, 10);
-pub const BULWARK_BASIC_RANGE: i32 = 240;
 
-/// Basic-attack bolt (engine default: the spec gives damage/rate/range only).
+// --- Main guns (design/BATTLE.md B8) -----------------------------------------
+
+// Either ship carries either gun; the ship decides only its skills. The
+// spec gives the heavy's charge rules only, so the numbers are engine
+// defaults for the controls playtest: the semi-auto is the Kite's old basic
+// attack, and the heavy's weakest (30%) shot still kills a Swarmer.
+
+/// Semi-auto: 4 damage every 0.35 s, 220 px.
+pub const SEMI_DAMAGE: i32 = 4;
+pub const SEMI_INTERVAL: u32 = ticks(35, 100);
+pub const SEMI_RANGE: i32 = 220;
+
+/// Heavy: 14 damage at full charge (4 at the 30% minimum), 240 px.
+pub const HEAVY_DAMAGE: i32 = 14;
+/// Recovery after a heavy shot before it can charge again (engine default:
+/// stops tapping out minimum shots faster than the semi-auto fires).
+pub const HEAVY_RECOVERY: u32 = ticks(1, 2);
+pub const HEAVY_RANGE: i32 = 240;
+/// Full charge in 1.0 s; damage and shot size scale from 30% to 100%.
+pub const HEAVY_CHARGE_TICKS: u32 = ticks(1, 1);
+pub const HEAVY_MIN_PCT: i32 = 30;
+/// Shot radius at full charge, px (scaled down with the charge, min 1).
+pub const HEAVY_RADIUS: i32 = 12;
+/// The ship moves at 60% speed while charging.
+pub const HEAVY_CHARGE_SPEED_PCT: i32 = 60;
+/// Knock-back of a heavy shot at full charge, px (scaled like damage).
+pub const HEAVY_KNOCKBACK: i32 = 12;
+
+/// Main-gun bolt (engine default: the spec gives damage/rate/range only).
 pub const BOLT_SPEED: i32 = 900;
 pub const BOLT_RADIUS: i32 = 4;
 /// Knock-back on an enemy hit by a bolt or a Scatter bolt, px along the
@@ -67,13 +88,13 @@ pub const BOLT_RADIUS: i32 = 4;
 pub const BOLT_KNOCKBACK: i32 = 5;
 pub const SCATTER_KNOCKBACK: i32 = 4;
 
-/// Kite Q — Afterburn: dash 160 px toward the cursor.
+/// Kite 1 — Afterburn: dash 160 px toward the cursor.
 pub const AFTERBURN_DISTANCE: i32 = 160;
 /// The dash is spread over this many ticks so it reads on screen (engine default).
 pub const AFTERBURN_TICKS: u32 = 8;
 pub const AFTERBURN_COOLDOWN: u32 = ticks(4, 1);
 
-/// Kite W — Scatter: 5 bolts in a 40° cone.
+/// Kite 2 — Scatter: 5 bolts in a 40° cone.
 pub const SCATTER_BOLTS: i32 = 5;
 /// Angle between neighbouring bolts in `trig::ANGLE_STEPS` units:
 /// 10° = 1024 * 10 / 360 ≈ 28 steps (9.84°), so the cone is ~39.4°.
@@ -84,12 +105,12 @@ pub const SCATTER_LIFETIME: u32 = ticks(1, 2);
 pub const SCATTER_RADIUS: i32 = 3;
 pub const SCATTER_COOLDOWN: u32 = ticks(6, 1);
 
-/// Bulwark Q — Bastion: shield absorbs the next 40 damage for 5 s.
+/// Bulwark 1 — Bastion: shield absorbs the next 40 damage for 5 s.
 pub const BASTION_SHIELD: i32 = 40;
 pub const BASTION_DURATION: u32 = ticks(5, 1);
 pub const BASTION_COOLDOWN: u32 = ticks(12, 1);
 
-/// Bulwark W — Shockwave: 15 damage within 150 px, pushes 100 px away.
+/// Bulwark 2 — Shockwave: 15 damage within 150 px, pushes 100 px away.
 pub const SHOCKWAVE_DAMAGE: i32 = 15;
 pub const SHOCKWAVE_RADIUS: i32 = 150;
 pub const SHOCKWAVE_PUSH: i32 = 100;
@@ -104,7 +125,7 @@ pub const MAX_UPGRADE_LEVEL: u8 = 2;
 
 // --- Carrier rooms (design/READINESS.md § Carrier › Room catalogue) ----------
 
-/// Training Room: Q and W cooldowns × 85 / 100, rounded down. One level.
+/// Training Room: skill 1 and 2 cooldowns × 85 / 100, rounded down. One level.
 pub const TRAINING_COOLDOWN_PCT: u32 = 85;
 pub const MAX_TRAINING_LEVEL: u8 = 1;
 
@@ -121,8 +142,8 @@ pub const fn trained(cooldown: u32, training: u8) -> u32 {
 
 pub const ENEMY_MASS: i32 = 1;
 
-/// One basic hit from any ship kills a Swarmer (TAKOAI-113, design/BATTLE.md
-/// #2 and B1): Kite's unupgraded bolt does 4. Was 10 (3 Kite hits).
+/// One main-gun hit kills a Swarmer (TAKOAI-113, design/BATTLE.md #2 and
+/// B1): the semi-auto and a minimum heavy charge both do 4. Was 10 (3 Kite hits).
 pub const SWARMER_HP: i32 = 4;
 /// +20% over the spec's 110 (TAKOAI-58).
 pub const SWARMER_SPEED: i32 = 132;

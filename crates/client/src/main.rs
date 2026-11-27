@@ -385,8 +385,9 @@ fn main() {
 }
 
 /// Synctest / p2p fleet: even handles fly Kite, odd handles Bulwark;
-/// handles 2 and up have the Combat Simulator (`Upgrades::training`), so
-/// the gate covers its cooldowns too.
+/// handles 1 and 2 carry the heavy gun and the rest the semi-auto (both
+/// guns on both ships with 4 players); handles 2 and up have the Combat
+/// Simulator (`Upgrades::training`), so the gate covers its cooldowns too.
 fn test_loadouts(players: usize) -> Vec<Loadout> {
     (0..players)
         .map(|h| Loadout {
@@ -394,6 +395,11 @@ fn test_loadouts(players: usize) -> Vec<Loadout> {
                 ShipKind::Kite
             } else {
                 ShipKind::Bulwark
+            },
+            gun: if h == 1 || h == 2 {
+                sim::MainGun::Heavy
+            } else {
+                sim::MainGun::SemiAuto
             },
             upgrades: sim::Upgrades {
                 training: u8::from(h >= 2),

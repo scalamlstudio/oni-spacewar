@@ -30,7 +30,7 @@ crates/
     src/fixed.rs        fixed-point: SUB (1 px = 256), FxVec2 (+ scale_to), mul_q16
     src/trig.rs         integer sin/cos from a committed Q16 table (from the spike)
     src/rng.rs          SimRng, seeded xorshift64* (part of SimState)
-    src/input.rs        NetInput: buttons (move, Q/W/E/R) + cursor target, exchanged per tick
+    src/input.rs        NetInput: u16 buttons (WASD, fire, skills 1/2/3/4) + cursor, exchanged per tick
   content/            package `oni-content`, lib `content` — content manifests, stable IDs, patch diffing
     src/lib.rs          manifest types, hash validation, stable-ID resolution, manifest diff
     tests/asset_crop.rs crop check: no opaque pixel of a cut-out under assets/source/core/ touches its canvas edge
@@ -554,7 +554,7 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
 - **Station effects.** Combat Simulator: once finished, `mission::upgrade_ids`
   adds `combat_simulator_1` to the mission's upgrade IDs, which
   `upgrade_levels` maps to `sim::Upgrades::training` (the sim is untouched);
-  `ShipSheet::new` applies × 85 / 100 (integer) to the Q / W cooldowns
+  `ShipSheet::new` applies × 85 / 100 (integer) to the skill 1 / 2 cooldowns
   (`tuning::trained`), the ship keeps them in `ShipStats`, and the launch
   card / Workshop preview read the same sheet. The determinism gate's
   fleet gives handles 2–3 `training`. Salvage Sorter: once finished,
@@ -743,7 +743,7 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
   entry. A missing image draws a "No art yet" box. Stats beside an entry
   are only those already in the data (`codex::stats`): footprint /
   placement / cost / effect from `layout::CATALOGUE`, HP and speed from
-  `sim::tuning`, hull / speed / basic attack from `sim::ShipSheet`, a crew
+  `sim::tuning`, hull / speed from `sim::ShipSheet`, a crew
   member's post. `codex::discovered` is the single unlock hook (all true
   for now). Tests require an entry, with name, description and shipped
   art, for every enemy / ship / carrier item image in the manifest, every
@@ -783,9 +783,10 @@ of the full-size pixels (e.g. `empty_rows`) are unaffected.
 ### Simulation structure
 
 The gameplay in `sim` is the First Playable's Elimination mission
-(design/READINESS.md § Demo Spec): click-to-move battleships (Kite or
-Bulwark, from a per-player `Loadout` with Workshop upgrade levels) with an
-auto-firing basic attack and Q/W skills, packs of void monsters (Swarmers,
+(design/READINESS.md § Demo Spec): twin-stick battleships (Kite or
+Bulwark, from a per-player `Loadout` with Workshop upgrade levels and a
+main gun, design/BATTLE.md B8) with a cursor-aimed main gun that fires only
+when the player shoots and two skills on 1/2, packs of void monsters (Swarmers,
 Spitters and, from TAKOAI-116, Lancers, Bloaters, Broods and Wardens)
 spawned continuously from 1–2 void fissures in open space (no arena edge), loot pickups, and a win (the kill target
 brings out the Fissure Guardian, TAKOAI-118; its death wins) / lose (every
@@ -796,7 +797,8 @@ follow:
   `SimState`. Removal uses `retain`, so order stays stable. No Bevy entities or
   components in the simulation.
 - **`step()` is a fixed list of phases** (`state.rs`): spawn director → apply
-  inputs (move target, Q/W skills) → move ships → basic attacks → enemy
+  inputs (WASD thrust, aim, heavy charge, skills 1/2) → move ships → main
+  guns (semi-auto shots / heavy release) → enemy
   behaviour (chase / strafe in range band, contact damage, shots, Lancer
   dash, Bloater fuse, Brood release, Warden positioning, the Guardian's
   attack cycle) → elite affixes
@@ -812,23 +814,42 @@ follow:
   (`hull <= 0`), enemies target the nearest *living* ship (spawns come from the
   fissures, not from any one ship), loot totals are mission-wide, and the mission
   fails only when every ship is down. Synctest/p2p runs give even handles
-  Kite and odd handles Bulwark so both ships are always exercised.
+  Kite and odd handles Bulwark, and handles 1–2 the heavy gun (the rest
+  the semi-auto), so both ships and both guns are always exercised.
 - **Numbers live in `tuning.rs`** in human units (px, px/s, seconds) and are
   converted at use (`px_per_tick`, `ticks`). They come from the Demo Spec;
   values the spec doesn't give (bolt speed, dash duration, pickup drift
   speed, ...) are marked "engine default" there. Deliberate departures from
   the spec are commented where they're set (the mission success bonus is
   100 cr + 3 VC instead of 50 + 2 so one win buys an upgrade; TAKOAI-42).
-- **Input** (`NetInput`) is a button bitmask (move, Q/W/E/R) plus the cursor in
-  world pixels: click-to-move sets the ship's target, skills aim at the cursor.
-  The basic attack needs no input. Inputs are *levels* (key held = bit set);
+- **Input** (`NetInput`) is a `u16` button bitmask (WASD, fire, skills
+  1/2/3/4; 3/4 reserved) plus the cursor in world pixels (TAKOAI-131,
+  design/BATTLE.md B8). WASD sets `Ship::thrust` (each axis −1..1; the ship
+  moves at its speed along the normalised direction, diagonals included,
+  and stops when no key is held); the cursor is `Ship::aim`, where the main
+  gun and the skills point. Nothing fires without input.
+- **Main guns** (`MainGun` in `Loadout`, chosen at the Berth and saved as
+  `SaveGame::main_gun`; either ship carries either gun, the ship decides
+  only its skills). `ShipSheet` takes the gun's damage / interval / range
+  (`SEMI_*`, `HEAVY_*` in `tuning.rs`), not the ship's. Semi-auto: fire
+  held fires a bolt every `basic_interval`. Heavy: fire held charges
+  `Ship::charge` up to `HEAVY_CHARGE_TICKS` (held indefinitely; the ship
+  moves at 60% while `charge > 0`, applied from the first held tick because
+  charging updates in `apply_inputs`, before movement); release fires with
+  `charge_pct` (30..100%, integer) of damage, radius and knock-back, then
+  the gun recovers for `basic_interval`. A full charge sets
+  `Projectile::pierce`: it hits every enemy it overlaps once (their IDs in
+  `Projectile::pierced`, rolled back with the shot) until its range ends.
+  The client's charge ring and HUD read `Ship::charge`; they never feed back.
+- Inputs are *levels* (key held = bit set);
   the sim latches each ship's previous buttons (`Ship::prev_buttons`, rolled
   back with the rest of the state) and fires a skill only on the tick its bit
   goes 0 → 1, so a held key fires once and a press during the cooldown is
   spent (TAKOAI-50). Chosen over an edge bit sent by the client because a
   level input survives GGRS prediction (which repeats the last input) and
-  dropped/duplicated frames without double-firing; move stays level-
-  triggered (hold to keep steering).
+  dropped/duplicated frames without double-firing; movement and the gun
+  stay level-triggered (the heavy fires on the tick fire is no longer held
+  while charged, so prediction repeating "held" only delays the shot).
 - **Mission result.** `SimState::outcome()` returns a `sim::MissionOutcome`
   (success, kills, loot collected, success bonus) once the mission
   ends. Which loot the player keeps is client policy: `client::mission`

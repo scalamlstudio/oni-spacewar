@@ -2,22 +2,26 @@
 //! outside the rollback schedule; only the resulting `NetInput`s reach the
 //! simulation.
 //!
-//! Controls (`design/DESIGN.md` § Player): left mouse button = click-to-move
-//! (hold to keep steering; [`MovePress`] is shared with the carrier's
-//! Pilot so the two can't drift apart), Q/W = the battleship's two skills aimed at the
-//! cursor (E/R are unused so far); the basic attack fires on its own.
+//! Battle controls (`design/DESIGN.md` § Player, design/BATTLE.md B8):
+//! twin-stick. WASD moves the battleship, the cursor aims the main gun, the
+//! left mouse button fires it (hold: semi-auto; press, hold, release:
+//! heavy), and 1/2 cast the ship's two skills toward the cursor (3/4 are
+//! reserved). Nothing fires on its own. [`MovePress`] is the Carrier's
+//! click-to-walk button; the battle no longer uses it to move.
 
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy_ggrs::{LocalInputs, LocalPlayers};
-use sim::input::{INPUT_MOVE, INPUT_SKILL_E, INPUT_SKILL_Q, INPUT_SKILL_R, INPUT_SKILL_W};
+use sim::input::{
+    INPUT_DOWN, INPUT_FIRE, INPUT_LEFT, INPUT_RIGHT, INPUT_SKILL_1, INPUT_SKILL_2, INPUT_SKILL_3,
+    INPUT_SKILL_4, INPUT_UP,
+};
 use sim::NetInput;
 
 use crate::rollback::GameConfig;
 
-/// The move button's state this frame, shared by the battle and the
-/// carrier: a press starts a move toward the cursor and holding it keeps
+/// The Carrier's walk button this frame: a press starts a move toward the cursor and holding it keeps
 /// following the cursor (TAKOAI-87).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum MovePress {
@@ -59,7 +63,8 @@ pub fn cursor_world(window: &Window, camera: &Camera, cam_tf: &GlobalTransform) 
 pub struct KeyboardPlayer(pub bool);
 
 /// Scripted local players for unattended runs: every 30..150 frames a bot
-/// clicks a new random destination and toggles using skills toward it.
+/// picks a new random WASD heading and aim point, and whether to hold the
+/// gun and use skills toward it.
 #[derive(Resource, Default)]
 pub struct BotBrains(HashMap<usize, Bot>);
 
@@ -68,12 +73,13 @@ pub struct Bot {
     rng: u64,
     left: u32,
     target: IVec2,
+    keys: u16,
     firing: bool,
 }
 
 fn bot_input(brains: &mut BotBrains, handle: usize) -> NetInput {
     let bot = brains.0.entry(handle).or_insert_with(|| Bot {
-        rng: (handle as u64 + 1) * 0x9E37_79B9_7F4A_7C15,
+        rng: (handle as u64 + 1).wrapping_mul(0x9E37_79B9_7F4A_7C15),
         ..default()
     });
     let mut buttons = 0;
@@ -88,14 +94,18 @@ fn bot_input(brains: &mut BotBrains, handle: usize) -> NetInput {
         bot.target = IVec2::new((a % 1201) as i32 - 600, (b % 1201) as i32 - 600);
         bot.firing = c % 3 != 0;
         bot.left = 30 + (c >> 8) as u32 % 121;
-        buttons |= INPUT_MOVE;
+        bot.keys = [INPUT_UP, INPUT_DOWN, INPUT_LEFT, INPUT_RIGHT, 0][(a >> 32) as usize % 5]
+            | [0, INPUT_LEFT, INPUT_RIGHT][(b >> 32) as usize % 3];
     }
     bot.left -= 1;
+    buttons |= bot.keys;
     if bot.firing {
+        // Fire held (a heavy charges and lets go when the burst ends).
+        buttons |= INPUT_FIRE;
         buttons |= if bot.left % 2 == 0 {
-            INPUT_SKILL_Q
+            INPUT_SKILL_1
         } else {
-            INPUT_SKILL_W
+            INPUT_SKILL_2
         };
     }
     NetInput {
@@ -110,26 +120,39 @@ fn human_input(
     mouse: &ButtonInput<MouseButton>,
     cursor: IVec2,
 ) -> NetInput {
+    NetInput {
+        buttons: battle_buttons(keys, mouse),
+        target_x: cursor.x,
+        target_y: cursor.y,
+    }
+}
+
+/// The battle's buttons from mouse + keyboard (also the offline Demo
+/// battle in `flow`): WASD, left mouse = fire, 1/2/3/4 = skills.
+pub fn battle_buttons(keys: &ButtonInput<KeyCode>, mouse: &ButtonInput<MouseButton>) -> u16 {
     let mut buttons = 0;
-    if MovePress::read(mouse).held() {
-        buttons |= INPUT_MOVE;
+    if mouse.pressed(FIRE_BUTTON) {
+        buttons |= INPUT_FIRE;
     }
     for (key, bit) in [
-        (KeyCode::KeyQ, INPUT_SKILL_Q),
-        (KeyCode::KeyW, INPUT_SKILL_W),
-        (KeyCode::KeyE, INPUT_SKILL_E),
-        (KeyCode::KeyR, INPUT_SKILL_R),
+        (KeyCode::KeyW, INPUT_UP),
+        (KeyCode::KeyS, INPUT_DOWN),
+        (KeyCode::KeyA, INPUT_LEFT),
+        (KeyCode::KeyD, INPUT_RIGHT),
+        (KeyCode::Digit1, INPUT_SKILL_1),
+        (KeyCode::Digit2, INPUT_SKILL_2),
+        (KeyCode::Digit3, INPUT_SKILL_3),
+        (KeyCode::Digit4, INPUT_SKILL_4),
     ] {
         if keys.pressed(key) {
             buttons |= bit;
         }
     }
-    NetInput {
-        buttons,
-        target_x: cursor.x,
-        target_y: cursor.y,
-    }
+    buttons
 }
+
+/// The main gun's trigger.
+pub const FIRE_BUTTON: MouseButton = MouseButton::Left;
 
 #[allow(clippy::too_many_arguments)]
 pub fn read_local_inputs(
@@ -182,5 +205,24 @@ mod tests {
         // Other buttons don't move.
         mouse.press(MouseButton::Right);
         assert!(!MovePress::read(&mouse).held());
+    }
+
+    #[test]
+    fn battle_keys_are_twin_stick() {
+        let mut keys = ButtonInput::<KeyCode>::default();
+        let mut mouse = ButtonInput::<MouseButton>::default();
+        assert_eq!(battle_buttons(&keys, &mouse), 0);
+        keys.press(KeyCode::KeyW);
+        keys.press(KeyCode::KeyD);
+        keys.press(KeyCode::Digit2);
+        mouse.press(FIRE_BUTTON);
+        assert_eq!(
+            battle_buttons(&keys, &mouse),
+            INPUT_UP | INPUT_RIGHT | INPUT_SKILL_2 | INPUT_FIRE
+        );
+        // Q no longer casts anything.
+        let mut keys = ButtonInput::<KeyCode>::default();
+        keys.press(KeyCode::KeyQ);
+        assert_eq!(battle_buttons(&keys, &ButtonInput::default()), 0);
     }
 }
