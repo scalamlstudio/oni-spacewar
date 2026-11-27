@@ -2,6 +2,20 @@
 
 _Running log of what's decided and what's built. Newest entries on top._
 
+## 2026-11-27 — Twin-stick controls (TAKOAI-109)
+
+- Wei decided battle controls (BATTLE.md B8, DESIGN.md § Player): WASD moves
+  the battleship, the mouse aims, click-to-move is removed from battle.
+- Two main guns, usable by either ship (the ship decides only its skills):
+  semi-auto (hold left mouse to fire) and heavy (press to charge, release to
+  fire; 1.0 s full charge, 30%→100% damage and size, full charge pierces,
+  hold indefinitely, 60% move speed while charging).
+- Skills move to 1/2/3/4. Nothing fires on its own except side guns and
+  passive parts; side guns are out of scope for now. Speeds unchanged until
+  the controls playtest.
+- Controls go before Batch 3 (ship modules); C1 notes that the proposed
+  gun variants need reconciling with the two-weapon split.
+
 ## 2026-11-08 — Playtest #2 component direction (TAKOAI-120)
 
 - Recorded Wei's accepted six replaceable component categories at the existing

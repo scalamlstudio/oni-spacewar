@@ -32,21 +32,33 @@ segment (see § Missions, § Ship Modules).
 
 ## Player
 
-- Movement: **click-to-move**, League of Legends champion-style — during a
+- Movement: **WASD**, twin-stick style (Wei, 2026-11-27, TAKOAI-109; replaces
+  the original LoL-style click-to-move, which is removed from battle). During a
   mission, the player always controls their own **battleship** directly, with no
   unit selection step (there's only ever the one battleship to control). The
-  battleship moves **slowly** and leans on abilities rather than fast
-  dogfighting, the same feel as controlling the Mothership unit in StarCraft II.
-  Every battleship has one mobility or defensive skill, and enemy shots are
-  tuned so the slowest ship can dodge them (design/BATTLE.md § Decisions, B2).
+  mouse aims the main gun. The battleship moves **slowly** and leans on
+  abilities rather than fast dogfighting, the same feel as controlling the
+  Mothership unit in StarCraft II. Ship and enemy shot speeds are unchanged by
+  the switch and get tuned in playtest. Every battleship has one mobility or
+  defensive skill, and enemy shots are tuned so the slowest ship can dodge them
+  (design/BATTLE.md § Decisions, B2, B8).
 - Combat / interaction: the main character's Combat Operation skills are
   manually triggered by the player (hotkeys, LoL-ability-style) while the
   battleship moves (see § Crew Skill Trees) — unlike companions, whose combat
   skills auto-trigger automatically when their condition is matched.
-- Basic attack: the battleship's main weapon auto-fires at the nearest enemy
-  within weapon range at a fixed rate; the player's inputs are movement
-  (click-to-move) and Combat Operation skills (Q/W/E/R, cooldown-based). A
-  player-set focus target may be added later.
+- Basic attack: the player fires the main gun toward the mouse cursor; it
+  never fires on its own. There are two main guns, and either battleship can
+  use either one — the battleship decides only its skills, never the weapon:
+  - **Semi-auto:** hold the left mouse button to fire at the gun's fire rate;
+    release to stop.
+  - **Heavy:** press the left mouse button to charge, release to fire. Full
+    charge takes 1.0 s; damage and shot size scale from 30% to 100%; a full
+    charge pierces; a full charge can be held indefinitely; the ship moves at
+    60% speed while charging.
+  Combat Operation skills are cast with **1/2/3/4** (cooldown-based, aimed at
+  the cursor); 1 and 2 are today's two skills per ship, 3 and 4 are reserved
+  for the deferred E/R skills. Only side guns and passive parts may fire on
+  their own; side guns are not in the current scope (design/BATTLE.md B8).
 - Progression: earn credits via faction missions and resource-gathering, spend on
   growing/upgrading the carrier (see § Hub, § Economy).
 - **Aboard the carrier (outside missions):** the player walks the main
