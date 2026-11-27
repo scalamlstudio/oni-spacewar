@@ -27,9 +27,11 @@ story on. Six pillars:
    that unlock enemies, skills and ship parts.
 
 **What stays:** dodging slow, readable shots (the bullet-hell core),
-click-to-move, a slow battleship that leans on abilities (DESIGN.md
+a slow battleship that leans on abilities (DESIGN.md
 § Player), void fissures as the place enemies come from, and battle logic
 in the deterministic `sim` crate so multiplayer stays possible.
+Click-to-move was in this list until Wei replaced it with twin-stick
+controls on 2026-11-27 (B8).
 
 **Mapping:** the battleship's hull, weapon and modules play the part of
 PoE's gear and gems; the Pilot's Combat Operation tree (DESIGN.md § Crew
@@ -141,6 +143,21 @@ design/OPEN_QUESTIONS.md._
 - **B7. Difficulty → Threat levels at the mission-selection station.** The player picks Threat
   1–5 before launching: more enemy HP and damage, more elites and affixes,
   better loot. Threat never raises the kill target above 100 (TAKOAI-128).
+- **B8. Controls → twin-stick (Wei, 2026-11-27).** Decided by Wei, not
+  provisional. WASD moves the battleship; the mouse aims the main gun;
+  click-to-move is removed from battle (the carrier keeps click or WASD
+  walking). The main gun only fires when the player shoots. There are two
+  main guns, a **semi-auto** gun (hold left mouse to fire at its fire rate)
+  and a **heavy** gun (press to charge, release to fire: full charge in
+  1.0 s, damage and size 30%→100%, full charge pierces, can be held
+  indefinitely, 60% move speed while charging). Either battleship can use
+  either gun: the battleship decides only its skills. Skills move to
+  **1/2/3/4** (1/2 = today's Q/W skills, 3/4 = the deferred E/R). Only side
+  guns and passive parts may fire on their own, and side guns are out of
+  scope for now. Ship and enemy shot speeds stay as they are and get tuned
+  in the controls playtest. This supersedes "auto-fire at the nearest
+  enemy" wherever this doc assumes it (e.g. the reasons given for leaving
+  out the tank role and Reflect, which can be revisited).
 
 ## Build order
 
@@ -156,10 +173,13 @@ numbers refer to § Prioritised change list._
 2. **Batch 2: monsters.** #5 Lancer, Bloater, Brood and Warden (via
    TAKOAI-5's roster), #6 elite packs with affixes, #7 Fissure Guardian
    ending Elimination (B5).
-3. **Batch 3: building and loot.** #8 Ship modules (B3), #9 loot rarity,
+3. **Controls (B8).** Twin-stick movement and aiming, the semi-auto and
+   heavy main guns, skills on 1/2/3/4, then a short controls playtest.
+   Comes before Batch 3 (Wei, 2026-11-27).
+4. **Batch 3: building and loot.** #8 Ship modules (B3), #9 loot rarity,
    module drops and salvage (B4), #10 Threat levels at the mission-selection station (B7),
    #11 E and R skills.
-4. **Later:** #12 more objectives (close the fissures first), #13 Pilot
+5. **Later:** #12 more objectives (close the fissures first), #13 Pilot
    Combat Operation tree, #14 enemy families and story bosses.
 
 Each batch is played before the next starts; a playtest can reorder the

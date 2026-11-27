@@ -44,7 +44,8 @@ Carrier, result, menus and save live in `client`.
   cooldowns) and **Bulwark** (slow, tanky, stronger basic attack). Each has 2
   skills (Q, W).
 - **Battle scene:** the existing top-down click-to-move battleship, auto-firing
-  its basic attack. One mission type, **Elimination** (kill 40 enemies), in
+  its basic attack (since 2026-11-27: twin-stick controls with an aimed,
+  player-fired main gun, design/BATTLE.md B8). One mission type, **Elimination** (kill 40 enemies), in
   open space with no edge, over a procedural "magical night sky with nebula"
   background, with 2 void-monster types (**Void Swarmer**, **Void Spitter**)
   pouring continuously out of 1–2 void fissures.

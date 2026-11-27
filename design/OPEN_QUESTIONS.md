@@ -137,7 +137,11 @@ level design), and the rest left scope with manufacturing and the research loop
   the next implementation baseline (recommended), or keep the six requested
   component categories but revise which carry Q/W modifiers? The proposal
   unlocks six sockets immediately, keeps stock fallbacks, and offers 31 item
-  templates including four uniques. `Blocks (partial)` · TAKOAI-120/122.
+  templates including four uniques. Since B8 (2026-11-27) the main gun is
+  one of two weapons (semi-auto or heavy) that either ship can use, and the
+  side gun is out of current scope, so the proposed basic-gun variants and
+  side-gun items need reconciling with that before approval.
+  `Blocks (partial)` · TAKOAI-120/122.
 - **C2. Loot and economy:** approve the proposed rarity/drop tables and
   VC-only salvage/craft costs as playtest defaults (recommended), or defer
   quality rolls and ship common behavior variants first? Common crafting
